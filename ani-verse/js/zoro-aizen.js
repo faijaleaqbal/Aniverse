@@ -663,39 +663,43 @@
      7. ZORO WATCH PAGE: ZOKOANIME EMBED PLAYER
      ========================================================================== */
 
+  /* Episode currently loaded in the player (comments follow it). */
+  let activeEpisode = 1;
+  let reloadComments = null;
+
   async function initWatchPage() {
     const watchStage = document.getElementById("zoro-video-stage");
     if (!watchStage) return;
 
     const params = new URLSearchParams(window.location.search);
-    let currentSlug = params.get("slug") || "kagerou-protocol";
-    let currentEp = parseInt(params.get("ep"), 10) || 1;
-    let currentTrack = "sub";
-    let isAutoplay = true;
-    let isAutoskip = true;
-    let isAutonext = true;
+    const currentSlug = params.get("slug") || "kagerou-protocol";
+    const currentEp = parseInt(params.get("ep"), 10) || 1;
 
-    const iframe = document.getElementById("zoko-embed-frame");
-    const coverOverlay = document.getElementById("video-cover-overlay");
-    const playerWrap = document.getElementById("player-wrap");
+    const playerApi = window.ZokoPlayer || null;
+    const watchApi = window.ZokoWatchUI || null;
 
-    let titleData = null;
-    let episodesList = [];
-    let customMalIdOverride = null;
+    // Embed origin + defaults come from the server config (never hardcoded here).
+    const cfgRes = await api("/api/player/config");
+    if (playerApi && cfgRes.ok && cfgRes.data && cfgRes.data.embed) {
+      playerApi.setEmbedConfig(cfgRes.data.embed);
+    }
+
+    let title = null;
+    let episodes = [];
 
     // Load Title Details
     const titleRes = await api(`/api/titles/${encodeURIComponent(currentSlug)}`);
     if (titleRes.ok && titleRes.data) {
       const data = titleRes.data;
-      titleData = data.title;
-      episodesList = Array.isArray(data.episodes) ? data.episodes : [];
+      title = data.title;
+      episodes = Array.isArray(data.episodes) ? data.episodes : [];
 
       const h1 = document.getElementById("watch-anime-title");
-      if (h1) h1.textContent = titleData.name;
+      if (h1) h1.textContent = title.name;
       const h1Top = document.getElementById("watch-anime-title-h1");
-      if (h1Top) h1Top.textContent = titleData.name;
+      if (h1Top) h1Top.textContent = title.name;
       const descEl = document.getElementById("watch-anime-desc");
-      if (descEl) descEl.textContent = titleData.synopsis;
+      if (descEl) descEl.textContent = title.synopsis;
 
       // Watchlist Button State
       const wlBtn = document.getElementById("watch-add-list-btn");
@@ -704,248 +708,53 @@
       }
     }
 
-    // Build episodes grid
-    function renderEpisodesGrid() {
-      const epGrid = document.getElementById("zoro-episodes-grid");
-      if (!epGrid) return;
-
-      const totalEps = (titleData && titleData.episodes) || episodesList.length || 12;
-      let html = "";
-      for (let i = 1; i <= totalEps; i++) {
-        const epPadded = String(i).padStart(3, "0");
-        const isActive = i === currentEp;
-        html += `<button class="ep-btn ${isActive ? "active" : ""}" data-ep="${i}" type="button">${epPadded}</button>`;
-      }
-      epGrid.innerHTML = html;
-
-      epGrid.querySelectorAll(".ep-btn").forEach((btn) => {
-        btn.addEventListener("click", () => {
-          const epNum = parseInt(btn.dataset.ep, 10);
-          loadEpisode(epNum);
-        });
+    // ZokoAnime embed player (iframe + postMessage protocol + watch page UI)
+    let player = null;
+    if (watchApi) {
+      player = watchApi.init({
+        slug: currentSlug,
+        episode: currentEp,
+        title: title,
+        episodes: episodes,
+        iframe: document.getElementById("zoko-embed-frame"),
+        onEpisodeChange: (episode) => {
+          // Comments follow the episode without a page reload.
+          activeEpisode = episode;
+          if (reloadComments) reloadComments();
+        },
+        onProgress: async (position, duration) => {
+          // Keep the signed-in account progress in sync too.
+          if (!currentUser || !position) return;
+          await api("/api/progress", {
+            method: "POST",
+            body: {
+              slug: currentSlug,
+              episode: player ? player.episode : currentEp,
+              positionSec: Math.floor(position),
+              durationSec: Math.floor(duration),
+            },
+          });
+        },
       });
     }
 
-    renderEpisodesGrid();
-
-    // Episode subtitle updater
-    async function updateEpisodeSubtitle(epNum) {
-      const epRes = await api(`/api/titles/${encodeURIComponent(currentSlug)}/episodes/${epNum}`);
-      const subTitle = document.getElementById("watch-ep-subtitle");
-      if (epRes.ok && epRes.data && epRes.data.episode) {
-        const ep = epRes.data.episode;
-        if (subTitle) subTitle.textContent = `Episode ${ep.epNum}: ${ep.title}`;
-      } else {
-        if (subTitle) subTitle.textContent = `Episode ${epNum}`;
-      }
-    }
-
-    // Build stream embed URL
-    function getEmbedUrl(epNum, track) {
-      const malId = customMalIdOverride || (titleData && titleData.malId) || 40748;
-      const color = "cae962";
-      return `https://zokoanime.video/stream/mal/${malId}/${epNum}/${track}?color=${color}&autoplay=${isAutoplay}&asi=${isAutoskip}&autonext=${isAutonext}`;
-    }
-
-    // Load an episode
-    function loadEpisode(epNum) {
-      currentEp = epNum;
-      updateEpisodeSubtitle(epNum);
-
-      // Update URL without reload
-      const newUrl = `watch.html?slug=${encodeURIComponent(currentSlug)}&ep=${epNum}`;
-      window.history.replaceState({ slug: currentSlug, ep: epNum }, "", newUrl);
-
-      // Highlight active episode button
-      document.querySelectorAll("#zoro-episodes-grid .ep-btn").forEach((btn) => {
-        btn.classList.toggle("active", parseInt(btn.dataset.ep, 10) === epNum);
-      });
-
-      // Update Prev / Next button states
-      const totalEps = (titleData && titleData.episodes) || episodesList.length || 12;
-      const prevBtn = document.getElementById("btn-prev-ep");
-      const nextBtn = document.getElementById("btn-next-ep");
-      if (prevBtn) {
-        prevBtn.disabled = currentEp <= 1;
-        prevBtn.style.opacity = currentEp <= 1 ? "0.5" : "1";
-      }
-      if (nextBtn) {
-        nextBtn.disabled = currentEp >= totalEps;
-        nextBtn.style.opacity = currentEp >= totalEps ? "0.5" : "1";
-      }
-
-      // Load iframe stream
-      const streamUrl = getEmbedUrl(currentEp, currentTrack);
-      if (iframe) {
-        iframe.src = streamUrl;
-      }
-      if (coverOverlay) {
-        coverOverlay.style.display = "none";
-      }
-
-      // Re-init comments for this episode
-      initComments(currentSlug, currentEp);
-    }
-
-    // Play big play button
-    const bigPlayBtn = document.querySelector(".player-big-play");
-    if (bigPlayBtn) {
-      bigPlayBtn.addEventListener("click", () => {
-        loadEpisode(currentEp);
-      });
-    }
-
-    // Track switcher buttons (sub, hsub, dub)
-    const trackSwitcher = document.getElementById("zoko-track-switcher");
-    if (trackSwitcher) {
-      trackSwitcher.querySelectorAll(".server-pill").forEach((pill) => {
-        pill.addEventListener("click", () => {
-          trackSwitcher.querySelectorAll(".server-pill").forEach((p) => p.classList.remove("active"));
-          pill.classList.add("active");
-          currentTrack = pill.dataset.track || "sub";
-          showToast(`Switched audio track to ${currentTrack.toUpperCase()}`);
-          if (iframe && iframe.src && iframe.src !== "about:blank") {
-            iframe.src = getEmbedUrl(currentEp, currentTrack);
-          }
-        });
-      });
-    }
-
-    // Setting toggles (autoplay, autoskip, autonext)
-    const settingToggles = document.getElementById("zoko-setting-toggles");
-    if (settingToggles) {
-      settingToggles.addEventListener("change", (e) => {
-        const toggle = e.target;
-        const setting = toggle.dataset.setting;
-        if (setting === "autoplay") isAutoplay = toggle.checked;
-        if (setting === "autoskip") isAutoskip = toggle.checked;
-        if (setting === "autonext") isAutonext = toggle.checked;
-        showToast(`${setting.toUpperCase()}: ${toggle.checked ? "ON" : "OFF"}`);
-      });
-    }
-
-    // Prev / Next Ep buttons
-    const prevBtn = document.getElementById("btn-prev-ep");
-    if (prevBtn) {
-      prevBtn.addEventListener("click", () => {
-        if (currentEp > 1) loadEpisode(currentEp - 1);
-      });
-    }
-    const nextBtn = document.getElementById("btn-next-ep");
-    if (nextBtn) {
-      nextBtn.addEventListener("click", () => {
-        const totalEps = (titleData && titleData.episodes) || episodesList.length || 12;
-        if (currentEp < totalEps) loadEpisode(currentEp + 1);
-      });
-    }
-
-    // Fullscreen button
-    const fsBtn = document.getElementById("btn-fullscreen");
-    if (fsBtn && playerWrap) {
-      fsBtn.addEventListener("click", () => {
-        if (!document.fullscreenElement) {
-          playerWrap.requestFullscreen().catch(() => {});
-        } else {
-          document.exitFullscreen().catch(() => {});
-        }
-      });
-    }
-
-    // Skip buttons
-    const skipBack = document.getElementById("btn-skip-back");
-    if (skipBack && iframe && iframe.contentWindow) {
-      skipBack.addEventListener("click", () => {
-        iframe.contentWindow.postMessage({ channel: "zokoanime", action: "seekRelative", value: -10 }, "*");
-      });
-    }
-    const skipForward = document.getElementById("btn-skip-forward");
-    if (skipForward && iframe && iframe.contentWindow) {
-      skipForward.addEventListener("click", () => {
-        iframe.contentWindow.postMessage({ channel: "zokoanime", action: "seekRelative", value: 10 }, "*");
-      });
-    }
-
-    // Custom MAL ID button
+    // Custom MAL ID button (ids are never guessed - the user sets them)
     const customMalBtn = document.getElementById("btn-custom-mal-id");
     if (customMalBtn) {
+      const currentMalId = (title && title.malId) || "";
       customMalBtn.addEventListener("click", () => {
-        const currentMalId = customMalIdOverride || (titleData && titleData.malId) || "";
         const inputId = prompt(
           `Enter the MyAnimeList id for this title (current: ${currentMalId}).\n` +
             `The id is the number in myanimelist.net/anime/<id>/...`,
           currentMalId
         );
         if (!inputId || isNaN(inputId)) return;
-        customMalIdOverride = parseInt(inputId, 10);
-        showToast(`MAL ID set to ${customMalIdOverride}. Reloading stream...`);
-        loadEpisode(currentEp);
+        const malId = parseInt(inputId, 10);
+        if (playerApi) playerApi.setIdOverride(currentSlug, malId);
+        if (player) player.loadEpisode(player.episode);
+        showToast(`MAL ID set to ${malId}.`);
       });
     }
-
-    // Bi-directional postMessage listener from ZokoAnime embed
-    window.addEventListener("message", async (event) => {
-      if (event.origin !== "https://zokoanime.video") return;
-      const data = event.data;
-      if (!data || data.channel !== "zokoanime") return;
-
-      // Watching progress log event
-      if (data.type === "watching-log" || data.type === "progress") {
-        const currentTime = data.currentTime || data.position || 0;
-        const duration = data.duration || 1440;
-
-        // Update progress bar
-        const progressFill = document.getElementById("video-progress-fill");
-        if (progressFill && duration > 0) {
-          const pct = Math.min((currentTime / duration) * 100, 100);
-          progressFill.style.width = `${pct}%`;
-        }
-
-        // Update time text
-        const timeText = document.getElementById("video-time-text");
-        if (timeText) {
-          const fmt = (s) => {
-            const m = Math.floor(s / 60);
-            const sec = Math.floor(s % 60);
-            return `${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
-          };
-          timeText.textContent = `${fmt(currentTime)} / ${fmt(duration)}`;
-        }
-
-        // Save progress to server
-        if (currentUser && currentTime > 0) {
-          await api("/api/progress", {
-            method: "POST",
-            body: {
-              slug: currentSlug,
-              episode: currentEp,
-              positionSec: Math.floor(currentTime),
-              durationSec: Math.floor(duration),
-            },
-          });
-        }
-      }
-
-      // Ended event -> auto-next
-      if (data.type === "ended") {
-        const totalEps = (titleData && titleData.episodes) || episodesList.length || 12;
-        if (isAutonext && currentEp < totalEps) {
-          showToast(`Episode finished! Auto-playing Episode ${currentEp + 1}...`);
-          setTimeout(() => loadEpisode(currentEp + 1), 1500);
-        }
-      }
-
-      // Fullscreen event
-      if (data.type === "fullscreen" && playerWrap) {
-        if (data.request === "enter" && !document.fullscreenElement) {
-          playerWrap.requestFullscreen().catch(() => {});
-        } else if (data.request === "exit" && document.fullscreenElement) {
-          document.exitFullscreen().catch(() => {});
-        }
-      }
-    });
-
-    // Initial subtitle update
-    updateEpisodeSubtitle(currentEp);
 
     // Watchlist Toggle
     const wlBtn = document.getElementById("watch-add-list-btn");
@@ -973,7 +782,7 @@
       });
     }
 
-    // Initial comments
+    // Discussion / Comments
     initComments(currentSlug, currentEp);
   }
 
@@ -982,10 +791,11 @@
     const form = document.getElementById("zoro-comment-form");
     const input = document.getElementById("zoro-comment-input");
     const countEl = document.getElementById("comments-count-text");
+    activeEpisode = ep;
 
     async function loadComments() {
       if (!list) return;
-      const res = await api(`/api/comments/${encodeURIComponent(slug)}/${ep}`);
+      const res = await api(`/api/comments/${encodeURIComponent(slug)}/${activeEpisode}`);
       if (res.ok && res.data && res.data.comments) {
         const comments = res.data.comments;
         if (countEl) countEl.textContent = `${comments.length} Comments`;
@@ -1010,7 +820,9 @@
       }
     }
 
-    if (form) {
+    // Bind the form only once - the episode can change without a reload.
+    if (form && form.dataset.zoroCommentsBound !== "true") {
+      form.dataset.zoroCommentsBound = "true";
       form.addEventListener("submit", async (e) => {
         e.preventDefault();
         if (!currentUser) {
@@ -1020,7 +832,7 @@
         const text = input ? input.value.trim() : "";
         if (!text) return;
 
-        const res = await api(`/api/comments/${encodeURIComponent(slug)}/${ep}`, {
+        const res = await api(`/api/comments/${encodeURIComponent(slug)}/${activeEpisode}`, {
           method: "POST",
           body: { content: text },
         });
@@ -1033,6 +845,7 @@
       });
     }
 
+    reloadComments = loadComments;
     loadComments();
   }
 
