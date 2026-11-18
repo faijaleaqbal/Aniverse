@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Browse Anime - Ani Verse (Zoro UI × Aizen Motion)</title>
+  <meta name="description" content="Browse full anime catalog with genre filters, ratings, and instant streaming on Ani Verse.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/zoro-aizen.css">
+</head>
+<body>
+
+  <!-- Ambient Light Backdrop -->
+  <div class="ambient-glow"></div>
+
+  <!-- Zoro Top Navigation with Aizen Glass -->
+  <header class="zoro-header">
+    <div class="header-inner">
+      <div class="header-left">
+        <button class="menu-toggle-btn" type="button" aria-label="Toggle Menu">☰</button>
+        <a class="zoro-brand" href="index.html">
+          <div class="zoro-brand-icon">Z</div>
+          <span>Ani<span class="verse">Verse</span></span>
+        </a>
+      </div>
+
+      <nav class="header-nav" aria-label="Main Navigation">
+        <a class="nav-link" href="index.html">Home</a>
+        <a class="nav-link active" href="browse.html">Browse</a>
+        <a class="nav-link" href="genres.html">Genres</a>
+        <a class="nav-link" href="schedule.html">Schedule</a>
+        <a class="nav-link" href="browse.html?genre=action">Movies</a>
+        <a class="nav-link" href="browse.html?sort=newest">Top Airing</a>
+      </nav>
+
+      <div class="search-wrapper">
+        <div class="search-box">
+          <input id="zoro-search-input" type="text" placeholder="Search anime, movie, series..." autocomplete="off">
+          <button class="search-btn" type="button" aria-label="Search">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          </button>
+        </div>
+        <div class="search-dropdown" id="zoro-search-dropdown"></div>
+      </div>
+
+      <div class="header-actions">
+        <button class="icon-action-btn" id="btn-random-anime" type="button" title="Shuffle / Random Anime">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 3h5v5M4 20l7-7m9-10-7 7M4 4l16 16M16 21h5v-5"/></svg>
+        </button>
+        <button class="icon-action-btn" id="btn-replay-intro" type="button" title="Replay Aizen Shutter Intro">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 12 7-7v4c7 0 11 4 11 11-2-5-6-7-11-7v4l-7-5z"/></svg>
+        </button>
+        <div id="header-user-slot">
+          <button class="btn-zoro-primary" type="button">Sign In</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="container-main" style="padding: 2.5rem 1.5rem 5rem;">
+    <div class="section-header-zoro">
+      <div>
+        <h1 class="section-title">Explore <span class="accent">Anime Shelf</span></h1>
+        <p style="color: var(--text-muted); font-size: 0.9rem; margin-top: 4px;">Filter by genre, sort by popularity or release date.</p>
+      </div>
+    </div>
+
+    <!-- Filter Bar -->
+    <div class="filter-bar-zoro">
+      <div class="genre-chips-wrap" id="genre-chips-container">
+        <button class="genre-chip-zoro active" data-genre="all" type="button">All</button>
+        <button class="genre-chip-zoro" data-genre="action" type="button">Action</button>
+        <button class="genre-chip-zoro" data-genre="drama" type="button">Drama</button>
+        <button class="genre-chip-zoro" data-genre="fantasy" type="button">Fantasy</button>
+        <button class="genre-chip-zoro" data-genre="horror" type="button">Horror</button>
+        <button class="genre-chip-zoro" data-genre="mecha" type="button">Mecha</button>
+        <button class="genre-chip-zoro" data-genre="romance" type="button">Romance</button>
+        <button class="genre-chip-zoro" data-genre="sports" type="button">Sports</button>
+      </div>
+    </div>
+
+    <!-- Zoro Card Grid with Hover Tooltip System -->
+    <div class="cards-grid-zoro" id="zoro-main-grid">
+      <!-- Populated dynamically via zoro-aizen.js -->
+    </div>
+  </main>
+
+  <footer style="background: var(--bg-darker); border-top: 1px solid var(--border-subtle); padding: 3rem 0;">
+    <div class="container-main" style="text-align: center; font-size: 0.8rem; color: var(--text-muted);">
+      <p>Ani Verse • Zoro UI Catalog with Aizen-Verse animation engine.</p>
+    </div>
+  </footer>
+
+  <script src="js/zoro-aizen.js"></script>
+</body>
+</html>

@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Watch Anime - Ani Verse (Zoro UI × Aizen Engine)</title>
+  <meta name="description" content="Watch high quality anime online on Ani Verse. Free streaming with multi-server selection, subtitles and dubs.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/zoro-aizen.css">
+</head>
+<body>
+
+  <!-- Ambient Light Backdrop -->
+  <div class="ambient-glow"></div>
+
+  <!-- Zoro Top Navigation with Aizen Glass -->
+  <header class="zoro-header">
+    <div class="header-inner">
+      <div class="header-left">
+        <button class="menu-toggle-btn" type="button" aria-label="Toggle Menu">☰</button>
+        <a class="zoro-brand" href="index.html">
+          <div class="zoro-brand-icon">Z</div>
+          <span>Ani<span class="verse">Verse</span></span>
+        </a>
+      </div>
+
+      <nav class="header-nav" aria-label="Main Navigation">
+        <a class="nav-link" href="index.html">Home</a>
+        <a class="nav-link" href="browse.html">Browse</a>
+        <a class="nav-link" href="genres.html">Genres</a>
+        <a class="nav-link" href="schedule.html">Schedule</a>
+        <a class="nav-link" href="browse.html?genre=action">Movies</a>
+        <a class="nav-link" href="browse.html?sort=newest">Top Airing</a>
+      </nav>
+
+      <div class="search-wrapper">
+        <div class="search-box">
+          <input id="zoro-search-input" type="text" placeholder="Search anime, movie, series..." autocomplete="off">
+          <button class="search-btn" type="button" aria-label="Search">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          </button>
+        </div>
+        <div class="search-dropdown" id="zoro-search-dropdown"></div>
+      </div>
+
+      <div class="header-actions">
+        <button class="icon-action-btn" id="btn-random-anime" type="button" title="Shuffle / Random Anime">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 3h5v5M4 20l7-7m9-10-7 7M4 4l16 16M16 21h5v-5"/></svg>
+        </button>
+        <button class="icon-action-btn" id="btn-replay-intro" type="button" title="Replay Aizen Shutter Intro">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 12 7-7v4c7 0 11 4 11 11-2-5-6-7-11-7v4l-7-5z"/></svg>
+        </button>
+        <div id="header-user-slot">
+          <button class="btn-zoro-primary" type="button">Sign In</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="container-main" id="zoro-video-stage">
+    <!-- Breadcrumb -->
+    <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 1.5rem; display: flex; gap: 0.5rem; align-items: center;">
+      <a href="index.html" style="color: var(--text-sub);">Home</a>
+      <span>/</span>
+      <a href="browse.html" style="color: var(--text-sub);">Series</a>
+      <span>/</span>
+      <span id="watch-anime-title" style="color: var(--zoro-lime); font-weight: 600;">Kagerou Protocol</span>
+    </div>
+
+    <div class="watch-layout">
+      <!-- Player Main Column -->
+      <div class="watch-player-column">
+        <div>
+          <h1 id="watch-anime-title-h1" style="font-size: 1.75rem; font-weight: 800; color: #fff;">Kagerou Protocol</h1>
+          <p id="watch-ep-subtitle" style="font-size: 0.95rem; color: var(--text-sub); margin-top: 4px;">Episode 7: The Long Way Down</p>
+        </div>
+
+        <!-- Video Player Stage (ZokoAnime Embed) -->
+        <div class="player-theater-wrapper" id="player-wrap">
+          <iframe
+            id="zoko-embed-frame"
+            class="player-stage-video"
+            src="about:blank"
+            title="ZokoAnime player"
+            allow="fullscreen; autoplay"
+            allowfullscreen
+          ></iframe>
+          <div class="player-cover-overlay" id="video-cover-overlay" style="background-image: url('img/photo1.jpg');">
+            <button class="player-big-play" type="button" aria-label="Play Episode">▶</button>
+            <div style="position: absolute; bottom: 20px; font-family: var(--font-mono); font-size: 0.8rem; color: #fff; background: rgba(0,0,0,0.7); padding: 5px 14px; border-radius: 999px; border: 1px solid rgba(202, 233, 98, 0.4); display: flex; align-items: center; gap: 6px;">
+              <span style="color: var(--zoro-lime);">⚡</span> Stream with ZokoAnime (1080p • Auto-Skip)
+            </div>
+          </div>
+          <div class="zoko-player-spinner" id="zoko-player-spinner" hidden>
+            <div class="zoko-spinner-ring"></div>
+            <span>Loading stream…</span>
+          </div>
+          <div class="zoko-player-overlay" id="zoko-player-overlay" hidden>
+            <div class="zoko-overlay-card">
+              <h3 id="zoko-overlay-title">Stream failed</h3>
+              <p id="zoko-overlay-text">The player could not load this episode.</p>
+              <button class="btn-zoro-primary" id="zoko-overlay-action" type="button">Retry</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Resume notice + toasts -->
+        <div class="zoko-resume-note" id="zoko-resume-note" hidden></div>
+        <div class="zoko-toasts" id="zoko-toasts" aria-live="polite"></div>
+
+        <!-- Player Control Bar -->
+        <div class="zoro-player-bar">
+          <button id="btn-player-playpause" type="button" style="background: none; font-size: 1.1rem; color: var(--zoro-lime); cursor: pointer; width: 28px;">▶</button>
+          <div class="progress-track-zoro" id="video-progress-track">
+            <div class="progress-fill-zoro" id="video-progress-fill"></div>
+          </div>
+          <span id="video-time-text" style="font-size: 0.75rem; font-family: var(--font-mono); color: var(--text-muted);">08:41 / 23:52</span>
+          <div style="display: flex; gap: 0.5rem;">
+            <button class="icon-action-btn" id="btn-skip-back" type="button" title="Skip -10s" style="width: 32px; height: 32px;">-10s</button>
+            <button class="icon-action-btn" id="btn-skip-forward" type="button" title="Skip +10s" style="width: 32px; height: 32px;">+10s</button>
+            <button class="icon-action-btn" id="btn-fullscreen" type="button" title="Fullscreen" style="width: 32px; height: 32px;">⛶</button>
+          </div>
+        </div>
+
+        <!-- Action Bar: Add to Watchlist & Next/Prev -->
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+          <button class="btn-zoro-primary" id="watch-add-list-btn" type="button" style="padding: 0.5rem 1.25rem;">
+            + Add to List
+          </button>
+          <div style="display: flex; gap: 0.75rem;">
+            <button class="genre-chip-zoro" id="btn-prev-ep" type="button">‹ Prev Ep</button>
+            <button class="genre-chip-zoro" id="btn-next-ep" type="button">Next Ep ›</button>
+          </div>
+        </div>
+
+        <!-- ZokoAnime Track Switcher + Player Settings -->
+        <div class="servers-bar-zoro zoko-control-bar">
+          <span class="zoko-bar-label">TRACK:</span>
+          <div class="zoko-track-switcher" id="zoko-track-switcher">
+            <button class="server-pill active" data-track="sub" type="button">Sub</button>
+            <button class="server-pill" data-track="hsub" type="button">Hard-sub</button>
+            <button class="server-pill" data-track="dub" type="button">Dub</button>
+          </div>
+
+          <div class="zoko-setting-toggles" id="zoko-setting-toggles">
+            <label class="zoko-toggle">
+              <input type="checkbox" data-setting="autoplay" checked>
+              <span>Autoplay</span>
+            </label>
+            <label class="zoko-toggle">
+              <input type="checkbox" data-setting="autoskip" checked>
+              <span>Auto-skip intro/outro</span>
+            </label>
+            <label class="zoko-toggle">
+              <input type="checkbox" data-setting="autonext" checked>
+              <span>Auto-next episode</span>
+            </label>
+          </div>
+
+          <button class="genre-chip-zoro" id="btn-custom-mal-id" type="button" style="margin-left: auto; font-size: 0.75rem; padding: 2px 8px;">Switch Anime MAL ID</button>
+        </div>
+
+        <!-- Anime Synopsis & Details Card -->
+        <div style="background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 12px; padding: 1.5rem;">
+          <h3 style="font-size: 1.15rem; font-weight: 800; color: var(--zoro-lime); margin-bottom: 0.75rem;">Synopsis</h3>
+          <p id="watch-anime-desc" style="font-size: 0.925rem; color: var(--text-sub); line-height: 1.6;">
+            A courier runs the last unmonitored line in a watched city. The drop goes missing and the route closes behind her.
+          </p>
+        </div>
+
+        <!-- Zoro Community & Comments Box (Synced to SQLite) -->
+        <div class="discussion-box">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem;">
+            <h3 style="font-size: 1.2rem; font-weight: 800; color: #fff;">Community Discussion</h3>
+            <span id="comments-count-text" style="font-size: 0.8rem; color: var(--text-muted); font-family: var(--font-mono);">Loading comments...</span>
+          </div>
+
+          <form id="zoro-comment-form" class="comment-input-area">
+            <div class="user-comment-avatar">U</div>
+            <div class="comment-form-wrap">
+              <textarea id="zoro-comment-input" placeholder="Join the discussion... Share your thoughts about this episode!" required></textarea>
+              <div style="display: flex; justify-content: flex-end;">
+                <button class="btn-zoro-primary" type="submit" style="padding: 0.45rem 1.25rem;">Post Comment</button>
+              </div>
+            </div>
+          </form>
+
+          <div class="comment-list-zoro" id="comments-list-container">
+            <!-- Populated via API -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Watch Sidebar: Episodes & Related -->
+      <div class="watch-sidebar">
+        <div class="episodes-card-zoro">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+            <h3 style="font-size: 1rem; font-weight: 800; color: #fff;">List of Episodes</h3>
+            <span style="font-size: 0.75rem; color: var(--zoro-lime); font-family: var(--font-mono);">SUB / DUB</span>
+          </div>
+
+          <div class="ep-range-tabs">
+            <button class="ep-tab-btn active" type="button">001 - 012</button>
+          </div>
+
+          <div class="ep-buttons-grid" id="zoro-episodes-grid">
+            <!-- Populated via API -->
+          </div>
+        </div>
+
+        <!-- Quick Info Card -->
+        <div style="background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 12px; padding: 1.25rem;">
+          <h3 style="font-size: 0.95rem; font-weight: 800; color: var(--zoro-lime); margin-bottom: 0.85rem;">Anime Details</h3>
+          <div style="display: grid; gap: 0.6rem; font-size: 0.825rem; color: var(--text-sub);">
+            <div><strong style="color: #fff;">Country:</strong> Japan</div>
+            <div><strong style="color: #fff;">Status:</strong> Completed</div>
+            <div><strong style="color: #fff;">Studios:</strong> Verse Works Film</div>
+            <div><strong style="color: #fff;">Duration:</strong> 24m per ep</div>
+            <div><strong style="color: #fff;">Quality:</strong> Ultra HD 1080p</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer style="background: var(--bg-darker); border-top: 1px solid var(--border-subtle); padding: 3rem 0; margin-top: 4rem;">
+    <div class="container-main" style="text-align: center; font-size: 0.8rem; color: var(--text-muted);">
+      <p>Ani Verse • Zoro UI layout with Aizen-Verse animation engine.</p>
+    </div>
+  </footer>
+
+  <script src="js/zoro-aizen.js"></script>
+</body>
+</html>

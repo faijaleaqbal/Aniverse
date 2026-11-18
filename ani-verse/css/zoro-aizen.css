@@ -1,0 +1,2207 @@
+/* ==========================================================================
+   ANI VERSE: ZORO UI + AIZEN ANIMATIONS
+   Fusing Zoro.to / HiAnime aesthetics with Aizen's cinematic motion design.
+   ========================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
+:root {
+  /* Zoro Signature Colors */
+  --zoro-lime: #cae962;
+  --zoro-lime-hover: #d8f375;
+  --zoro-lime-glow: rgba(202, 233, 98, 0.35);
+  --zoro-sub: #b4e380;
+  --zoro-dub: #ff8da1;
+  --zoro-ep: #56c596;
+
+  /* Deep Cyber/Anime Dark Surface */
+  --bg-main: #0c0d12;
+  --bg-darker: #07070a;
+  --bg-surface: #15171e;
+  --bg-card: #1f222b;
+  --bg-card-hover: #272b37;
+  --bg-glass: rgba(21, 23, 30, 0.75);
+  --bg-glass-card: rgba(31, 34, 43, 0.65);
+
+  /* Typography & Borders */
+  --text-main: #ffffff;
+  --text-sub: #a5abb8;
+  --text-muted: #6b7280;
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-active: rgba(202, 233, 98, 0.4);
+
+  /* Font Families */
+  --font-main: 'Outfit', sans-serif;
+  --font-mono: 'Space Grotesk', monospace;
+
+  /* Easing */
+  --ease-aizen: cubic-bezier(0.83, 0, 0.17, 1);
+  --ease-spring: cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  --ease-smooth: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* Elevation */
+  --shadow-card: 0 10px 30px -10px rgba(0, 0, 0, 0.8);
+  --shadow-neon: 0 0 25px rgba(202, 233, 98, 0.25);
+}
+
+/* Reset */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  color-scheme: dark;
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--bg-main);
+  color: var(--text-main);
+  font-family: var(--font-main);
+  overflow-x: hidden;
+  min-height: 100vh;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+button, input, select, textarea {
+  font-family: inherit;
+  color: inherit;
+  border: none;
+  outline: none;
+}
+
+ul {
+  list-style: none;
+}
+
+img {
+  max-width: 100%;
+  display: block;
+}
+
+/* ==========================================================================
+   AIZEN CINEMATIC SHUTTER INTRO ANIMATION
+   ========================================================================== */
+
+.aizen-intro-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: all;
+  background: transparent;
+  user-select: none;
+}
+
+.aizen-shutter-top,
+.aizen-shutter-bottom {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 50%;
+  background: #000000;
+  z-index: 10;
+  transition: transform 0.85s var(--ease-aizen);
+}
+
+.aizen-shutter-top {
+  top: 0;
+  transform-origin: top;
+}
+
+.aizen-shutter-bottom {
+  bottom: 0;
+  transform-origin: bottom;
+}
+
+.aizen-intro-overlay.is-exiting .aizen-shutter-top {
+  transform: translateY(-100%);
+}
+
+.aizen-intro-overlay.is-exiting .aizen-shutter-bottom {
+  transform: translateY(100%);
+}
+
+.aizen-intro-content {
+  position: relative;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  transition: opacity 0.3s ease;
+}
+
+.aizen-intro-overlay.is-exiting .aizen-intro-content {
+  opacity: 0;
+}
+
+/* Aizen Glitch Title */
+.aizen-glitch-title {
+  font-size: clamp(2.5rem, 8vw, 5.5rem);
+  font-weight: 900;
+  letter-spacing: 0.22em;
+  color: #ffffff;
+  position: relative;
+  text-transform: uppercase;
+  font-family: var(--font-mono);
+  margin-bottom: 1.5rem;
+}
+
+.aizen-glitch-title::before,
+.aizen-glitch-title::after {
+  content: attr(data-text);
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.aizen-glitch-title::before {
+  color: var(--zoro-lime);
+  opacity: 0.8;
+  clip-path: inset(10% 0 55% 0);
+  animation: aizenGlitch 0.35s infinite alternate-reverse;
+}
+
+.aizen-glitch-title::after {
+  color: #00f5ff;
+  opacity: 0.7;
+  clip-path: inset(65% 0 10% 0);
+  animation: aizenGlitch 0.4s infinite 0.1s alternate;
+}
+
+@keyframes aizenGlitch {
+  0% { transform: translate(0); }
+  25% { transform: translate(-3px, 2px); }
+  50% { transform: translate(3px, -2px); }
+  75% { transform: translate(-2px, -1px); }
+  100% { transform: translate(2px, 1px); }
+}
+
+/* Aizen Loading Bar */
+.aizen-progress-track {
+  width: 280px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  overflow: hidden;
+  position: relative;
+  box-shadow: 0 0 15px rgba(202, 233, 98, 0.2);
+}
+
+.aizen-progress-bar {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #00f5ff, var(--zoro-lime));
+  box-shadow: 0 0 12px var(--zoro-lime);
+  transition: width 0.15s ease-out;
+}
+
+.aizen-intro-meta {
+  margin-top: 1.25rem;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: #8890a0;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.aizen-kanji-bg {
+  position: absolute;
+  font-size: clamp(4rem, 15vw, 10rem);
+  font-weight: 900;
+  color: rgba(255, 255, 255, 0.03);
+  pointer-events: none;
+  user-select: none;
+  z-index: 15;
+}
+.aizen-kanji-left { bottom: 5%; left: 5%; }
+.aizen-kanji-right { top: 5%; right: 5%; }
+
+/* Ambient Aura Background */
+.ambient-glow {
+  position: fixed;
+  top: -150px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 900px;
+  height: 450px;
+  background: radial-gradient(circle, rgba(202, 233, 98, 0.08) 0%, rgba(86, 197, 150, 0.04) 40%, transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+  filter: blur(80px);
+}
+
+/* ==========================================================================
+   ZORO HEADER & NAVBAR WITH AIZEN GLASS
+   ========================================================================== */
+
+.zoro-header {
+  position: sticky;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 70px;
+  z-index: 1000;
+  background: rgba(12, 13, 18, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  transition: background 0.3s ease, border-color 0.3s ease;
+}
+
+.zoro-header.scrolled {
+  background: rgba(12, 13, 18, 0.95);
+  border-bottom-color: rgba(202, 233, 98, 0.2);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+}
+
+.header-inner {
+  width: 100%;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 0 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+}
+
+.menu-toggle-btn {
+  background: none;
+  color: var(--text-main);
+  font-size: 1.35rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+.menu-toggle-btn:hover {
+  color: var(--zoro-lime);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+/* Zoro Logo */
+.zoro-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 800;
+  font-size: 1.6rem;
+  letter-spacing: -0.02em;
+}
+
+.zoro-brand span.verse {
+  color: var(--zoro-lime);
+  text-shadow: 0 0 12px var(--zoro-lime-glow);
+}
+
+.zoro-brand-icon {
+  width: 28px;
+  height: 28px;
+  background: var(--zoro-lime);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #000;
+  font-weight: 900;
+  box-shadow: 0 0 14px var(--zoro-lime-glow);
+}
+
+/* Navigation Links */
+.header-nav {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.nav-link {
+  font-size: 0.925rem;
+  font-weight: 500;
+  color: var(--text-sub);
+  position: relative;
+  padding: 6px 0;
+  transition: color 0.2s ease;
+}
+
+.nav-link:hover,
+.nav-link.active {
+  color: var(--text-main);
+}
+
+.nav-link.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: var(--zoro-lime);
+  box-shadow: 0 0 8px var(--zoro-lime);
+}
+
+/* Zoro Search Bar */
+.search-wrapper {
+  position: relative;
+  flex: 1;
+  max-width: 380px;
+}
+
+.search-box {
+  display: flex;
+  align-items: center;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  padding: 0.45rem 1rem;
+  gap: 0.75rem;
+  transition: all 0.25s ease;
+}
+
+.search-box:focus-within {
+  border-color: var(--zoro-lime);
+  box-shadow: 0 0 16px rgba(202, 233, 98, 0.2);
+  background: var(--bg-card);
+}
+
+.search-box input {
+  background: none;
+  width: 100%;
+  font-size: 0.875rem;
+  color: var(--text-main);
+}
+
+.search-box input::placeholder {
+  color: var(--text-muted);
+}
+
+.search-btn {
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  transition: color 0.2s;
+}
+
+.search-box:focus-within .search-btn {
+  color: var(--zoro-lime);
+}
+
+/* Autocomplete Dropdown */
+.search-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  width: 100%;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(20px);
+  max-height: 400px;
+  overflow-y: auto;
+  display: none;
+  z-index: 100;
+}
+
+.search-dropdown.is-open {
+  display: block;
+  animation: aizenDropdown 0.2s var(--ease-smooth);
+}
+
+@keyframes aizenDropdown {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.search-result-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 0.9rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  transition: background 0.15s;
+}
+.search-result-item:hover {
+  background: rgba(202, 233, 98, 0.1);
+}
+.search-result-thumb {
+  width: 36px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: 4px;
+}
+.search-result-info {
+  flex: 1;
+}
+.search-result-title {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 240px;
+}
+.search-result-meta {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  display: flex;
+  gap: 0.5rem;
+}
+
+/* Header Actions */
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.icon-action-btn {
+  background: none;
+  color: var(--text-sub);
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.icon-action-btn:hover {
+  color: var(--zoro-lime);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* Zoro Lime Sign In Button */
+.btn-zoro-primary {
+  background: var(--zoro-lime);
+  color: #0c0d12;
+  font-weight: 700;
+  font-size: 0.875rem;
+  padding: 0.5rem 1.25rem;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.25s var(--ease-spring);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  box-shadow: 0 0 16px var(--zoro-lime-glow);
+}
+
+.btn-zoro-primary:hover {
+  background: var(--zoro-lime-hover);
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 4px 22px rgba(202, 233, 98, 0.5);
+}
+
+.user-badge-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  padding: 0.35rem 0.85rem;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.user-badge-btn:hover {
+  border-color: var(--zoro-lime);
+}
+.user-avatar-circle {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--zoro-lime);
+  color: #000;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+}
+
+/* ==========================================================================
+   ZORO SPOTLIGHT HERO SLIDER WITH AIZEN MOTION
+   ========================================================================== */
+
+.spotlight-hero {
+  position: relative;
+  width: 100%;
+  min-height: 540px;
+  overflow: hidden;
+  background: var(--bg-darker);
+}
+
+.spotlight-slide {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.8s ease, visibility 0.8s ease;
+}
+
+.spotlight-slide.is-active {
+  opacity: 1;
+  visibility: visible;
+  position: relative;
+}
+
+/* Background Banner with Dynamic Gradient */
+.spotlight-backdrop {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center top;
+  filter: brightness(0.65) contrast(1.1);
+  transform: scale(1.02);
+  transition: transform 6s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.spotlight-slide.is-active .spotlight-backdrop {
+  transform: scale(1.08);
+}
+
+.spotlight-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(12, 13, 18, 0.98) 0%, rgba(12, 13, 18, 0.8) 45%, rgba(12, 13, 18, 0.3) 100%),
+              linear-gradient(0deg, rgba(12, 13, 18, 1) 0%, transparent 60%);
+}
+
+.spotlight-content {
+  position: relative;
+  z-index: 10;
+  max-width: 1440px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 4rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.spotlight-rank {
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--zoro-lime);
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  margin-bottom: 0.75rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.spotlight-title {
+  font-size: clamp(2rem, 5vw, 3.8rem);
+  font-weight: 900;
+  line-height: 1.1;
+  max-width: 720px;
+  margin-bottom: 1rem;
+  color: #ffffff;
+  text-shadow: 0 4px 20px rgba(0, 0, 0, 0.8);
+}
+
+.spotlight-badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 1.25rem;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.2rem 0.55rem;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.badge-sub {
+  background: rgba(180, 227, 128, 0.2);
+  color: var(--zoro-sub);
+  border: 1px solid rgba(180, 227, 128, 0.4);
+}
+
+.badge-dub {
+  background: rgba(255, 141, 161, 0.2);
+  color: var(--zoro-dub);
+  border: 1px solid rgba(255, 141, 161, 0.4);
+}
+
+.badge-hd {
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+}
+
+.badge-type {
+  background: rgba(86, 197, 150, 0.2);
+  color: var(--zoro-ep);
+}
+
+.spotlight-desc {
+  max-width: 620px;
+  color: var(--text-sub);
+  font-size: 0.95rem;
+  line-height: 1.6;
+  margin-bottom: 2rem;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.spotlight-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.btn-watch-now {
+  background: var(--zoro-lime);
+  color: #0c0d12;
+  font-size: 1rem;
+  font-weight: 800;
+  padding: 0.8rem 1.8rem;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  cursor: pointer;
+  transition: all 0.25s var(--ease-spring);
+  box-shadow: 0 0 20px var(--zoro-lime-glow);
+}
+
+.btn-watch-now:hover {
+  background: var(--zoro-lime-hover);
+  transform: translateY(-2px) scale(1.03);
+  box-shadow: 0 6px 28px rgba(202, 233, 98, 0.55);
+}
+
+.btn-detail {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  font-size: 0.95rem;
+  font-weight: 600;
+  padding: 0.8rem 1.6rem;
+  border-radius: 999px;
+  border: 1px solid var(--border-subtle);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  backdrop-filter: blur(8px);
+}
+
+.btn-detail:hover {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+/* Slider Controls */
+.spotlight-nav {
+  position: absolute;
+  bottom: 2rem;
+  right: 2rem;
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  z-index: 20;
+}
+
+.spotlight-arrow {
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  background: rgba(21, 23, 30, 0.7);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-main);
+  font-size: 1.1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.spotlight-arrow:hover {
+  background: var(--zoro-lime);
+  color: #000;
+  border-color: var(--zoro-lime);
+  box-shadow: 0 0 16px var(--zoro-lime-glow);
+}
+
+/* ==========================================================================
+   TRENDING ANIME RAIL (ZORO TOP 10 WITH OVERSIZED NUMBERS)
+   ========================================================================== */
+
+.section-trending {
+  padding: 2.5rem 0;
+  position: relative;
+}
+
+.container-main {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 0 1.5rem;
+}
+
+.section-header-zoro {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
+}
+
+.section-title {
+  font-size: 1.45rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: #fff;
+}
+
+.section-title span.accent {
+  color: var(--zoro-lime);
+}
+
+.trending-rail {
+  display: flex;
+  gap: 1.25rem;
+  overflow-x: auto;
+  padding-bottom: 1rem;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+
+.trending-item {
+  flex: 0 0 210px;
+  display: flex;
+  position: relative;
+  background: var(--bg-surface);
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  transition: all 0.3s var(--ease-smooth);
+}
+
+.trending-item:hover {
+  transform: translateY(-4px);
+  border-color: var(--border-active);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.7);
+}
+
+.trending-rank-num {
+  position: absolute;
+  bottom: -15px;
+  left: -8px;
+  font-size: 5rem;
+  font-weight: 900;
+  font-family: var(--font-mono);
+  color: rgba(255, 255, 255, 0.08);
+  line-height: 1;
+  pointer-events: none;
+  z-index: 1;
+  transition: color 0.3s;
+}
+
+.trending-item:hover .trending-rank-num {
+  color: rgba(202, 233, 98, 0.22);
+}
+
+.trending-poster-wrap {
+  width: 100%;
+  aspect-ratio: 3 / 4.2;
+  position: relative;
+  overflow: hidden;
+}
+
+.trending-poster-wrap img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.4s ease;
+}
+
+.trending-item:hover .trending-poster-wrap img {
+  transform: scale(1.06);
+}
+
+.trending-info-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 1.5rem 0.75rem 0.65rem;
+  background: linear-gradient(0deg, rgba(12, 13, 18, 0.95) 0%, rgba(12, 13, 18, 0.6) 70%, transparent 100%);
+  z-index: 2;
+}
+
+.trending-anime-title {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ==========================================================================
+   ZORO 4-COLUMN FEATURED GRIDS (AIRING, POPULAR, FAVORITE, COMPLETED)
+   ========================================================================== */
+
+.four-col-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1.5rem;
+  margin-top: 2rem;
+  margin-bottom: 3.5rem;
+}
+
+.col-block {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 1.25rem;
+  box-shadow: var(--shadow-card);
+}
+
+.col-title {
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: var(--zoro-lime);
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.col-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.col-item {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.4rem;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+.col-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.col-thumb {
+  width: 48px;
+  height: 64px;
+  border-radius: 6px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.col-item-details {
+  flex: 1;
+  min-width: 0;
+}
+
+.col-item-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 0.25rem;
+}
+
+.col-item:hover .col-item-title {
+  color: var(--zoro-lime);
+}
+
+.col-item-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.725rem;
+  color: var(--text-muted);
+}
+
+/* ==========================================================================
+   ZORO ANIME CARD GRID & AIZEN HOVER TOOLTIPS
+   ========================================================================== */
+
+.filter-bar-zoro {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.75rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.genre-chips-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.genre-chip-zoro {
+  background: var(--bg-surface);
+  color: var(--text-sub);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 0.4rem 0.85rem;
+  font-size: 0.825rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.genre-chip-zoro:hover,
+.genre-chip-zoro.active {
+  background: var(--zoro-lime);
+  color: #0c0d12;
+  border-color: var(--zoro-lime);
+  box-shadow: 0 0 12px var(--zoro-lime-glow);
+}
+
+.cards-grid-zoro {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 1.25rem;
+}
+
+.zoro-card {
+  position: relative;
+  background: var(--bg-surface);
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  transition: transform 0.25s var(--ease-spring), border-color 0.25s ease, box-shadow 0.25s ease;
+  display: flex;
+  flex-direction: column;
+}
+
+.zoro-card:hover {
+  transform: translateY(-6px);
+  border-color: var(--border-active);
+  box-shadow: 0 12px 30px -5px rgba(0, 0, 0, 0.9), 0 0 16px rgba(202, 233, 98, 0.15);
+}
+
+.zoro-card-poster {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 3 / 4.2;
+  overflow: hidden;
+  background: #111;
+}
+
+.zoro-card-poster img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.4s ease;
+}
+
+.zoro-card:hover .zoro-card-poster img {
+  transform: scale(1.07);
+}
+
+/* Play Icon Overlay */
+.zoro-play-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+
+.zoro-play-circle {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--zoro-lime);
+  color: #0c0d12;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  box-shadow: 0 0 20px var(--zoro-lime-glow);
+  transform: scale(0.7);
+  transition: transform 0.25s var(--ease-spring);
+}
+
+.zoro-card:hover .zoro-play-overlay {
+  opacity: 1;
+}
+
+.zoro-card:hover .zoro-play-circle {
+  transform: scale(1);
+}
+
+/* Bottom Tags on Poster */
+.zoro-poster-badges {
+  position: absolute;
+  bottom: 6px;
+  left: 6px;
+  right: 6px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  z-index: 5;
+}
+
+.badges-left {
+  display: flex;
+  gap: 4px;
+}
+
+.badge-mini-sub {
+  background: var(--zoro-sub);
+  color: #0c0d12;
+  font-weight: 800;
+  font-size: 0.65rem;
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+.badge-mini-dub {
+  background: var(--zoro-dub);
+  color: #0c0d12;
+  font-weight: 800;
+  font-size: 0.65rem;
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+.badge-mini-ep {
+  background: rgba(0, 0, 0, 0.7);
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.65rem;
+  padding: 1px 6px;
+  border-radius: 3px;
+}
+
+.zoro-card-info {
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.zoro-card-title {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 0.35rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.zoro-card:hover .zoro-card-title {
+  color: var(--zoro-lime);
+}
+
+.zoro-card-submeta {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Zoro Hover Tooltip */
+.zoro-tooltip {
+  position: absolute;
+  z-index: 9999;
+  width: 320px;
+  background: rgba(26, 28, 36, 0.95);
+  border: 1px solid var(--border-active);
+  border-radius: 12px;
+  padding: 1.25rem;
+  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(16px);
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(10px) scale(0.96);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.zoro-tooltip.is-visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.tooltip-title {
+  font-size: 1rem;
+  font-weight: 800;
+  color: #fff;
+  margin-bottom: 0.35rem;
+}
+
+.tooltip-rating {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--zoro-lime);
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-bottom: 0.6rem;
+}
+
+.tooltip-synopsis {
+  font-size: 0.8rem;
+  color: var(--text-sub);
+  line-height: 1.5;
+  margin-bottom: 0.85rem;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.tooltip-meta-rows {
+  font-size: 0.75rem;
+  display: grid;
+  gap: 0.35rem;
+  color: var(--text-muted);
+}
+.tooltip-meta-rows span strong {
+  color: var(--text-main);
+}
+
+/* ==========================================================================
+   ZORO WATCH PAGE WITH AIZEN CINEMATIC VIDEO & DISCUSSION
+   ========================================================================== */
+
+.watch-layout {
+  display: grid;
+  grid-template-columns: 1fr 380px;
+  gap: 2rem;
+  padding: 2rem 0;
+}
+
+.watch-player-column {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+/* Ambient Glow Video Stage */
+.player-theater-wrapper {
+  position: relative;
+  border-radius: 12px;
+  background: #000;
+  overflow: hidden;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.9);
+  aspect-ratio: 16 / 9;
+}
+
+.player-stage-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: 5;
+}
+
+.player-cover-overlay {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.player-cover-overlay.is-playing {
+  display: none !important;
+}
+
+.player-big-play {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: var(--zoro-lime);
+  color: #0c0d12;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  box-shadow: 0 0 35px var(--zoro-lime-glow);
+  transition: transform 0.25s var(--ease-spring);
+}
+
+.player-cover-overlay:hover .player-big-play {
+  transform: scale(1.1);
+  box-shadow: 0 0 45px rgba(202, 233, 98, 0.6);
+}
+
+/* Player Custom Controls */
+.zoro-player-bar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 0.75rem 1.25rem;
+}
+
+.progress-track-zoro {
+  flex: 1;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 999px;
+  position: relative;
+  cursor: pointer;
+}
+
+.progress-fill-zoro {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: var(--zoro-lime);
+  box-shadow: 0 0 10px var(--zoro-lime);
+  border-radius: 999px;
+  width: 0%;
+}
+
+/* Server Selection */
+.servers-bar-zoro {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 0.85rem 1.25rem;
+}
+
+.server-pill {
+  padding: 0.4rem 0.85rem;
+  border-radius: 6px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  font-size: 0.825rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.server-pill:hover,
+.server-pill.active {
+  background: var(--zoro-lime);
+  color: #0c0d12;
+  border-color: var(--zoro-lime);
+  box-shadow: 0 0 12px var(--zoro-lime-glow);
+}
+
+/* Watch Page Sidebar & Episode Selector */
+.watch-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.episodes-card-zoro {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 1.25rem;
+  box-shadow: var(--shadow-card);
+}
+
+.ep-range-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: 0.75rem;
+}
+
+.ep-tab-btn {
+  padding: 0.35rem 0.75rem;
+  background: var(--bg-card);
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  color: var(--text-sub);
+}
+.ep-tab-btn.active {
+  background: var(--zoro-lime);
+  color: #000;
+}
+
+.ep-buttons-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 0.5rem;
+  max-height: 380px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.ep-number-btn {
+  aspect-ratio: 1;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text-sub);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.ep-number-btn:hover {
+  border-color: var(--zoro-lime);
+  color: #fff;
+}
+
+.ep-number-btn.active {
+  background: var(--zoro-lime);
+  color: #0c0d12;
+  border-color: var(--zoro-lime);
+  box-shadow: 0 0 14px var(--zoro-lime-glow);
+}
+
+/* ==========================================================================
+   ZORO COMMUNITY & COMMENTS (SYNCED TO SQLITE BACKEND)
+   ========================================================================== */
+
+.discussion-box {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 1.5rem;
+  margin-top: 2rem;
+}
+
+.comment-input-area {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1.75rem;
+}
+
+.user-comment-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--zoro-lime);
+  color: #000;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.comment-form-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.comment-form-wrap textarea {
+  width: 100%;
+  min-height: 85px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  font-size: 0.9rem;
+  color: #fff;
+  resize: vertical;
+}
+
+.comment-form-wrap textarea:focus {
+  border-color: var(--zoro-lime);
+}
+
+.comment-list-zoro {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.single-comment {
+  display: flex;
+  gap: 1rem;
+  padding-bottom: 1.25rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.comment-user-name {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.comment-date {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-left: 0.5rem;
+}
+
+.comment-body-text {
+  font-size: 0.875rem;
+  color: var(--text-sub);
+  margin-top: 0.25rem;
+  line-height: 1.5;
+}
+
+/* ==========================================================================
+   AIZEN GLASS AUTH MODAL
+   ========================================================================== */
+
+.aizen-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 5, 8, 0.85);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+}
+
+.aizen-modal-backdrop.is-active {
+  opacity: 1;
+  pointer-events: all;
+}
+
+.aizen-modal-card {
+  width: 100%;
+  max-width: 440px;
+  background: rgba(22, 24, 32, 0.92);
+  border: 1px solid var(--border-active);
+  border-radius: 16px;
+  padding: 2.25rem;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.9), 0 0 30px rgba(202, 233, 98, 0.15);
+  position: relative;
+  transform: scale(0.95);
+  transition: transform 0.25s var(--ease-spring);
+}
+
+.aizen-modal-backdrop.is-active .aizen-modal-card {
+  transform: scale(1);
+}
+
+.modal-close-cross {
+  position: absolute;
+  top: 1.25rem;
+  right: 1.25rem;
+  background: none;
+  color: var(--text-muted);
+  font-size: 1.5rem;
+  cursor: pointer;
+  line-height: 1;
+}
+.modal-close-cross:hover { color: #fff; }
+
+.modal-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: 1.5rem;
+}
+
+.modal-tab-btn {
+  flex: 1;
+  padding: 0.75rem;
+  background: none;
+  color: var(--text-sub);
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+}
+
+.modal-tab-btn.active {
+  color: var(--zoro-lime);
+  border-bottom-color: var(--zoro-lime);
+}
+
+.input-field-group {
+  margin-bottom: 1.15rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.input-field-group label {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.input-field-group input {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 0.7rem 1rem;
+  color: #fff;
+  font-size: 0.9rem;
+}
+
+.input-field-group input:focus {
+  border-color: var(--zoro-lime);
+  box-shadow: 0 0 12px var(--zoro-lime-glow);
+}
+
+.btn-demo-quick {
+  width: 100%;
+  margin-top: 1rem;
+  padding: 0.7rem;
+  background: transparent;
+  border: 1px dashed var(--zoro-lime);
+  color: var(--zoro-lime);
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-demo-quick:hover {
+  background: rgba(202, 233, 98, 0.12);
+}
+
+/* ==========================================================================
+   TOAST NOTIFICATION SYSTEM
+   ========================================================================== */
+
+.aizen-toast-container {
+  position: fixed;
+  bottom: 2rem;
+  right: 2rem;
+  z-index: 100000;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  pointer-events: none;
+}
+
+.aizen-toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: rgba(22, 24, 32, 0.95);
+  border: 1px solid var(--border-active);
+  backdrop-filter: blur(16px);
+  padding: 0.85rem 1.25rem;
+  border-radius: 12px;
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: 500;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8), 0 0 20px rgba(202, 233, 98, 0.2);
+  transform: translateY(20px);
+  opacity: 0;
+  animation: aizenToastIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+.aizen-toast.toast-leave {
+  animation: aizenToastOut 0.25s ease forwards;
+}
+
+.aizen-toast-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--zoro-lime);
+  color: #0c0d12;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 0.8rem;
+  flex-shrink: 0;
+}
+
+@keyframes aizenToastIn {
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes aizenToastOut {
+  to { transform: translateY(20px); opacity: 0; }
+}
+
+/* ==========================================================================
+   MOBILE NAVIGATION DRAWER
+   ========================================================================== */
+
+.mobile-nav-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(8px);
+  z-index: 9998;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+.mobile-nav-backdrop.is-open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.mobile-nav-drawer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 280px;
+  background: var(--bg-surface);
+  border-right: 1px solid var(--border-subtle);
+  z-index: 9999;
+  transform: translateX(-100%);
+  transition: transform 0.35s var(--ease-spring);
+  display: flex;
+  flex-direction: column;
+  padding: 1.5rem;
+  box-shadow: 10px 0 40px rgba(0, 0, 0, 0.7);
+}
+
+.mobile-nav-backdrop.is-open .mobile-nav-drawer {
+  transform: translateX(0);
+}
+
+.mobile-drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 2rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.mobile-drawer-close {
+  background: none;
+  font-size: 1.5rem;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.mobile-drawer-close:hover { color: #fff; }
+
+.mobile-drawer-links {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.mobile-drawer-link {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.85rem 1rem;
+  border-radius: 8px;
+  color: var(--text-sub);
+  font-weight: 600;
+  font-size: 1rem;
+  transition: all 0.2s ease;
+}
+
+.mobile-drawer-link:hover,
+.mobile-drawer-link.active {
+  background: rgba(202, 233, 98, 0.1);
+  color: var(--zoro-lime);
+}
+
+/* ==========================================================================
+   GENRES SHELF STYLES
+   ========================================================================== */
+
+.genres-hero-header {
+  text-align: center;
+  margin-bottom: 3.5rem;
+  position: relative;
+}
+
+.genres-hero-header .hero-tag {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--zoro-lime);
+  background: rgba(202, 233, 98, 0.1);
+  border: 1px solid var(--border-active);
+  padding: 0.35rem 0.9rem;
+  border-radius: 20px;
+  margin-bottom: 1rem;
+  letter-spacing: 1px;
+}
+
+.genres-hero-header h1 {
+  font-size: 2.75rem;
+  font-weight: 900;
+  letter-spacing: -0.5px;
+  line-height: 1.2;
+}
+
+.genres-hero-header p {
+  color: var(--text-sub);
+  max-width: 620px;
+  margin: 0.75rem auto 0;
+  font-size: 1.05rem;
+}
+
+.genres-shelf-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.5rem;
+  margin-bottom: 4rem;
+}
+
+.genre-shelf-card {
+  position: relative;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  padding: 1.75rem;
+  overflow: hidden;
+  transition: all 0.35s var(--ease-spring);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 210px;
+  text-decoration: none;
+}
+
+.genre-shelf-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--zoro-lime), transparent);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.genre-shelf-card:hover {
+  transform: translateY(-6px);
+  background: var(--bg-card-hover);
+  border-color: var(--border-active);
+  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.6), 0 0 25px rgba(202, 233, 98, 0.15);
+}
+
+.genre-shelf-card:hover::before {
+  opacity: 1;
+}
+
+.genre-card-watermark {
+  position: absolute;
+  right: 1rem;
+  bottom: -0.5rem;
+  font-size: 5.5rem;
+  font-weight: 900;
+  color: rgba(255, 255, 255, 0.03);
+  pointer-events: none;
+  font-family: var(--font-mono);
+  line-height: 1;
+  transition: color 0.3s ease, transform 0.3s ease;
+  user-select: none;
+}
+
+.genre-shelf-card:hover .genre-card-watermark {
+  color: rgba(202, 233, 98, 0.08);
+  transform: scale(1.08) rotate(-4deg);
+}
+
+.genre-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.genre-card-icon-pill {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: rgba(202, 233, 98, 0.1);
+  border: 1px solid rgba(202, 233, 98, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.35rem;
+}
+
+.genre-card-count {
+  font-size: 0.75rem;
+  font-family: var(--font-mono);
+  background: var(--bg-surface);
+  color: var(--zoro-lime);
+  padding: 0.25rem 0.65rem;
+  border-radius: 20px;
+  border: 1px solid var(--border-subtle);
+  font-weight: 600;
+}
+
+.genre-card-title {
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: #fff;
+  margin-bottom: 0.35rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.genre-card-kanji-sub {
+  font-size: 0.85rem;
+  color: var(--zoro-lime);
+  font-family: var(--font-mono);
+  opacity: 0.85;
+}
+
+.genre-card-desc {
+  font-size: 0.85rem;
+  color: var(--text-sub);
+  line-height: 1.4;
+  margin-bottom: 1.25rem;
+  max-width: 90%;
+}
+
+.genre-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--zoro-lime);
+}
+
+.genre-card-footer svg {
+  transition: transform 0.2s ease;
+}
+
+.genre-shelf-card:hover .genre-card-footer svg {
+  transform: translateX(4px);
+}
+
+/* ==========================================================================
+   SCHEDULE STYLES
+   ========================================================================== */
+
+.schedule-hero {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  margin-bottom: 2.5rem;
+}
+
+.schedule-clock-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-active);
+  padding: 0.6rem 1.1rem;
+  border-radius: 30px;
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  box-shadow: 0 0 15px rgba(202, 233, 98, 0.15);
+}
+
+.live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--zoro-lime);
+  box-shadow: 0 0 10px var(--zoro-lime);
+  animation: pulseDot 1.8s infinite;
+}
+
+@keyframes pulseDot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.85); }
+}
+
+.schedule-day-nav {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.5rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  padding: 0.5rem;
+  margin-bottom: 2rem;
+}
+
+.schedule-day-tab {
+  background: none;
+  padding: 0.85rem 0.5rem;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.schedule-day-tab .tab-day-name {
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-sub);
+}
+
+.schedule-day-tab .tab-day-date {
+  font-family: var(--font-mono);
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: #fff;
+}
+
+.schedule-day-tab:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.schedule-day-tab.active {
+  background: var(--zoro-lime);
+  box-shadow: 0 4px 15px rgba(202, 233, 98, 0.35);
+}
+
+.schedule-day-tab.active .tab-day-name,
+.schedule-day-tab.active .tab-day-date {
+  color: #0c0d12;
+}
+
+.schedule-day-tab.is-today::after {
+  content: "TODAY";
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  font-size: 0.55rem;
+  font-weight: 900;
+  color: var(--zoro-lime);
+  background: var(--bg-darker);
+  padding: 1px 4px;
+  border-radius: 4px;
+}
+.schedule-day-tab.active.is-today::after {
+  background: #0c0d12;
+  color: var(--zoro-lime);
+}
+
+.schedule-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-bottom: 3.5rem;
+}
+
+.schedule-item-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  padding: 1.25rem 1.5rem;
+  gap: 1.5rem;
+  transition: all 0.25s var(--ease-spring);
+}
+
+.schedule-item-card:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--border-active);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+}
+
+.schedule-item-left {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  flex: 1;
+}
+
+.schedule-slot-time {
+  font-family: var(--font-mono);
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--zoro-lime);
+  min-width: 80px;
+  padding: 0.45rem 0.75rem;
+  background: rgba(202, 233, 98, 0.1);
+  border: 1px solid rgba(202, 233, 98, 0.2);
+  border-radius: 8px;
+  text-align: center;
+}
+
+.schedule-thumb {
+  width: 55px;
+  height: 75px;
+  border-radius: 8px;
+  overflow: hidden;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.schedule-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.schedule-title-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.schedule-title-link {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #fff;
+}
+.schedule-title-link:hover {
+  color: var(--zoro-lime);
+}
+
+.schedule-meta-badges {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.8rem;
+}
+
+.schedule-item-right {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.btn-remind-slot {
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  color: var(--text-sub);
+  padding: 0.55rem 0.9rem;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  transition: all 0.2s ease;
+}
+
+.btn-remind-slot:hover {
+  border-color: var(--zoro-lime);
+  color: var(--zoro-lime);
+}
+
+/* ==========================================================================
+   RESPONSIVE MEDIA QUERIES
+   ========================================================================== */
+
+@media (max-width: 1200px) {
+  .cards-grid-zoro { grid-template-columns: repeat(4, 1fr); }
+  .four-col-grid { grid-template-columns: repeat(2, 1fr); }
+  .genres-shelf-grid { grid-template-columns: repeat(3, 1fr); }
+}
+
+@media (max-width: 900px) {
+  .header-nav { display: none; }
+  .cards-grid-zoro { grid-template-columns: repeat(3, 1fr); }
+  .watch-layout { grid-template-columns: 1fr; }
+  .genres-shelf-grid { grid-template-columns: repeat(2, 1fr); }
+  .schedule-day-nav { overflow-x: auto; display: flex; }
+  .schedule-day-tab { min-width: 75px; }
+  .schedule-item-card { flex-direction: column; align-items: flex-start; gap: 1rem; }
+  .schedule-item-right { width: 100%; justify-content: flex-end; }
+}
+
+@media (max-width: 600px) {
+  .cards-grid-zoro { grid-template-columns: repeat(2, 1fr); gap: 0.75rem; }
+  .four-col-grid { grid-template-columns: 1fr; }
+  .genres-shelf-grid { grid-template-columns: 1fr; }
+  .genres-hero-header h1 { font-size: 2rem; }
+  .search-wrapper { max-width: 160px; }
+  .spotlight-title { font-size: 1.8rem; }
+  .schedule-slot-time { font-size: 1rem; min-width: 60px; padding: 0.3rem 0.5rem; }
+  .schedule-item-left { gap: 0.85rem; }
+}

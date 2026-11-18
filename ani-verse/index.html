@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ani Verse - Watch Anime Online Free with Zoro UI & Aizen Motion</title>
+  <meta name="description" content="Ani Verse anime streaming platform featuring Zoro.to layout and Aizen cinematic motion design.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/zoro-aizen.css">
+</head>
+<body>
+
+  <!-- Ambient Light Backdrop -->
+  <div class="ambient-glow"></div>
+
+  <!-- Zoro Top Navigation with Aizen Glass -->
+  <header class="zoro-header">
+    <div class="header-inner">
+      <div class="header-left">
+        <button class="menu-toggle-btn" type="button" aria-label="Toggle Menu">☰</button>
+        <a class="zoro-brand" href="index.html">
+          <div class="zoro-brand-icon">Z</div>
+          <span>Ani<span class="verse">Verse</span></span>
+        </a>
+      </div>
+
+      <nav class="header-nav" aria-label="Main Navigation">
+        <a class="nav-link active" href="index.html">Home</a>
+        <a class="nav-link" href="browse.html">Browse</a>
+        <a class="nav-link" href="genres.html">Genres</a>
+        <a class="nav-link" href="schedule.html">Schedule</a>
+        <a class="nav-link" href="browse.html?genre=action">Movies</a>
+        <a class="nav-link" href="browse.html?sort=newest">Top Airing</a>
+      </nav>
+
+      <div class="search-wrapper">
+        <div class="search-box">
+          <input id="zoro-search-input" type="text" placeholder="Search anime, movie, series..." autocomplete="off">
+          <button class="search-btn" type="button" aria-label="Search">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          </button>
+        </div>
+        <div class="search-dropdown" id="zoro-search-dropdown"></div>
+      </div>
+
+      <div class="header-actions">
+        <button class="icon-action-btn" id="btn-random-anime" type="button" title="Shuffle / Random Anime">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 3h5v5M4 20l7-7m9-10-7 7M4 4l16 16M16 21h5v-5"/></svg>
+        </button>
+        <button class="icon-action-btn" id="btn-replay-intro" type="button" title="Replay Aizen Shutter Intro">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 12 7-7v4c7 0 11 4 11 11-2-5-6-7-11-7v4l-7-5z"/></svg>
+        </button>
+        <div id="header-user-slot">
+          <button class="btn-zoro-primary" type="button">Sign In</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main id="main-content">
+    <!-- Zoro Spotlight Hero Slider with Aizen Kinetic Transitions -->
+    <section class="spotlight-hero" aria-label="Spotlight Carousel">
+      <div id="spotlight-slider-container">
+        <!-- Rendered dynamically via zoro-aizen.js -->
+        <div class="spotlight-slide is-active">
+          <div class="spotlight-backdrop" style="background-image: url('img/banner.png');"></div>
+          <div class="spotlight-overlay"></div>
+          <div class="spotlight-content">
+            <span class="spotlight-rank">🔥 #1 Spotlight</span>
+            <h1 class="spotlight-title">Kagerou Protocol</h1>
+            <div class="spotlight-badges">
+              <span class="badge badge-sub">SUB 12</span>
+              <span class="badge badge-dub">DUB 12</span>
+              <span class="badge badge-type">Series</span>
+              <span class="badge badge-hd">HD</span>
+              <span style="font-size: 0.8rem; color: var(--text-sub); margin-left: 6px;">2026 • 24m</span>
+            </div>
+            <p class="spotlight-desc">A courier runs the last unmonitored line in a watched city. The drop goes missing and the route closes behind her.</p>
+            <div class="spotlight-actions">
+              <a class="btn-watch-now" href="watch.html?slug=kagerou-protocol&ep=1">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>
+                Watch Now
+              </a>
+              <a class="btn-detail" href="watch.html?slug=kagerou-protocol&ep=7">+ Detail</a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="spotlight-nav">
+        <button class="spotlight-arrow" id="spotlight-prev" type="button" aria-label="Previous Slide">‹</button>
+        <button class="spotlight-arrow" id="spotlight-next" type="button" aria-label="Next Slide">›</button>
+      </div>
+    </section>
+
+    <!-- Continue Watching (local watch progress) -->
+    <section class="container-main zoko-continue-section" id="continue-watching-section" hidden>
+      <div class="section-header-zoro">
+        <h2 class="section-title">Continue <span class="accent">Watching</span></h2>
+        <span style="font-size: 0.85rem; color: var(--text-muted); font-family: var(--font-mono);">RESUME WHERE YOU LEFT OFF</span>
+      </div>
+      <div class="cards-grid-zoro" id="continue-watching-row"></div>
+    </section>
+
+    <!-- Zoro Trending Top 10 Rail -->
+    <section class="section-trending container-main">
+      <div class="section-header-zoro">
+        <h2 class="section-title">Trending <span class="accent">Anime</span></h2>
+        <span style="font-size: 0.85rem; color: var(--text-muted); font-family: var(--font-mono);">TOP 10 TODAY</span>
+      </div>
+      <div class="trending-rail" id="trending-rail-container">
+        <!-- Rendered dynamically -->
+      </div>
+    </section>
+
+    <!-- Zoro 4-Column Section (Top Airing, Most Popular, Most Favorite, Latest Completed) -->
+    <section class="container-main">
+      <div class="four-col-grid">
+        <div class="col-block">
+          <div class="col-title">Top Airing</div>
+          <div class="col-list" id="col-airing-list"></div>
+        </div>
+        <div class="col-block">
+          <div class="col-title">Most Popular</div>
+          <div class="col-list" id="col-popular-list"></div>
+        </div>
+        <div class="col-block">
+          <div class="col-title">Most Favorite</div>
+          <div class="col-list" id="col-favorite-list"></div>
+        </div>
+        <div class="col-block">
+          <div class="col-title">Latest Completed</div>
+          <div class="col-list" id="col-completed-list"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Zoro Main Catalog Grid with Genre Filter Chips & Hover Tooltips -->
+    <section class="container-main" style="margin-bottom: 4rem;">
+      <div class="section-header-zoro">
+        <h2 class="section-title">Latest <span class="accent">Episodes</span></h2>
+        <a href="browse.html" style="font-size: 0.85rem; color: var(--zoro-lime); font-weight: 600;">View All →</a>
+      </div>
+
+      <div class="filter-bar-zoro">
+        <div class="genre-chips-wrap" id="genre-chips-container">
+          <button class="genre-chip-zoro active" data-genre="all" type="button">All</button>
+          <button class="genre-chip-zoro" data-genre="action" type="button">Action</button>
+          <button class="genre-chip-zoro" data-genre="drama" type="button">Drama</button>
+          <button class="genre-chip-zoro" data-genre="fantasy" type="button">Fantasy</button>
+          <button class="genre-chip-zoro" data-genre="horror" type="button">Horror</button>
+          <button class="genre-chip-zoro" data-genre="mecha" type="button">Mecha</button>
+          <button class="genre-chip-zoro" data-genre="romance" type="button">Romance</button>
+          <button class="genre-chip-zoro" data-genre="sports" type="button">Sports</button>
+        </div>
+      </div>
+
+      <div class="cards-grid-zoro" id="zoro-main-grid">
+        <!-- Rendered dynamically with hover card tooltips -->
+      </div>
+    </section>
+  </main>
+
+  <!-- Zoro Footer with Aizen Cyber Accents -->
+  <footer style="background: var(--bg-darker); border-top: 1px solid var(--border-subtle); padding: 3.5rem 0 2rem;">
+    <div class="container-main">
+      <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 2rem; padding-bottom: 2rem; border-bottom: 1px solid rgba(255,255,255,0.06);">
+        <a class="zoro-brand" href="index.html">
+          <div class="zoro-brand-icon">Z</div>
+          <span>Ani<span class="verse">Verse</span></span>
+        </a>
+        <div style="display: flex; gap: 1.5rem; font-size: 0.875rem; color: var(--text-sub);">
+          <a href="index.html">Home</a>
+          <a href="browse.html">Catalog</a>
+          <a href="schedule.html">Schedule</a>
+          <a href="genres.html">Genres</a>
+          <a href="watch.html?slug=kagerou-protocol&ep=7">Watch</a>
+        </div>
+      </div>
+      <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; margin-top: 1.5rem; font-size: 0.75rem; color: var(--text-muted);">
+        <p>Ani Verse does not store any files on its server. Combining Zoro.to UI components with Aizen-Verse cinematic animation engine.</p>
+        <p style="font-family: var(--font-mono); color: var(--zoro-lime);">ZORO × AIZEN HYBRID ENGINE 2026</p>
+      </div>
+    </div>
+  </footer>
+
+  <script src="js/zoro-aizen.js"></script>
+</body>
+</html>
