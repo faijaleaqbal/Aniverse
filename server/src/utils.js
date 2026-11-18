@@ -130,7 +130,7 @@ export function titleView(row) {
     studio: row.studio,
     tagline: row.tagline,
     synopsis: row.synopsis,
-    malId: row.mal_id || 21,
-    anilistId: row.anilist_id || 21,
+    malId: row.mal_id != null ? Number(row.mal_id) : null,
+    anilistId: row.anilist_id != null ? Number(row.anilist_id) : null,
   };
 }
