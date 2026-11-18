@@ -673,33 +673,108 @@
 
     const params = new URLSearchParams(window.location.search);
     const currentSlug = params.get("slug") || "kagerou-protocol";
-    const currentEp = parseInt(params.get("ep"), 10) || 1;
+    let currentEp = parseInt(params.get("ep"), 10) || 1;
+    let currentTrack = "sub";
 
-    const playerApi = window.ZokoPlayer || null;
-    const watchApi = window.ZokoWatchUI || null;
+    const iframe = document.getElementById("zoko-embed-frame");
+    const coverOverlay = document.getElementById("video-cover-overlay");
+    const spinner = document.getElementById("zoko-player-spinner");
+    const overlay = document.getElementById("zoko-player-overlay");
+    const overlayTitle = document.getElementById("zoko-overlay-title");
+    const overlayText = document.getElementById("zoko-overlay-text");
+    const resumeNote = document.getElementById("zoko-resume-note");
+    const playerWrap = document.getElementById("player-wrap");
+    const playPauseBtn = document.getElementById("btn-player-playpause");
+    const progressFill = document.getElementById("video-progress-fill");
+    const timeText = document.getElementById("video-time-text");
 
-    // Embed origin + defaults come from the server config (never hardcoded here).
-    const cfgRes = await api("/api/player/config");
-    if (playerApi && cfgRes.ok && cfgRes.data && cfgRes.data.embed) {
-      playerApi.setEmbedConfig(cfgRes.data.embed);
+    let titleData = null;
+    let episodesList = [];
+    let currentPosition = 0;
+    let duration = 1440;
+    let isPaused = true;
+    let lastProgressSync = 0;
+
+    // LocalStorage keys
+    const LS_SETTINGS_KEY = "av_zoko_settings";
+    const LS_IDS_KEY = "av_zoko_ids";
+
+    // Player settings (persisted)
+    let playerSettings = {
+      autoplay: true,
+      autoskip: true,
+      autonext: true,
+    };
+    try {
+      const saved = localStorage.getItem(LS_SETTINGS_KEY);
+      if (saved) playerSettings = Object.assign(playerSettings, JSON.parse(saved));
+    } catch {}
+
+    // Custom MAL ID per anime (persisted)
+    function getCustomMalId(slug) {
+      try {
+        const map = JSON.parse(localStorage.getItem(LS_IDS_KEY) || "{}");
+        return map[slug] || null;
+      } catch {
+        return null;
+      }
+    }
+    function setCustomMalId(slug, id) {
+      try {
+        const map = JSON.parse(localStorage.getItem(LS_IDS_KEY) || "{}");
+        map[slug] = id;
+        localStorage.setItem(LS_IDS_KEY, JSON.stringify(map));
+      } catch {}
     }
 
-    let title = null;
-    let episodes = [];
+    // Helper: Send postMessage commands to ZokoAnime embed player
+    function sendPlayerCommand(cmd) {
+      if (iframe && iframe.contentWindow) {
+        iframe.contentWindow.postMessage(
+          Object.assign({ channel: "zokoanime" }, cmd),
+          "https://zokoanime.video"
+        );
+      }
+    }
+
+    // Helper: Format seconds to MM:SS
+    function formatTime(s) {
+      const sec = Math.floor(Math.max(0, s));
+      const m = Math.floor(sec / 60);
+      const remainingSec = sec % 60;
+      return `${String(m).padStart(2, "0")}:${String(remainingSec).padStart(2, "0")}`;
+    }
+
+    // Spec-compliant embed URL builder (ZokoAnime spec only)
+    function getEmbedUrl(malId, epNum, track, opts = {}) {
+      if (!malId) {
+        showToast("No MAL ID mapped for this title");
+        return null;
+      }
+      const color = "cae962";
+      const ap = opts.autoplay ? 1 : 0;
+      const as = opts.autoskip ? 1 : 0;
+      const an = opts.autonext ? 1 : 0;
+      let url = `https://zokoanime.video/stream/mal/${malId}/${epNum}/${track}?color=${color}&autoplay=${ap}&autoskip=${as}&autonext=${an}`;
+      if (opts.startTime && opts.startTime > 0) {
+        url += `&t=${Math.floor(opts.startTime)}`;
+      }
+      return url;
+    }
 
     // Load Title Details
     const titleRes = await api(`/api/titles/${encodeURIComponent(currentSlug)}`);
     if (titleRes.ok && titleRes.data) {
       const data = titleRes.data;
-      title = data.title;
-      episodes = Array.isArray(data.episodes) ? data.episodes : [];
+      titleData = data.title;
+      episodesList = Array.isArray(data.episodes) ? data.episodes : [];
 
       const h1 = document.getElementById("watch-anime-title");
-      if (h1) h1.textContent = title.name;
+      if (h1) h1.textContent = titleData.name;
       const h1Top = document.getElementById("watch-anime-title-h1");
-      if (h1Top) h1Top.textContent = title.name;
+      if (h1Top) h1Top.textContent = titleData.name;
       const descEl = document.getElementById("watch-anime-desc");
-      if (descEl) descEl.textContent = title.synopsis;
+      if (descEl) descEl.textContent = titleData.synopsis;
 
       // Watchlist Button State
       const wlBtn = document.getElementById("watch-add-list-btn");
@@ -708,53 +783,393 @@
       }
     }
 
-    // ZokoAnime embed player (iframe + postMessage protocol + watch page UI)
-    let player = null;
-    if (watchApi) {
-      player = watchApi.init({
-        slug: currentSlug,
-        episode: currentEp,
-        title: title,
-        episodes: episodes,
-        iframe: document.getElementById("zoko-embed-frame"),
-        onEpisodeChange: (episode) => {
-          // Comments follow the episode without a page reload.
-          activeEpisode = episode;
-          if (reloadComments) reloadComments();
-        },
-        onProgress: async (position, duration) => {
-          // Keep the signed-in account progress in sync too.
-          if (!currentUser || !position) return;
-          await api("/api/progress", {
-            method: "POST",
-            body: {
-              slug: currentSlug,
-              episode: player ? player.episode : currentEp,
-              positionSec: Math.floor(position),
-              durationSec: Math.floor(duration),
-            },
-          });
-        },
+    // Build episodes grid
+    function renderEpisodesGrid() {
+      const epGrid = document.getElementById("zoro-episodes-grid");
+      if (!epGrid) return;
+
+      const totalEps = (titleData && titleData.episodes) || episodesList.length || 12;
+      let html = "";
+      for (let i = 1; i <= totalEps; i++) {
+        const epPadded = String(i).padStart(3, "0");
+        const isActive = i === currentEp;
+        html += `<button class="ep-btn ${isActive ? "active" : ""}" data-ep="${i}" type="button">${epPadded}</button>`;
+      }
+      epGrid.innerHTML = html;
+
+      epGrid.querySelectorAll(".ep-btn").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const epNum = parseInt(btn.dataset.ep, 10);
+          loadEpisode(epNum);
+        });
       });
     }
 
-    // Custom MAL ID button (ids are never guessed - the user sets them)
+    renderEpisodesGrid();
+
+    // Episode subtitle updater
+    async function updateEpisodeSubtitle(epNum) {
+      const epRes = await api(`/api/titles/${encodeURIComponent(currentSlug)}/episodes/${epNum}`);
+      const subTitle = document.getElementById("watch-ep-subtitle");
+      if (epRes.ok && epRes.data && epRes.data.episode) {
+        const ep = epRes.data.episode;
+        if (subTitle) subTitle.textContent = `Episode ${ep.epNum}: ${ep.title}`;
+        return ep;
+      } else {
+        if (subTitle) subTitle.textContent = `Episode ${epNum}`;
+        return null;
+      }
+    }
+
+    // Load an episode
+    async function loadEpisode(epNum) {
+      currentEp = epNum;
+      activeEpisode = epNum;
+
+      // Reset overlay and show spinner
+      if (overlay) overlay.hidden = true;
+      if (spinner) spinner.hidden = false;
+
+      // Update URL without reload
+      const newUrl = `watch.html?slug=${encodeURIComponent(currentSlug)}&ep=${epNum}`;
+      window.history.replaceState({ slug: currentSlug, ep: epNum }, "", newUrl);
+
+      // Highlight active episode button
+      document.querySelectorAll("#zoro-episodes-grid .ep-btn").forEach((btn) => {
+        btn.classList.toggle("active", parseInt(btn.dataset.ep, 10) === epNum);
+      });
+
+      // Update Prev / Next button states
+      const totalEps = (titleData && titleData.episodes) || episodesList.length || 12;
+      const prevBtn = document.getElementById("btn-prev-ep");
+      const nextBtn = document.getElementById("btn-next-ep");
+      if (prevBtn) {
+        prevBtn.disabled = currentEp <= 1;
+        prevBtn.style.opacity = currentEp <= 1 ? "0.5" : "1";
+      }
+      if (nextBtn) {
+        nextBtn.disabled = currentEp >= totalEps;
+        nextBtn.style.opacity = currentEp >= totalEps ? "0.5" : "1";
+      }
+
+      // Check saved position for resume
+      const epData = await updateEpisodeSubtitle(epNum);
+      let resumeTime = 0;
+      if (epData && typeof epData.savedPositionSec === "number") {
+        const epDur = epData.durationSec || 1440;
+        if (epData.savedPositionSec > 0 && epData.savedPositionSec < epDur - 10) {
+          resumeTime = epData.savedPositionSec;
+          if (resumeNote) {
+            resumeNote.textContent = `Resumed from ${formatTime(resumeTime)}`;
+            resumeNote.hidden = false;
+            setTimeout(() => {
+              if (resumeNote) resumeNote.hidden = true;
+            }, 5000);
+          }
+        }
+      }
+
+      // Determine MAL ID (check custom override first, then title's malId)
+      const malId = getCustomMalId(currentSlug) || (titleData && titleData.malId);
+      const streamUrl = getEmbedUrl(malId, currentEp, currentTrack, {
+        autoplay: playerSettings.autoplay,
+        autoskip: playerSettings.autoskip,
+        autonext: playerSettings.autonext,
+        startTime: resumeTime,
+      });
+
+      if (!streamUrl) {
+        if (spinner) spinner.hidden = true;
+        if (overlay) {
+          overlay.hidden = false;
+          if (overlayTitle) overlayTitle.textContent = "Stream unavailable";
+          if (overlayText) overlayText.textContent = "No MAL ID mapped for this title. Use the 'Switch Anime MAL ID' button to set one.";
+        }
+        return;
+      }
+
+      if (iframe) {
+        iframe.src = streamUrl;
+      }
+      if (coverOverlay) {
+        coverOverlay.style.display = "none";
+      }
+
+      // Reload comments for this episode
+      if (reloadComments) reloadComments();
+    }
+
+    // Play big play button
+    const bigPlayBtn = document.querySelector(".player-big-play");
+    if (bigPlayBtn) {
+      bigPlayBtn.addEventListener("click", () => {
+        loadEpisode(currentEp);
+      });
+    }
+
+    // Track switcher buttons (sub, hsub, dub)
+    const trackSwitcher = document.getElementById("zoko-track-switcher");
+    if (trackSwitcher) {
+      trackSwitcher.querySelectorAll(".server-pill").forEach((pill) => {
+        pill.addEventListener("click", () => {
+          trackSwitcher.querySelectorAll(".server-pill").forEach((p) => p.classList.remove("active"));
+          pill.classList.add("active");
+          currentTrack = pill.dataset.track || "sub";
+          showToast(`Switched audio track to ${currentTrack.toUpperCase()}`);
+          if (iframe && iframe.src && iframe.src !== "about:blank") {
+            const malId = getCustomMalId(currentSlug) || (titleData && titleData.malId);
+            const newUrl = getEmbedUrl(malId, currentEp, currentTrack, {
+              autoplay: playerSettings.autoplay,
+              autoskip: playerSettings.autoskip,
+              autonext: playerSettings.autonext,
+              startTime: currentPosition,
+            });
+            if (newUrl) iframe.src = newUrl;
+          }
+        });
+      });
+    }
+
+    // Initialize toggle checkboxes from localStorage
+    const settingToggles = document.getElementById("zoko-setting-toggles");
+    if (settingToggles) {
+      settingToggles.querySelectorAll("input[data-setting]").forEach((cb) => {
+        const key = cb.dataset.setting;
+        if (key in playerSettings) {
+          cb.checked = !!playerSettings[key];
+        }
+        cb.addEventListener("change", () => {
+          playerSettings[key] = cb.checked;
+          try {
+            localStorage.setItem(LS_SETTINGS_KEY, JSON.stringify(playerSettings));
+          } catch {}
+          sendPlayerCommand({ type: key, on: cb.checked });
+          showToast(`${key.toUpperCase()}: ${cb.checked ? "ON" : "OFF"}`);
+        });
+      });
+    }
+
+    // Prev / Next Ep buttons
+    const prevBtn = document.getElementById("btn-prev-ep");
+    if (prevBtn) {
+      prevBtn.addEventListener("click", () => {
+        if (currentEp > 1) loadEpisode(currentEp - 1);
+      });
+    }
+    const nextBtn = document.getElementById("btn-next-ep");
+    if (nextBtn) {
+      nextBtn.addEventListener("click", () => {
+        const totalEps = (titleData && titleData.episodes) || episodesList.length || 12;
+        if (currentEp < totalEps) loadEpisode(currentEp + 1);
+      });
+    }
+
+    // Play/Pause button
+    if (playPauseBtn) {
+      playPauseBtn.addEventListener("click", () => {
+        sendPlayerCommand({ type: isPaused ? "play" : "pause" });
+      });
+    }
+
+    // Fullscreen button
+    const fsBtn = document.getElementById("btn-fullscreen");
+    if (fsBtn && playerWrap) {
+      fsBtn.addEventListener("click", () => {
+        if (!document.fullscreenElement) {
+          playerWrap.requestFullscreen().catch(() => {});
+        } else {
+          document.exitFullscreen().catch(() => {});
+        }
+      });
+    }
+
+    // Skip buttons: Absolute seek clamped to [0, duration] sent to official origin
+    const skipBack = document.getElementById("btn-skip-back");
+    if (skipBack) {
+      skipBack.addEventListener("click", () => {
+        const target = Math.max(0, currentPosition - 10);
+        sendPlayerCommand({ type: "seek", time: target });
+      });
+    }
+    const skipForward = document.getElementById("btn-skip-forward");
+    if (skipForward) {
+      skipForward.addEventListener("click", () => {
+        const target = Math.min(duration, currentPosition + 10);
+        sendPlayerCommand({ type: "seek", time: target });
+      });
+    }
+
+    // Custom MAL ID button
     const customMalBtn = document.getElementById("btn-custom-mal-id");
     if (customMalBtn) {
-      const currentMalId = (title && title.malId) || "";
       customMalBtn.addEventListener("click", () => {
+        const currentMalId = getCustomMalId(currentSlug) || (titleData && titleData.malId) || "";
         const inputId = prompt(
           `Enter the MyAnimeList id for this title (current: ${currentMalId}).\n` +
             `The id is the number in myanimelist.net/anime/<id>/...`,
           currentMalId
         );
         if (!inputId || isNaN(inputId)) return;
-        const malId = parseInt(inputId, 10);
-        if (playerApi) playerApi.setIdOverride(currentSlug, malId);
-        if (player) player.loadEpisode(player.episode);
-        showToast(`MAL ID set to ${malId}.`);
+        const newMalId = parseInt(inputId, 10);
+        setCustomMalId(currentSlug, newMalId);
+        showToast(`MAL ID set to ${newMalId}. Reloading stream...`);
+        loadEpisode(currentEp);
       });
     }
+
+    // Overlay Retry Action
+    const overlayAction = document.getElementById("zoko-overlay-action");
+    if (overlayAction) {
+      overlayAction.addEventListener("click", () => {
+        if (overlay) overlay.hidden = true;
+        loadEpisode(currentEp);
+      });
+    }
+
+    // Bi-directional postMessage listener from ZokoAnime embed
+    window.addEventListener("message", async (event) => {
+      // Hard origin check per spec
+      if (event.origin !== "https://zokoanime.video") return;
+      const data = event.data;
+      if (!data || data.channel !== "zokoanime") return;
+
+      // Event: ready
+      if (data.type === "ready") {
+        if (spinner) spinner.hidden = true;
+        if (overlay) overlay.hidden = true;
+        // Report current fullscreen state to player
+        sendPlayerCommand({ type: "fullscreen", active: !!document.fullscreenElement });
+      }
+
+      // Event: play
+      if (data.type === "play") {
+        isPaused = false;
+        if (playPauseBtn) playPauseBtn.textContent = "❚❚";
+      }
+
+      // Event: pause
+      if (data.type === "pause") {
+        isPaused = true;
+        if (playPauseBtn) playPauseBtn.textContent = "▶";
+      }
+
+      // Event: state
+      if (data.type === "state") {
+        if (typeof data.position === "number") currentPosition = data.position;
+        if (typeof data.duration === "number" && data.duration > 0) duration = data.duration;
+        if (typeof data.paused === "boolean") {
+          isPaused = data.paused;
+          if (playPauseBtn) playPauseBtn.textContent = isPaused ? "▶" : "❚❚";
+        }
+      }
+
+      // Event: time or watching-log
+      if (data.type === "watching-log" || data.type === "time") {
+        const cur = typeof data.currentTime === "number" ? data.currentTime : (typeof data.position === "number" ? data.position : 0);
+        const dur = typeof data.duration === "number" && data.duration > 0 ? data.duration : duration;
+        currentPosition = cur;
+        duration = dur;
+
+        // Update progress bar
+        if (progressFill && dur > 0) {
+          const pct = Math.min((cur / dur) * 100, 100);
+          progressFill.style.width = `${pct}%`;
+        }
+
+        // Update time text
+        if (timeText) {
+          timeText.textContent = `${formatTime(cur)} / ${formatTime(dur)}`;
+        }
+
+        // Save progress to server (throttled every 5 seconds)
+        const now = Date.now();
+        if (currentUser && cur > 0 && now - lastProgressSync > 5000) {
+          lastProgressSync = now;
+          api("/api/progress", {
+            method: "POST",
+            body: {
+              slug: currentSlug,
+              episode: currentEp,
+              positionSec: Math.floor(cur),
+              durationSec: Math.floor(dur),
+            },
+          });
+        }
+      }
+
+      // Event: skipped (intro or outro)
+      if (data.type === "skipped") {
+        const segment = data.name === "outro" ? "outro" : "intro";
+        showToast(`Skipped ${segment}`);
+      }
+
+      // Event: error
+      if (data.type === "error") {
+        if (spinner) spinner.hidden = true;
+        if (overlay) {
+          overlay.hidden = false;
+          if (overlayTitle) overlayTitle.textContent = "Stream error";
+          if (overlayText) {
+            if (data.reason === "sandboxed") {
+              overlayText.textContent = "Player blocked: remove sandbox attribute from iframe.";
+            } else {
+              overlayText.textContent = data.message || data.reason || "The player could not load this stream.";
+            }
+          }
+        }
+      }
+
+      // Event: ended (auto-next is parent-driven)
+      if (data.type === "ended") {
+        const totalEps = (titleData && titleData.episodes) || episodesList.length || 12;
+        if (playerSettings.autonext && currentEp < totalEps) {
+          showToast(`Episode finished! Auto-playing Episode ${currentEp + 1}...`);
+          setTimeout(() => loadEpisode(currentEp + 1), 1500);
+        } else if (currentEp >= totalEps) {
+          showToast("You finished this anime!");
+        }
+      }
+
+      // Event: fullscreen request from embed
+      if (data.type === "fullscreen" && playerWrap) {
+        if (data.request === "enter" && !document.fullscreenElement) {
+          playerWrap.requestFullscreen().catch(() => {});
+        } else if (data.request === "exit" && document.fullscreenElement) {
+          document.exitFullscreen().catch(() => {});
+        }
+      }
+    });
+
+    // Keyboard Shortcuts (only when activeElement is not an input/textarea)
+    window.addEventListener("keydown", (e) => {
+      const tag = document.activeElement ? document.activeElement.tagName : "";
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
+
+      if (e.code === "Space") {
+        e.preventDefault();
+        sendPlayerCommand({ type: isPaused ? "play" : "pause" });
+      } else if (e.code === "KeyF") {
+        e.preventDefault();
+        if (!document.fullscreenElement && playerWrap) {
+          playerWrap.requestFullscreen().catch(() => {});
+        } else if (document.fullscreenElement) {
+          document.exitFullscreen().catch(() => {});
+        }
+      } else if (e.code === "ArrowLeft") {
+        e.preventDefault();
+        const target = Math.max(0, currentPosition - 10);
+        sendPlayerCommand({ type: "seek", time: target });
+      } else if (e.code === "ArrowRight") {
+        e.preventDefault();
+        const target = Math.min(duration, currentPosition + 10);
+        sendPlayerCommand({ type: "seek", time: target });
+      }
+    });
+
+    // Fullscreenchange event: report state back to player
+    document.addEventListener("fullscreenchange", () => {
+      sendPlayerCommand({ type: "fullscreen", active: !!document.fullscreenElement });
+    });
 
     // Watchlist Toggle
     const wlBtn = document.getElementById("watch-add-list-btn");
@@ -782,7 +1197,7 @@
       });
     }
 
-    // Discussion / Comments
+    // Initialize comments for current episode
     initComments(currentSlug, currentEp);
   }
 
