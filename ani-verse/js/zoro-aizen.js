@@ -455,6 +455,125 @@
   }
 
   /* ==========================================================================
+     4.5 CONTINUE WATCHING RAIL (SERVER-BACKED)
+     ========================================================================== */
+
+  async function initContinueWatchingRail() {
+    const section = document.getElementById("continue-watching-section");
+    if (!section) return;
+    const row = document.getElementById("continue-watching-row");
+    if (!row) return;
+
+    // If user is logged out, keep section hidden
+    if (!currentUser) {
+      section.hidden = true;
+      section.style.display = "none";
+      row.innerHTML = "";
+      return;
+    }
+
+    try {
+      const res = await api("/api/progress/continue");
+      if (!res.ok || !res.data || !Array.isArray(res.data.items) || res.data.items.length === 0) {
+        section.hidden = true;
+        section.style.display = "none";
+        row.innerHTML = "";
+        return;
+      }
+
+      const items = res.data.items;
+      const sampleImages = [
+        "img/onepiece.jpg",
+        "img/narutoposter.jpg",
+        "img/photo1.jpg",
+        "img/photo2.jpg",
+        "img/photo3.jpg",
+        "img/photo4.jpg",
+      ];
+
+      function formatSec(s) {
+        const sec = Math.floor(Math.max(0, s || 0));
+        const m = Math.floor(sec / 60);
+        const rem = sec % 60;
+        return `${m}:${rem < 10 ? "0" : ""}${rem}`;
+      }
+
+      function getPoster(slug, idx) {
+        if (slug === "one-piece") return "img/onepiece.jpg";
+        if (slug === "naruto") return "img/narutoposter.jpg";
+        if (slug) {
+          let hash = 0;
+          for (let i = 0; i < slug.length; i++) hash = (hash * 31 + slug.charCodeAt(i)) >>> 0;
+          return sampleImages[hash % sampleImages.length];
+        }
+        return sampleImages[idx % sampleImages.length];
+      }
+
+      function escapeText(str) {
+        if (!str) return "";
+        return String(str)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
+
+      row.innerHTML = items
+        .map((item, idx) => {
+          const poster = getPoster(item.slug, idx);
+          const safeName = escapeText(item.titleName || item.slug);
+          const epNum = item.episodeNum || 1;
+          const watchHref = `watch.html?slug=${encodeURIComponent(item.slug)}&ep=${encodeURIComponent(epNum)}`;
+          const pct = Math.min(100, Math.max(0, typeof item.percent === "number" ? item.percent : 0));
+          const timeLabel = item.durationSec ? `${formatSec(item.positionSec)} / ${formatSec(item.durationSec)}` : `${pct}%`;
+
+          return `
+            <div class="zoro-card" data-slug="${escapeText(item.slug)}">
+              <a class="zoro-card-poster" href="${watchHref}">
+                <img src="${poster}" alt="${safeName}" loading="lazy">
+                <div class="zoro-play-overlay">
+                  <div class="zoro-play-circle">▶</div>
+                </div>
+                <div class="zoro-poster-badges">
+                  <div class="badges-left">
+                    <span class="badge-mini-sub">SUB</span>
+                  </div>
+                  <span class="badge-mini-ep">Ep ${epNum}</span>
+                </div>
+              </a>
+              <div class="zoro-card-info">
+                <a class="zoro-card-title" href="${watchHref}" title="${safeName}">${safeName}</a>
+                <div class="zoro-card-submeta" style="margin-bottom: 6px;">
+                  <span>Episode ${epNum}</span> • <span>${pct}%</span>
+                </div>
+                <div class="progress-track-zoro" style="height: 4px; margin-bottom: 8px;" title="${timeLabel} (${pct}%)">
+                  <div class="progress-fill-zoro" style="width: ${pct}%;"></div>
+                </div>
+                <a class="btn-zoro-primary" href="${watchHref}" style="width: 100%; justify-content: center; padding: 0.45rem 0.8rem; font-size: 0.8rem; margin-top: auto; text-decoration: none;">
+                  ▶ Resume
+                </a>
+              </div>
+            </div>
+          `;
+        })
+        .join("");
+
+      section.hidden = false;
+      section.style.display = "";
+    } catch (err) {
+      console.error("Failed to load continue watching rail:", err);
+      section.hidden = true;
+      section.style.display = "none";
+    }
+  }
+
+  // Refresh Continue Watching rail when auth state changes (login / logout)
+  window.addEventListener("zoro:auth", () => {
+    initContinueWatchingRail();
+  });
+
+  /* ==========================================================================
      5. ZORO TRENDING RAIL & 4-COLUMN SECTIONS
      ========================================================================== */
 
@@ -1411,6 +1530,7 @@
     initMobileDrawer();
     initSearch();
     initSpotlightSlider();
+    await initContinueWatchingRail();
     initTrendingAndColumns();
     initMainCatalogGrid();
     initWatchPage();
