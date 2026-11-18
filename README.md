@@ -18,12 +18,9 @@ Aniverse/
 │   ├── watch.html              # Watch: ZokoAnime embed player, episodes grid, comments
 │   ├── css/
 │   │   ├── zoro-aizen.css      # Consolidated master stylesheet
-│   │   └── embed-player.css    # Embed player UI (spinner, overlay, toasts, track bar)
+│   │   └── zoko-player.css     # Embed player styles (wrap, spinner, overlay, toasts)
 │   ├── js/
-│   │   ├── zoro-aizen.js       # Master frontend controller
-│   │   ├── embed-player.js     # Player core: buildEmbedUrl + postMessage controller
-│   │   ├── embed-watch.js      # Watch page player UI (tracks, toggles, resume, keys)
-│   │   └── embed-home.js       # Home page "Continue Watching" rail
+│   │   └── zoro-aizen.js       # Master frontend controller (single source of truth: inline player & continue watching)
 │   └── img/                    # High-res posters, banners, and icons
 └── server/                     # Backend API & Database
     ├── package.json            # Node.js manifest with test, seed, dev, start scripts
@@ -68,12 +65,10 @@ https://zokoanime.video/stream/{source}/{id}/{episode}/{track}?color=cae962&auto
 - Events received: `ready`, `play`, `pause`, `time`, `watching-log`, `skipped`, `ended`, `error`, `fullscreen`.
 - Commands sent: `play`, `pause`, `seek {time}` (absolute seconds), `autoplay {on}`, `autoskip {on}`, `autonext {on}`, `fullscreen {active}`.
 
-### Player Modules
-| Module | Responsibility |
-|---|---|
-| `ani-verse/js/embed-player.js` | `buildEmbedUrl({source,id,episode,track,color,autoplay,autoskip,autonext,startTime})`, `createPlayerController(iframe)` → `{send,on,off,load,destroy}`, plus the localStorage stores (`av_zoko_settings`, `av_zoko_progress`, `av_zoko_ids`). The embed origin and defaults come from `GET /api/player/config`, never from a hardcoded string. |
-| `ani-verse/js/embed-watch.js` | Watch page player UI: track switcher (sub/hsub/dub), Autoplay / Auto-skip / Auto-next toggles, episode navigation, auto-next on `ended`, resume-from-saved-position, toast + error/retry overlays, fullscreen that survives an episode swap, keyboard shortcuts (`Space`, `F`, `←`/`→`). |
-| `ani-verse/js/embed-home.js` | "Continue Watching" rail on the home page, built from the saved progress store. |
+### Player Implementation
+The player and progress tracking are implemented directly inside `ani-verse/js/zoro-aizen.js` as the single source of truth:
+- **Watch Page Player UI** (`initWatchPage`): Track switcher (`sub`/`hsub`/`dub`), Autoplay / Auto-skip / Auto-next live toggles, episode navigation, parent-driven auto-next on `ended`, server-backed resume from `savedPositionSec` via `?t=`, toast notifications, error/retry overlay, and keyboard shortcuts (`Space`, `F`, `←`/`→`).
+- **Continue Watching Rail** (`initContinueWatchingRail`): Server-backed rail on the home page querying `GET /api/progress/continue`, displaying anime poster, episode number, progress bar, and direct resume link. Hidden for guest users or when no watch progress exists.
 
 Behaviour notes:
 - Episode and track changes only swap the iframe `src` — the page never reloads.
