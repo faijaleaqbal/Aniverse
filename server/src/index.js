@@ -279,9 +279,11 @@ app.get("/api/titles", (req, res) => {
   let params = [];
 
   if (q) {
-    whereClauses.push("(LOWER(name) LIKE ? OR LOWER(synopsis) LIKE ? OR LOWER(tagline) LIKE ?)");
+    whereClauses.push(
+      "(LOWER(name) LIKE ? OR LOWER(synopsis) LIKE ? OR LOWER(tagline) LIKE ? OR LOWER(real_title) LIKE ? OR LOWER(romaji_title) LIKE ? OR LOWER(native_title) LIKE ? OR LOWER(old_title) LIKE ?)"
+    );
     const pattern = `%${q}%`;
-    params.push(pattern, pattern, pattern);
+    params.push(pattern, pattern, pattern, pattern, pattern, pattern, pattern);
   }
 
   if (genre && genre !== "all") {
@@ -537,7 +539,8 @@ app.get("/api/progress/continue", (req, res) => {
   const rows = db
     .prepare(`
       SELECT p.title_slug, p.episode_num, p.position_sec, p.duration_sec, p.updated_at,
-             t.name as title_name, t.kind, t.tone, e.title as episode_title
+             t.name as title_name, t.kind, t.tone, e.title as episode_title,
+             t.cover_local, t.cover_remote, t.banner_local, t.banner_remote
       FROM watch_progress p
       JOIN titles t ON p.title_slug = t.slug
       LEFT JOIN episodes e ON p.title_slug = e.title_slug AND p.episode_num = e.ep_num
@@ -560,6 +563,8 @@ app.get("/api/progress/continue", (req, res) => {
       durationSec: r.duration_sec,
       percent: Math.min(100, Math.round((r.position_sec / (r.duration_sec || 1)) * 100)),
       updatedAt: r.updated_at,
+      cover: r.cover_local || r.cover_remote || null,
+      banner: r.banner_local || r.banner_remote || null,
     })),
   });
 });
