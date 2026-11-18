@@ -400,9 +400,16 @@ app.get("/api/stream/:slug/:ep", (req, res) => {
   if (!title) throw notFound("Title not found.");
 
   const source = String(req.query.source || ZOKO_DEFAULT_SOURCE).toLowerCase();
-  const malId = toInt(req.query.mal_id, title.mal_id || 21);
-  const anilistId = toInt(req.query.anilist_id, title.anilist_id || 21);
+  const malId = req.query.mal_id != null ? toInt(req.query.mal_id, null) : (title.mal_id || null);
+  const anilistId = req.query.anilist_id != null ? toInt(req.query.anilist_id, null) : (title.anilist_id || null);
   const animeId = source === "anilist" ? anilistId : malId;
+
+  if (!animeId) {
+    return res.status(400).json({
+      ok: false,
+      error: "No MAL/AniList id mapped for this title.",
+    });
+  }
   const color = (req.query.color || ZOKO_DEFAULT_COLOR).replace(/^#/, "");
   const startTime = toInt(req.query.t, 0);
 
