@@ -7,7 +7,28 @@
 
   let currentUser = null;
 
-  async function api(path, options = {}) {
+  function escapeHtml(str) {
+    if (str == null) return "";
+    return String(str)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  /* Every API call is bounded: a stalled connection must never freeze a page
+     on fallback content. GETs are retried once (bodyless = safe to repeat). */
+  const API_TIMEOUT_MS = 10000;
+
+  /* Requests that the inline head script already started. Reusing them removes
+     a full round trip from the critical path (the API call no longer waits for
+     the app script to download). */
+  function prefetchStore() {
+    return window.__zoroPrefetch || null;
+  }
+
+  async function api(path, options = {}, attempt = 0) {
     options.headers = options.headers || {};
     if (options.body && typeof options.body === "object") {
       options.headers["Content-Type"] = "application/json";
@@ -15,19 +36,71 @@
     }
     options.credentials = "same-origin";
 
-    try {
-      const res = await fetch(path, options);
-      const data = await res.json().catch(() => null);
-      return { ok: res.ok, status: res.status, data };
-    } catch (err) {
-      console.error("API error:", err);
-      return { ok: false, status: 0, data: null };
+    /* A request that was already issued by the inline prefetch is adopted
+       instead of being sent a second time. */
+    const store = prefetchStore();
+    if (!options.body && store && store[path]) {
+      const pending = store[path];
+      delete store[path];
+      const pre = await pending;
+      if (pre && pre.ok) return pre;
+      /* A failed prefetch falls through to the normal path below. */
     }
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+
+    try {
+      const res = await fetch(path, Object.assign({}, options, { signal: controller.signal }));
+      const data = await res.json().catch(() => null);
+      return { ok: res.ok, status: res.status, data, error: null };
+    } catch (err) {
+      const timedOut = !!err && err.name === "AbortError";
+      if (attempt === 0 && !options.body) {
+        clearTimeout(timer);
+        return api(path, options, 1);
+      }
+      console.error("API error:", err);
+      return {
+        ok: false,
+        status: 0,
+        data: null,
+        error: timedOut ? "Request timed out" : String((err && err.message) || err),
+      };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /* In-flight request coalescing: several sections ask for the same catalog
+     slice at once, so they share one network round trip instead of three. */
+  const inflightTitles = new Map();
+
+  function fetchTitles(limit) {
+    const key = String(limit);
+    if (!inflightTitles.has(key)) {
+      const promise = api(`/api/titles?limit=${limit}`);
+      inflightTitles.set(key, promise);
+      promise.then((res) => {
+        if (!res.ok && inflightTitles.get(key) === promise) inflightTitles.delete(key);
+      });
+    }
+    return inflightTitles.get(key);
   }
 
   /* ==========================================================================
      1. AIZEN CINEMATIC SHUTTER INTRO
      ========================================================================== */
+
+  /* The intro is a flourish, never a gate: as soon as the real content is on
+     screen it steps aside instead of holding the page for its full runtime. */
+  let contentReadyDispatched = false;
+
+  function markContentReady() {
+    if (contentReadyDispatched) return;
+    contentReadyDispatched = true;
+    window.dispatchEvent(new CustomEvent("zoro:contentReady"));
+  }
 
   function initAizenIntro(force = false) {
     if (!force && sessionStorage.getItem("aizen_intro_seen")) {
@@ -56,22 +129,44 @@
     document.body.appendChild(overlay);
 
     let progress = 0;
+    let timer = null;
+    let finished = false;
+    const startedAt = Date.now();
     const bar = overlay.querySelector("#aizen-bar");
     const statusText = overlay.querySelector("#aizen-status-text");
 
-    const timer = setInterval(() => {
+    function finish() {
+      if (finished) return;
+      finished = true;
+      if (timer) clearInterval(timer);
+      overlay.classList.add("is-exiting");
+      sessionStorage.setItem("aizen_intro_seen", "true");
+      /* The shutter transition runs for 0.6s - remove the overlay after it. */
+      setTimeout(() => overlay.remove(), 650);
+    }
+
+    /* Real content is ready -> let it through (after a short minimum so the
+       intro still reads as an intro). */
+    window.addEventListener("zoro:contentReady", () => {
+      const elapsed = Date.now() - startedAt;
+      if (elapsed >= 450) {
+        finish();
+      } else {
+        setTimeout(finish, 450 - elapsed);
+      }
+    });
+
+    timer = setInterval(() => {
       progress += Math.floor(Math.random() * 12) + 6;
-      if (progress >= 100) {
+      /* Wall-clock cap: a throttled background tab must not keep the intro
+         (and the page behind it) waiting for the next tick. */
+      if (progress >= 100 || Date.now() - startedAt > 1000) {
         progress = 100;
         clearInterval(timer);
         bar.style.width = "100%";
         statusText.textContent = "SYSTEM READY • 100%";
 
-        setTimeout(() => {
-          overlay.classList.add("is-exiting");
-          sessionStorage.setItem("aizen_intro_seen", "true");
-          setTimeout(() => overlay.remove(), 900);
-        }, 350);
+        setTimeout(finish, 350);
       } else {
         bar.style.width = `${progress}%`;
         statusText.textContent = `INITIALIZING RESOURCES... ${progress}%`;
@@ -79,12 +174,7 @@
     }, 60);
 
     // Allow skip on click
-    overlay.addEventListener("click", () => {
-      clearInterval(timer);
-      overlay.classList.add("is-exiting");
-      sessionStorage.setItem("aizen_intro_seen", "true");
-      setTimeout(() => overlay.remove(), 500);
-    });
+    overlay.addEventListener("click", finish);
   }
 
   /* ==========================================================================
@@ -291,24 +381,118 @@
   function updateHeaderUser() {
     const slot = document.getElementById("header-user-slot");
     if (!slot) return;
+    slot.removeAttribute("aria-busy");
 
     if (currentUser) {
+      const initial = (currentUser.name || "U")[0].toUpperCase();
+      const safeName = escapeHtml(currentUser.name || "User");
+      const safeEmail = escapeHtml(currentUser.email || "");
+
       slot.innerHTML = `
-        <button class="user-badge-btn" id="btn-user-profile" type="button">
-          <span class="user-avatar-circle">${(currentUser.name || "U")[0].toUpperCase()}</span>
-          <span>${currentUser.name}</span>
-          <span style="color: var(--text-muted); font-size: 0.7rem; margin-left: 4px;">▼</span>
+        <button class="user-badge-btn" id="btn-user-profile" type="button" aria-haspopup="true" aria-expanded="false" aria-label="User Profile Menu">
+          <span class="user-avatar-circle">${initial}</span>
+          <span>${safeName}</span>
+          <span class="user-caret" style="color: var(--text-muted); font-size: 0.7rem; margin-left: 4px;">▼</span>
         </button>
+        <div class="user-dropdown-menu" id="user-dropdown-menu" role="menu">
+          <div class="user-dropdown-header">
+            <div class="user-dropdown-name">${safeName}</div>
+            <div class="user-dropdown-email">${safeEmail}</div>
+          </div>
+          <div class="user-dropdown-divider"></div>
+          <a href="#profile" class="user-dropdown-item" id="menu-item-profile" role="menuitem">
+            <span class="user-dropdown-icon">👤</span>
+            <span>Profile</span>
+          </a>
+          <a href="browse.html" class="user-dropdown-item" id="menu-item-mylist" role="menuitem">
+            <span class="user-dropdown-icon">📑</span>
+            <span>My List</span>
+          </a>
+          <div class="user-dropdown-divider"></div>
+          <button type="button" class="user-dropdown-item user-dropdown-logout" id="menu-item-logout" role="menuitem">
+            <span class="user-dropdown-icon">🚪</span>
+            <span>Log Out</span>
+          </button>
+        </div>
       `;
-      slot.querySelector("#btn-user-profile").addEventListener("click", async () => {
-        if (confirm(`Logged in as ${currentUser.name}. Do you want to sign out?`)) {
+
+      const btnProfile = slot.querySelector("#btn-user-profile");
+      const dropdown = slot.querySelector("#user-dropdown-menu");
+
+      function openMenu() {
+        if (!dropdown) return;
+        dropdown.classList.add("is-open");
+        btnProfile.setAttribute("aria-expanded", "true");
+      }
+
+      function closeMenu() {
+        if (!dropdown) return;
+        dropdown.classList.remove("is-open");
+        btnProfile.setAttribute("aria-expanded", "false");
+      }
+
+      function toggleMenu(e) {
+        if (e) e.stopPropagation();
+        if (dropdown && dropdown.classList.contains("is-open")) {
+          closeMenu();
+        } else {
+          openMenu();
+        }
+      }
+
+      btnProfile.addEventListener("click", toggleMenu);
+
+      const profileItem = slot.querySelector("#menu-item-profile");
+      if (profileItem) {
+        profileItem.addEventListener("click", (e) => {
+          e.preventDefault();
+          closeMenu();
+          showToast(`Logged in as ${currentUser.name} (${currentUser.email || "active"})`);
+        });
+      }
+
+      const myListBtn = slot.querySelector("#menu-item-mylist");
+      if (myListBtn) {
+        myListBtn.addEventListener("click", () => {
+          closeMenu();
+        });
+      }
+
+      const logoutBtn = slot.querySelector("#menu-item-logout");
+      if (logoutBtn) {
+        logoutBtn.addEventListener("click", async (e) => {
+          e.preventDefault();
+          closeMenu();
           await api("/api/auth/logout", { method: "POST" });
           currentUser = null;
           updateHeaderUser();
+          showToast("Signed out successfully.");
           window.dispatchEvent(new CustomEvent("zoro:auth", { detail: null }));
+        });
+      }
+
+      // Close on outside click
+      const handleOutsideClick = (e) => {
+        if (!slot.contains(e.target)) {
+          closeMenu();
         }
-      });
+      };
+      // Close on Escape
+      const handleEscape = (e) => {
+        if (e.key === "Escape") {
+          closeMenu();
+        }
+      };
+
+      if (slot._outsideHandler) document.removeEventListener("click", slot._outsideHandler);
+      if (slot._escapeHandler) document.removeEventListener("keydown", slot._escapeHandler);
+      slot._outsideHandler = handleOutsideClick;
+      slot._escapeHandler = handleEscape;
+      document.addEventListener("click", handleOutsideClick);
+      document.addEventListener("keydown", handleEscape);
     } else {
+      if (slot._outsideHandler) document.removeEventListener("click", slot._outsideHandler);
+      if (slot._escapeHandler) document.removeEventListener("keydown", slot._escapeHandler);
       slot.innerHTML = `
         <button class="btn-zoro-primary" id="btn-open-signin" type="button">Sign In</button>
       `;
@@ -397,16 +581,16 @@
     const sliderContainer = document.getElementById("spotlight-slider-container");
     if (!sliderContainer) return;
 
-    const res = await api("/api/titles?limit=5");
+    const res = await fetchTitles(18);
     if (!res.ok || !res.data || !res.data.titles || res.data.titles.length === 0) return;
 
-    const titles = res.data.titles;
-    const posters = ["img/banner.png", "img/photo1.jpg", "img/photo2.jpg", "img/photo3.jpg", "img/photo4.jpg"];
+    const titles = res.data.titles.slice(0, 5);
+    const posters = ["img/banner.jpg", "img/photo1.jpg", "img/photo2.jpg", "img/photo3.jpg", "img/photo4.jpg"];
 
     sliderContainer.innerHTML = titles
       .map((t, idx) => `
-        <div class="spotlight-slide ${idx === 0 ? "is-active" : ""}" data-index="${idx}">
-          <div class="spotlight-backdrop" style="background-image: url('${posters[idx % posters.length]}');"></div>
+        <div class="spotlight-slide ${idx === 0 ? "is-active" : ""}" data-index="${idx}" data-poster="${posters[idx % posters.length]}">
+          <div class="spotlight-backdrop"></div>
           <div class="spotlight-overlay"></div>
           <div class="spotlight-content">
             <span class="spotlight-rank">🔥 #${idx + 1} Spotlight</span>
@@ -434,11 +618,25 @@
     let currentSlide = 0;
     const slides = sliderContainer.querySelectorAll(".spotlight-slide");
 
+    /* Backdrops are multi-hundred-KB images: only pull the one on screen.
+       The rest are fetched when their slide becomes active. */
+    function applyBackdrop(slide) {
+      if (!slide || slide.dataset.backdropLoaded === "true") return;
+      const poster = slide.dataset.poster;
+      if (!poster) return;
+      slide.dataset.backdropLoaded = "true";
+      const backdrop = slide.querySelector(".spotlight-backdrop");
+      if (backdrop) backdrop.style.backgroundImage = `url('${poster}')`;
+    }
+
     function goToSlide(n) {
       slides[currentSlide].classList.remove("is-active");
       currentSlide = (n + slides.length) % slides.length;
       slides[currentSlide].classList.add("is-active");
+      applyBackdrop(slides[currentSlide]);
     }
+
+    applyBackdrop(slides[0]);
 
     const prevBtn = document.getElementById("spotlight-prev");
     const nextBtn = document.getElementById("spotlight-next");
@@ -531,7 +729,7 @@
           return `
             <div class="zoro-card" data-slug="${escapeText(item.slug)}">
               <a class="zoro-card-poster" href="${watchHref}">
-                <img src="${poster}" alt="${safeName}" loading="lazy">
+                <img src="${poster}" alt="${safeName}" loading="lazy" decoding="async" fetchpriority="low">
                 <div class="zoro-play-overlay">
                   <div class="zoro-play-circle">▶</div>
                 </div>
@@ -584,7 +782,7 @@
     const favoriteList = document.getElementById("col-favorite-list");
     const completedList = document.getElementById("col-completed-list");
 
-    const res = await api("/api/titles?limit=18");
+    const res = await fetchTitles(18);
     if (!res.ok || !res.data || !res.data.titles) return;
     const allTitles = res.data.titles;
 
@@ -595,7 +793,7 @@
       trendingRail.innerHTML = allTitles.slice(0, 10).map((t, i) => `
         <a class="trending-item" href="watch.html?slug=${encodeURIComponent(t.slug)}&ep=1">
           <div class="trending-poster-wrap">
-            <img src="${sampleImages[i % sampleImages.length]}" alt="${t.name}">
+            <img src="${sampleImages[i % sampleImages.length]}" alt="${t.name}" loading="lazy" decoding="async" fetchpriority="low">
             <div class="trending-rank-num">${(i + 1 < 10 ? "0" : "") + (i + 1)}</div>
             <div class="trending-info-overlay">
               <div class="trending-anime-title">${t.name}</div>
@@ -613,7 +811,7 @@
       if (!container) return;
       container.innerHTML = items.map((t, idx) => `
         <a class="col-item" href="watch.html?slug=${encodeURIComponent(t.slug)}&ep=1">
-          <img class="col-thumb" src="${sampleImages[(idx + 2) % sampleImages.length]}" alt="${t.name}">
+          <img class="col-thumb" src="${sampleImages[(idx + 2) % sampleImages.length]}" alt="${t.name}" loading="lazy" decoding="async" fetchpriority="low">
           <div class="col-item-details">
             <div class="col-item-title">${t.name}</div>
             <div class="col-item-meta">
@@ -650,7 +848,7 @@
     const grid = document.getElementById("zoro-main-grid");
     if (!grid) return;
 
-    const res = await api("/api/titles?limit=18");
+    const res = await fetchTitles(18);
     if (!res.ok || !res.data || !res.data.titles) return;
 
     const titles = res.data.titles;
@@ -660,7 +858,7 @@
       grid.innerHTML = list.map((t, i) => `
         <div class="zoro-card" data-slug="${t.slug}" data-genres="${t.genres ? t.genres.join(" ") : ""}" data-title="${t.name}">
           <a class="zoro-card-poster" href="watch.html?slug=${encodeURIComponent(t.slug)}&ep=1">
-            <img src="${sampleImages[i % sampleImages.length]}" alt="${t.name}" loading="lazy">
+            <img src="${sampleImages[i % sampleImages.length]}" alt="${t.name}" loading="lazy" decoding="async" fetchpriority="low">
             <div class="zoro-play-overlay">
               <div class="zoro-play-circle">▶</div>
             </div>
@@ -682,6 +880,8 @@
       `).join("");
 
       attachTooltipListeners();
+      /* The card grid is the page's real content: release the intro. */
+      markContentReady();
     }
 
     // Check URL parameters
@@ -779,6 +979,36 @@
   }
 
   /* ==========================================================================
+     6B. GENRES PAGE DYNAMIC SHELF COUNTS
+     ========================================================================== */
+
+  async function initGenresPage() {
+    const grid = document.querySelector(".genres-shelf-grid");
+    if (!grid) return;
+
+    const res = await api("/api/genres");
+    if (!res.ok || !res.data || !res.data.counts) return;
+
+    const counts = res.data.counts;
+    const cards = grid.querySelectorAll(".genre-shelf-card");
+    cards.forEach((card) => {
+      let genreKey = card.dataset.genre;
+      if (!genreKey) {
+        const href = card.getAttribute("href") || "";
+        const m = href.match(/genre=([^&]+)/);
+        if (m) genreKey = decodeURIComponent(m[1]).toLowerCase();
+      }
+      if (!genreKey) return;
+
+      const cnt = counts[genreKey] != null ? counts[genreKey] : 0;
+      const countEl = card.querySelector(".genre-card-count");
+      if (countEl) {
+        countEl.textContent = `${cnt} ${cnt === 1 ? "Title" : "Titles"}`;
+      }
+    });
+  }
+
+  /* ==========================================================================
      7. ZORO WATCH PAGE: ZOKOANIME EMBED PLAYER
      ========================================================================== */
 
@@ -806,6 +1036,19 @@
     const playPauseBtn = document.getElementById("btn-player-playpause");
     const progressFill = document.getElementById("video-progress-fill");
     const timeText = document.getElementById("video-time-text");
+
+    /* All elements are resolved once, up front. Declaring them here (instead of
+       re-declaring inside a block below) keeps every binding out of the
+       temporal dead zone, which used to abort the whole page init. */
+    const wlBtn = document.getElementById("watch-add-list-btn");
+    const epGrid = document.getElementById("zoro-episodes-grid");
+    const epSubtitle = document.getElementById("watch-ep-subtitle");
+    const animeTitle = document.getElementById("watch-anime-title");
+    const animeTitleH1 = document.getElementById("watch-anime-title-h1");
+    const animeDesc = document.getElementById("watch-anime-desc");
+    const dataError = document.getElementById("watch-data-error");
+    const dataErrorText = document.getElementById("watch-data-error-text");
+    const dataErrorRetry = document.getElementById("watch-data-error-retry");
 
     let titleData = null;
     let episodesList = [];
@@ -881,67 +1124,196 @@
       return url;
     }
 
-    // Load Title Details
-    const titleRes = await api(`/api/titles/${encodeURIComponent(currentSlug)}`);
-    if (titleRes.ok && titleRes.data) {
+    /* ------------------------------------------------------------------
+       Visible states: the page must never sit silently on placeholder
+       text pretending to be real data.
+       ------------------------------------------------------------------ */
+    function showDataError(message, onRetry) {
+      if (!dataError) return;
+      if (dataErrorText) dataErrorText.textContent = message;
+      if (dataErrorRetry) {
+        dataErrorRetry.hidden = false;
+        dataErrorRetry.onclick = () => {
+          hideDataError();
+          if (typeof onRetry === "function") onRetry();
+        };
+      }
+      dataError.hidden = false;
+    }
+
+    function hideDataError() {
+      if (dataError) dataError.hidden = true;
+    }
+
+    function showPlaceholder(message) {
+      if (animeTitle) animeTitle.textContent = "Loading…";
+      if (animeTitleH1) animeTitleH1.textContent = "Loading…";
+      if (epSubtitle) epSubtitle.textContent = message;
+      if (animeDesc) animeDesc.textContent = "Loading synopsis…";
+      if (timeText) timeText.textContent = "00:00 / --:--";
+      if (epGrid && !epGrid.querySelector(".ep-btn")) {
+        epGrid.innerHTML = `<p class="ep-grid-status">Loading episodes…</p>`;
+      }
+    }
+
+    /* Total episode count, or 0 while the title is unknown. */
+    function totalEpisodes() {
+      return (titleData && titleData.episodes) || episodesList.length || 0;
+    }
+
+    /* Load Title Details (retryable) */
+    async function loadTitleData() {
+      hideDataError();
+      const titleRes = await api(`/api/titles/${encodeURIComponent(currentSlug)}`);
+      if (!titleRes.ok || !titleRes.data || !titleRes.data.title) {
+        showPlaceholder("Could not load episode data");
+        showDataError(
+          titleRes.error === "Request timed out"
+            ? "The server took too long to respond. Check your connection and retry."
+            : "This title could not be loaded from the server.",
+          startWatch
+        );
+        return false;
+      }
+
       const data = titleRes.data;
       titleData = data.title;
       episodesList = Array.isArray(data.episodes) ? data.episodes : [];
 
-      const h1 = document.getElementById("watch-anime-title");
-      if (h1) h1.textContent = titleData.name;
-      const h1Top = document.getElementById("watch-anime-title-h1");
-      if (h1Top) h1Top.textContent = titleData.name;
-      const descEl = document.getElementById("watch-anime-desc");
-      if (descEl) descEl.textContent = titleData.synopsis;
+      if (animeTitle) animeTitle.textContent = titleData.name;
+      if (animeTitleH1) animeTitleH1.textContent = titleData.name;
+      if (animeDesc) animeDesc.textContent = titleData.synopsis || titleData.tagline || "";
 
       // Watchlist Button State
-      const wlBtn = document.getElementById("watch-add-list-btn");
       if (wlBtn && data.userState) {
         updateWatchlistBtn(data.userState.inWatchlist);
       }
+
+      renderEpisodesGrid();
+      updateEpisodeNavState();
+      /* The episode list is the watch page's real content. */
+      markContentReady();
+      return true;
     }
 
     // Build episodes grid
     function renderEpisodesGrid() {
-      const epGrid = document.getElementById("zoro-episodes-grid");
       if (!epGrid) return;
 
-      const totalEps = (titleData && titleData.episodes) || episodesList.length || 12;
+      const totalEps = totalEpisodes();
+      if (!totalEps) {
+        epGrid.innerHTML = `<p class="ep-grid-status">No episodes available for this title.</p>`;
+        return;
+      }
+
+      // Update range tabs label (Bug 7)
+      const rangeTabs = document.querySelector(".ep-range-tabs");
+      if (rangeTabs) {
+        const maxEpStr = String(totalEps).padStart(3, "0");
+        rangeTabs.innerHTML = `<button class="ep-tab-btn active" type="button">001 - ${maxEpStr}</button>`;
+      }
+
+      // Build map of episode titles (Bug 8)
+      const epMap = new Map();
+      episodesList.forEach((e) => {
+        if (e && e.ep_num != null) {
+          epMap.set(Number(e.ep_num), e.title);
+        }
+      });
+
       let html = "";
       for (let i = 1; i <= totalEps; i++) {
         const epPadded = String(i).padStart(3, "0");
         const isActive = i === currentEp;
-        html += `<button class="ep-btn ${isActive ? "active" : ""}" data-ep="${i}" type="button">${epPadded}</button>`;
+        const rawTitle = epMap.get(i) || `Episode ${i}`;
+        const safeTitle = escapeHtml(rawTitle);
+        html += `<button class="ep-btn ${isActive ? "active" : ""}" data-ep="${i}" data-title="${safeTitle.toLowerCase()}" type="button" title="Episode ${i}: ${safeTitle}"><span class="ep-btn-num">${epPadded}</span><span class="ep-btn-title">${safeTitle}</span></button>`;
       }
       epGrid.innerHTML = html;
 
-      epGrid.querySelectorAll(".ep-btn").forEach((btn) => {
-        btn.addEventListener("click", () => {
-          const epNum = parseInt(btn.dataset.ep, 10);
-          loadEpisode(epNum);
+      // Filter episodes by search box (Bug 8)
+      const searchInput = document.getElementById("ep-search-input");
+      if (searchInput && searchInput.dataset.searchBound !== "true") {
+        searchInput.dataset.searchBound = "true";
+        searchInput.addEventListener("input", () => {
+          const q = searchInput.value.trim().toLowerCase();
+          const buttons = epGrid.querySelectorAll(".ep-btn");
+          let visibleCount = 0;
+          buttons.forEach((btn) => {
+            const epNum = btn.dataset.ep;
+            const epTitle = btn.dataset.title || "";
+            const match = !q || epNum === q || epNum.padStart(3, "0") === q || epTitle.includes(q);
+            btn.style.display = match ? "flex" : "none";
+            if (match) visibleCount++;
+          });
+          let noMatchEl = epGrid.querySelector(".ep-no-search-match");
+          if (visibleCount === 0) {
+            if (!noMatchEl) {
+              noMatchEl = document.createElement("p");
+              noMatchEl.className = "ep-no-search-match";
+              noMatchEl.style.cssText = "color: var(--text-muted); font-size: 0.85rem; padding: 12px 0; text-align: center;";
+              noMatchEl.textContent = "No episodes match your search.";
+              epGrid.appendChild(noMatchEl);
+            }
+          } else if (noMatchEl) {
+            noMatchEl.remove();
+          }
         });
-      });
+      }
+
+      // Delegated click listener for episodes grid (ensures in-page swap without navigation)
+      if (epGrid.dataset.delegatedBound !== "true") {
+        epGrid.dataset.delegatedBound = "true";
+        epGrid.addEventListener("click", (e) => {
+          const btn = e.target.closest(".ep-btn");
+          if (!btn) return;
+          e.preventDefault();
+          e.stopPropagation();
+          const epNum = parseInt(btn.dataset.ep, 10);
+          if (epNum && epNum !== currentEp) {
+            loadEpisode(epNum);
+          }
+        });
+      }
     }
 
-    renderEpisodesGrid();
+    // Prev / Next button states (also used before the title has loaded)
+    function updateEpisodeNavState() {
+      const totalEps = totalEpisodes();
+      const prevBtn = document.getElementById("btn-prev-ep");
+      const nextBtn = document.getElementById("btn-next-ep");
+      if (prevBtn) {
+        prevBtn.disabled = currentEp <= 1;
+        prevBtn.style.opacity = currentEp <= 1 ? "0.5" : "1";
+      }
+      if (nextBtn) {
+        const atEnd = totalEps > 0 && currentEp >= totalEps;
+        nextBtn.disabled = atEnd || totalEps === 0;
+        nextBtn.style.opacity = nextBtn.disabled ? "0.5" : "1";
+      }
+    }
 
     // Episode subtitle updater
-    async function updateEpisodeSubtitle(epNum) {
-      const epRes = await api(`/api/titles/${encodeURIComponent(currentSlug)}/episodes/${epNum}`);
-      const subTitle = document.getElementById("watch-ep-subtitle");
+    async function updateEpisodeSubtitle(epNum, prefetched) {
+      const epRes = await (prefetched || fetchEpisodeData(epNum));
       if (epRes.ok && epRes.data && epRes.data.episode) {
         const ep = epRes.data.episode;
-        if (subTitle) subTitle.textContent = `Episode ${ep.epNum}: ${ep.title}`;
+        if (epSubtitle) epSubtitle.textContent = `Episode ${ep.epNum}: ${ep.title}`;
         return ep;
       } else {
-        if (subTitle) subTitle.textContent = `Episode ${epNum}`;
+        if (epSubtitle) epSubtitle.textContent = `Episode ${epNum}`;
         return null;
       }
     }
 
     // Load an episode
-    async function loadEpisode(epNum) {
+    /* Episode metadata only needs the slug + episode number, so it is fetched
+       in parallel with the title instead of after it. */
+    function fetchEpisodeData(epNum) {
+      return api(`/api/titles/${encodeURIComponent(currentSlug)}/episodes/${epNum}`);
+    }
+
+    async function loadEpisode(epNum, prefetched) {
       currentEp = epNum;
       activeEpisode = epNum;
 
@@ -957,24 +1329,32 @@
       document.querySelectorAll("#zoro-episodes-grid .ep-btn").forEach((btn) => {
         btn.classList.toggle("active", parseInt(btn.dataset.ep, 10) === epNum);
       });
+      const activeBtn = epGrid ? epGrid.querySelector(`.ep-btn[data-ep="${epNum}"]`) : null;
+      if (activeBtn) {
+        activeBtn.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      }
 
       // Update Prev / Next button states
-      const totalEps = (titleData && titleData.episodes) || episodesList.length || 12;
-      const prevBtn = document.getElementById("btn-prev-ep");
-      const nextBtn = document.getElementById("btn-next-ep");
-      if (prevBtn) {
-        prevBtn.disabled = currentEp <= 1;
-        prevBtn.style.opacity = currentEp <= 1 ? "0.5" : "1";
-      }
-      if (nextBtn) {
-        nextBtn.disabled = currentEp >= totalEps;
-        nextBtn.style.opacity = currentEp >= totalEps ? "0.5" : "1";
-      }
+      updateEpisodeNavState();
 
       // Check saved position for resume
-      const epData = await updateEpisodeSubtitle(epNum);
+      const epData = await updateEpisodeSubtitle(epNum, prefetched);
+      if (!epData) {
+        // Episode metadata could not be loaded: show a retry state instead of
+        // leaving stale placeholder text on screen.
+        if (spinner) spinner.hidden = true;
+        if (overlay) {
+          overlay.hidden = false;
+          if (overlayTitle) overlayTitle.textContent = "Could not load episode";
+          if (overlayText) overlayText.textContent = "The episode list could not be loaded from the server. Use Retry to try again.";
+        }
+        showDataError("This episode could not be loaded from the server.", () => loadEpisode(epNum));
+        return;
+      }
+      hideDataError();
+
       let resumeTime = 0;
-      if (epData && typeof epData.savedPositionSec === "number") {
+      if (typeof epData.savedPositionSec === "number") {
         const epDur = epData.durationSec || 1440;
         if (epData.savedPositionSec > 0 && epData.savedPositionSec < epDur - 10) {
           resumeTime = epData.savedPositionSec;
@@ -986,6 +1366,16 @@
             }, 5000);
           }
         }
+      }
+
+      // Reflect the resumed position in the UI before the player reports back
+      currentPosition = resumeTime;
+      if (epData.durationSec) duration = epData.durationSec;
+      if (progressFill && duration > 0) {
+        progressFill.style.width = `${Math.min((resumeTime / duration) * 100, 100)}%`;
+      }
+      if (timeText) {
+        timeText.textContent = `${formatTime(resumeTime)} / ${formatTime(duration)}`;
       }
 
       // Determine MAL ID (check custom override first, then title's malId)
@@ -1015,8 +1405,17 @@
       }
 
       // Reload comments for this episode
-      if (reloadComments) reloadComments();
+      if (reloadComments) reloadComments(true);
     }
+
+    // Support browser back/forward history without full reload
+    window.addEventListener("popstate", () => {
+      const p = new URLSearchParams(window.location.search);
+      const epParam = parseInt(p.get("ep"), 10);
+      if (epParam && epParam !== currentEp) {
+        loadEpisode(epParam);
+      }
+    });
 
     // Play big play button
     const bigPlayBtn = document.querySelector(".player-big-play");
@@ -1068,18 +1467,24 @@
       });
     }
 
-    // Prev / Next Ep buttons
+    // Prev / Next Ep buttons (in-page swap with preventDefault to guarantee zero reload)
     const prevBtn = document.getElementById("btn-prev-ep");
-    if (prevBtn) {
-      prevBtn.addEventListener("click", () => {
+    if (prevBtn && prevBtn.dataset.bound !== "true") {
+      prevBtn.dataset.bound = "true";
+      prevBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
         if (currentEp > 1) loadEpisode(currentEp - 1);
       });
     }
     const nextBtn = document.getElementById("btn-next-ep");
-    if (nextBtn) {
-      nextBtn.addEventListener("click", () => {
-        const totalEps = (titleData && titleData.episodes) || episodesList.length || 12;
-        if (currentEp < totalEps) loadEpisode(currentEp + 1);
+    if (nextBtn && nextBtn.dataset.bound !== "true") {
+      nextBtn.dataset.bound = "true";
+      nextBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const totalEps = totalEpisodes();
+        if (totalEps > 0 && currentEp < totalEps) loadEpisode(currentEp + 1);
       });
     }
 
@@ -1290,8 +1695,7 @@
       sendPlayerCommand({ type: "fullscreen", active: !!document.fullscreenElement });
     });
 
-    // Watchlist Toggle
-    const wlBtn = document.getElementById("watch-add-list-btn");
+    // Watchlist Toggle (wlBtn is resolved at the top of initWatchPage)
     function updateWatchlistBtn(inList) {
       if (!wlBtn) return;
       wlBtn.setAttribute("data-active", inList ? "true" : "false");
@@ -1312,9 +1716,37 @@
         if (res.ok) {
           updateWatchlistBtn(!active);
           showToast(!active ? "Added to your Watchlist!" : "Removed from Watchlist.");
+        } else {
+          showToast("Could not update your list. Please try again.", "!");
         }
       });
     }
+
+    /* Bootstrap: load the title, then start the episode from the URL.
+       Starting the episode here is what makes Resume land on the saved
+       episode at the saved position (the saved offset is applied through
+       the embed's &t= parameter). */
+    async function startWatch() {
+      /* Title and episode metadata are independent: fetch both at once. */
+      const episodeDataPromise = fetchEpisodeData(currentEp);
+      const loaded = await loadTitleData();
+      if (!loaded) {
+        episodeDataPromise.catch(() => {});
+        return;
+      }
+      await loadEpisode(currentEp, episodeDataPromise);
+    }
+
+    (async () => {
+      try {
+        showPlaceholder("Loading episode…");
+        await startWatch();
+      } catch (err) {
+        console.error("Watch page init failed:", err);
+        showPlaceholder("Could not load episode data");
+        showDataError("Something went wrong while loading this episode.", () => startWatch());
+      }
+    })();
 
     // Initialize comments for current episode
     initComments(currentSlug, currentEp);
@@ -1327,11 +1759,16 @@
     const countEl = document.getElementById("comments-count-text");
     activeEpisode = ep;
 
-    async function loadComments() {
+    let loadedEpisode = null;
+
+    async function loadComments(force = false) {
       if (!list) return;
+      if (!force && loadedEpisode === activeEpisode) return;
+
       const res = await api(`/api/comments/${encodeURIComponent(slug)}/${activeEpisode}`);
       if (res.ok && res.data && res.data.comments) {
         const comments = res.data.comments;
+        loadedEpisode = activeEpisode;
         if (countEl) countEl.textContent = `${comments.length} Comments`;
         if (comments.length === 0) {
           list.innerHTML = `<p style="color: var(--text-muted); font-size: 0.85rem; padding: 12px 0;">No comments on this episode yet. Be the first to start the discussion!</p>`;
@@ -1351,6 +1788,15 @@
             </div>
           `)
           .join("");
+      } else {
+        if (countEl) countEl.textContent = "Comments unavailable";
+        list.innerHTML = `
+          <p style="color: var(--text-muted); font-size: 0.85rem; padding: 12px 0;">
+            Comments could not be loaded.
+            <button class="btn-zoro-primary" type="button" id="comments-retry-btn" style="padding: 0.3rem 0.8rem; font-size: 0.75rem; margin-left: 6px;">Retry</button>
+          </p>`;
+        const retryBtn = list.querySelector("#comments-retry-btn");
+        if (retryBtn) retryBtn.addEventListener("click", () => loadComments(true));
       }
     }
 
@@ -1373,7 +1819,7 @@
 
         if (res.ok) {
           input.value = "";
-          loadComments();
+          loadComments(true);
           showToast("Comment published!");
         }
       });
@@ -1518,23 +1964,47 @@
       todayTab.classList.add("active");
       renderScheduleForDay(todayTab.dataset.day);
     }
+
+    /* The schedule is static content: it is ready as soon as it is rendered. */
+    markContentReady();
   }
 
   /* ==========================================================================
      LIFECYCLE INITIALIZATION
      ========================================================================== */
 
-  document.addEventListener("DOMContentLoaded", async () => {
-    initAizenIntro();
-    await checkAuthSession();
+  /* The intro is started as soon as the script runs. Waiting for
+     DOMContentLoaded delayed it by the full asset load, which pushed the
+     first paint of every session past the intro's own runtime. */
+  if (document.body) initAizenIntro();
+
+  document.addEventListener("DOMContentLoaded", () => {
     initMobileDrawer();
     initSearch();
+
+    /* The schedule is static data: render it first so it never waits on the API. */
+    initSchedulePage();
+
+    /* Everything below is independent, so it all starts at once instead of
+       queueing behind one another (that chain was the 15s "empty boxes"). */
+    const authReady = checkAuthSession();
     initSpotlightSlider();
-    await initContinueWatchingRail();
     initTrendingAndColumns();
     initMainCatalogGrid();
+    initGenresPage();
     initWatchPage();
-    initSchedulePage();
+
+    /* The continue-watching rail needs the resolved auth state. */
+    authReady.then(() => initContinueWatchingRail());
+
+    /* Pages whose content is plain HTML (Genres) have nothing to wait for. */
+    const hasDynamicContent = !!(
+      document.getElementById("zoro-main-grid") ||
+      document.getElementById("spotlight-slider-container") ||
+      document.getElementById("schedule-timeline-container") ||
+      document.getElementById("zoro-video-stage")
+    );
+    if (!hasDynamicContent) markContentReady();
 
     // Replay intro button if exists
     const replayBtn = document.getElementById("btn-replay-intro");

@@ -112,7 +112,7 @@ img {
   height: 50%;
   background: #000000;
   z-index: 10;
-  transition: transform 0.85s var(--ease-aizen);
+  transition: transform 0.6s var(--ease-aizen);
 }
 
 .aizen-shutter-top {
@@ -553,6 +553,94 @@ img {
   align-items: center;
   justify-content: center;
   font-size: 0.75rem;
+}
+
+#header-user-slot {
+  position: relative;
+  display: inline-block;
+}
+
+.user-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 220px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(20px);
+  padding: 0.5rem 0;
+  display: none;
+  z-index: 1000;
+  animation: aizenDropdown 0.2s var(--ease-smooth);
+}
+
+.user-dropdown-menu.is-open {
+  display: block;
+}
+
+.user-dropdown-header {
+  padding: 0.6rem 1rem;
+}
+
+.user-dropdown-name {
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.user-dropdown-email {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.user-dropdown-divider {
+  height: 1px;
+  background: var(--border-subtle);
+  margin: 0.4rem 0;
+}
+
+.user-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.6rem 1rem;
+  font-size: 0.85rem;
+  color: var(--text-sub);
+  text-decoration: none;
+  background: none;
+  border: none;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+.user-dropdown-item:hover {
+  background: rgba(202, 233, 98, 0.1);
+  color: var(--zoro-lime);
+}
+
+.user-dropdown-item.user-dropdown-logout:hover {
+  background: rgba(255, 96, 96, 0.12);
+  color: #ff7878;
+}
+
+.user-dropdown-icon {
+  font-size: 0.95rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
 }
 
 /* ==========================================================================
@@ -1398,40 +1486,95 @@ img {
   color: #000;
 }
 
+.ep-search-wrap {
+  position: relative;
+  margin-bottom: 0.75rem;
+}
+
+.ep-search-input {
+  width: 100%;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 0.5rem 0.85rem;
+  font-size: 0.825rem;
+  color: #fff;
+  outline: none;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+  font-family: inherit;
+}
+
+.ep-search-input:focus {
+  border-color: var(--zoro-lime);
+}
+
 .ep-buttons-grid {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
   max-height: 380px;
   overflow-y: auto;
   padding-right: 4px;
 }
 
+.ep-btn,
 .ep-number-btn {
-  aspect-ratio: 1;
-  background: var(--bg-card);
-  border: 1px solid var(--border-subtle);
-  border-radius: 6px;
-  font-size: 0.85rem;
-  font-weight: 700;
-  color: var(--text-sub);
-  cursor: pointer;
   display: flex;
   align-items: center;
-  justify-content: center;
-  transition: all 0.2s ease;
+  gap: 0.75rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: left;
+  width: 100%;
+  box-sizing: border-box;
+  color: var(--text-sub);
+  font-family: inherit;
+  text-decoration: none;
 }
 
+.ep-btn:hover,
 .ep-number-btn:hover {
   border-color: var(--zoro-lime);
   color: #fff;
+  background: rgba(202, 233, 98, 0.06);
 }
 
+.ep-btn.active,
 .ep-number-btn.active {
   background: var(--zoro-lime);
   color: #0c0d12;
   border-color: var(--zoro-lime);
   box-shadow: 0 0 14px var(--zoro-lime-glow);
+  font-weight: 700;
+}
+
+.ep-btn-num {
+  font-family: var(--font-mono);
+  font-weight: 800;
+  font-size: 0.75rem;
+  padding: 2px 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.ep-btn.active .ep-btn-num,
+.ep-number-btn.active .ep-btn-num {
+  background: rgba(0, 0, 0, 0.2);
+  color: #0c0d12;
+}
+
+.ep-btn-title {
+  font-size: 0.825rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
 }
 
 /* ==========================================================================
@@ -2204,4 +2347,46 @@ img {
   .spotlight-title { font-size: 1.8rem; }
   .schedule-slot-time { font-size: 1rem; min-width: 60px; padding: 0.3rem 0.5rem; }
   .schedule-item-left { gap: 0.85rem; }
+}
+
+/* ==========================================================================
+   WATCH PAGE DATA-ERROR BANNER
+   The layout must live in a stylesheet, never inline: an inline `display:flex`
+   overrides the user-agent `[hidden] { display:none }` rule, which made the
+   banner stay visible (with its default text) even on a successful load.
+   ========================================================================== */
+
+#watch-data-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-top: 1rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid rgba(255, 96, 96, 0.5);
+  border-radius: 10px;
+  background: rgba(255, 80, 80, 0.1);
+}
+
+#watch-data-error[hidden] {
+  display: none;
+}
+
+#watch-data-error-text {
+  color: #ff9d9d;
+  font-size: 0.85rem;
+}
+
+#watch-data-error-retry {
+  padding: 0.4rem 1rem;
+  font-size: 0.8rem;
+}
+
+/* Episode grid status text (loading / empty) */
+.ep-grid-status {
+  grid-column: 1 / -1;
+  padding: 12px 0;
+  font-size: 0.85rem;
+  color: var(--text-muted, #8b8f9c);
 }

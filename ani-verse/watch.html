@@ -7,8 +7,33 @@
   <meta name="description" content="Watch high quality anime online on Ani Verse. Free streaming with multi-server selection, subtitles and dubs.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/zoro-aizen.css">
+  <!-- Loaded async: a slow Google Fonts response must never block the app script or render. -->
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+  <noscript><link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet"></noscript>
+  <link rel="preload" href="css/zoro-aizen.css" as="style">
+  <link rel="preload" href="js/zoro-aizen.js" as="script">
+  <script>
+    /* Warm the API while the app script is still downloading: this removes a
+       full round trip from the critical path. The app script adopts these
+       in-flight requests instead of issuing duplicates. */
+    window.__zoroPrefetch = {};
+    (function () {
+      var paths = ["/api/auth/me", "/api/titles?limit=18"];
+      paths.forEach(function (path) {
+        var ctl = new AbortController();
+        var to = setTimeout(function () { ctl.abort(); }, 10000);
+        window.__zoroPrefetch[path] = fetch(path, { credentials: "same-origin", signal: ctl.signal })
+          .then(function (r) {
+            clearTimeout(to);
+            return r.json().then(function (d) { return { ok: r.ok, status: r.status, data: d, error: null }; });
+          })
+          .catch(function (e) {
+            clearTimeout(to);
+            return { ok: false, status: 0, data: null, error: String((e && e.message) || e) };
+          });
+      });
+    })();
+  </script>  <link rel="stylesheet" href="css/zoro-aizen.css">
 </head>
 <body>
 
@@ -52,8 +77,8 @@
         <button class="icon-action-btn" id="btn-replay-intro" type="button" title="Replay Aizen Shutter Intro">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 12 7-7v4c7 0 11 4 11 11-2-5-6-7-11-7v4l-7-5z"/></svg>
         </button>
-        <div id="header-user-slot">
-          <button class="btn-zoro-primary" type="button">Sign In</button>
+        <div id="header-user-slot" aria-busy="true">
+          <button class="btn-zoro-primary" type="button" disabled style="opacity: 0.55;">···</button>
         </div>
       </div>
     </div>
@@ -66,15 +91,23 @@
       <span>/</span>
       <a href="browse.html" style="color: var(--text-sub);">Series</a>
       <span>/</span>
-      <span id="watch-anime-title" style="color: var(--zoro-lime); font-weight: 600;">Kagerou Protocol</span>
+      <span id="watch-anime-title" style="color: var(--zoro-lime); font-weight: 600;">Loading…</span>
+    </div>
+
+    <!-- Data error state: shown instead of stale placeholder content.
+         Layout lives in zoko-player.css so the `hidden` attribute can actually
+         hide it (an inline display:flex would override [hidden]). -->
+    <div id="watch-data-error" hidden>
+      <span id="watch-data-error-text">Something went wrong while loading this episode.</span>
+      <button class="btn-zoro-primary" id="watch-data-error-retry" type="button">Retry</button>
     </div>
 
     <div class="watch-layout">
       <!-- Player Main Column -->
       <div class="watch-player-column">
         <div>
-          <h1 id="watch-anime-title-h1" style="font-size: 1.75rem; font-weight: 800; color: #fff;">Kagerou Protocol</h1>
-          <p id="watch-ep-subtitle" style="font-size: 0.95rem; color: var(--text-sub); margin-top: 4px;">Episode 7: The Long Way Down</p>
+          <h1 id="watch-anime-title-h1" style="font-size: 1.75rem; font-weight: 800; color: #fff;">Loading…</h1>
+          <p id="watch-ep-subtitle" style="font-size: 0.95rem; color: var(--text-sub); margin-top: 4px;">Loading episode…</p>
         </div>
 
         <!-- Video Player Stage (ZokoAnime Embed) -->
@@ -116,7 +149,7 @@
           <div class="progress-track-zoro" id="video-progress-track">
             <div class="progress-fill-zoro" id="video-progress-fill"></div>
           </div>
-          <span id="video-time-text" style="font-size: 0.75rem; font-family: var(--font-mono); color: var(--text-muted);">08:41 / 23:52</span>
+          <span id="video-time-text" style="font-size: 0.75rem; font-family: var(--font-mono); color: var(--text-muted);">00:00 / --:--</span>
           <div style="display: flex; gap: 0.5rem;">
             <button class="icon-action-btn" id="btn-skip-back" type="button" title="Skip -10s" style="width: 32px; height: 32px;">-10s</button>
             <button class="icon-action-btn" id="btn-skip-forward" type="button" title="Skip +10s" style="width: 32px; height: 32px;">+10s</button>
@@ -126,7 +159,7 @@
 
         <!-- Action Bar: Add to Watchlist & Next/Prev -->
         <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
-          <button class="btn-zoro-primary" id="watch-add-list-btn" type="button" style="padding: 0.5rem 1.25rem;">
+          <button class="btn-zoro-primary" id="watch-add-list-btn" type="button" data-active="false" style="padding: 0.5rem 1.25rem;">
             + Add to List
           </button>
           <div style="display: flex; gap: 0.75rem;">
@@ -166,7 +199,7 @@
         <div style="background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 12px; padding: 1.5rem;">
           <h3 style="font-size: 1.15rem; font-weight: 800; color: var(--zoro-lime); margin-bottom: 0.75rem;">Synopsis</h3>
           <p id="watch-anime-desc" style="font-size: 0.925rem; color: var(--text-sub); line-height: 1.6;">
-            A courier runs the last unmonitored line in a watched city. The drop goes missing and the route closes behind her.
+            Loading synopsis…
           </p>
         </div>
 
@@ -196,9 +229,13 @@
       <!-- Watch Sidebar: Episodes & Related -->
       <div class="watch-sidebar">
         <div class="episodes-card-zoro">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+          <div class="ep-range-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
             <h3 style="font-size: 1rem; font-weight: 800; color: #fff;">List of Episodes</h3>
             <span style="font-size: 0.75rem; color: var(--zoro-lime); font-family: var(--font-mono);">SUB / DUB</span>
+          </div>
+
+          <div class="ep-search-wrap" style="margin-bottom: 0.75rem;">
+            <input type="text" id="ep-search-input" class="ep-search-input" placeholder="Search episode..." autocomplete="off">
           </div>
 
           <div class="ep-range-tabs">
@@ -231,6 +268,6 @@
     </div>
   </footer>
 
-  <script src="js/zoro-aizen.js"></script>
+  <script src="js/zoro-aizen.js?v=2"></script>
 </body>
 </html>

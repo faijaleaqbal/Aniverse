@@ -7,8 +7,33 @@
   <meta name="description" content="Explore 12 curated anime genre shelves on Ani Verse. Action, Fantasy, Romance, Mecha, Supernatural, and more.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/zoro-aizen.css">
+  <!-- Loaded async: a slow Google Fonts response must never block the app script or render. -->
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+  <noscript><link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet"></noscript>
+  <link rel="preload" href="css/zoro-aizen.css" as="style">
+  <link rel="preload" href="js/zoro-aizen.js" as="script">
+  <script>
+    /* Warm the API while the app script is still downloading: this removes a
+       full round trip from the critical path. The app script adopts these
+       in-flight requests instead of issuing duplicates. */
+    window.__zoroPrefetch = {};
+    (function () {
+      var paths = ["/api/auth/me", "/api/titles?limit=18"];
+      paths.forEach(function (path) {
+        var ctl = new AbortController();
+        var to = setTimeout(function () { ctl.abort(); }, 10000);
+        window.__zoroPrefetch[path] = fetch(path, { credentials: "same-origin", signal: ctl.signal })
+          .then(function (r) {
+            clearTimeout(to);
+            return r.json().then(function (d) { return { ok: r.ok, status: r.status, data: d, error: null }; });
+          })
+          .catch(function (e) {
+            clearTimeout(to);
+            return { ok: false, status: 0, data: null, error: String((e && e.message) || e) };
+          });
+      });
+    })();
+  </script>  <link rel="stylesheet" href="css/zoro-aizen.css">
 </head>
 <body>
 
@@ -52,8 +77,8 @@
         <button class="icon-action-btn" id="btn-replay-intro" type="button" title="Replay Aizen Shutter Intro">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 12 7-7v4c7 0 11 4 11 11-2-5-6-7-11-7v4l-7-5z"/></svg>
         </button>
-        <div id="header-user-slot">
-          <button class="btn-zoro-primary" type="button">Sign In</button>
+        <div id="header-user-slot" aria-busy="true">
+          <button class="btn-zoro-primary" type="button" disabled style="opacity: 0.55;">···</button>
         </div>
       </div>
     </div>
@@ -71,11 +96,11 @@
     <div class="genres-shelf-grid">
       
       <!-- Action -->
-      <a class="genre-shelf-card" href="browse.html?genre=action">
+      <a class="genre-shelf-card" href="browse.html?genre=action" data-genre="action">
         <div class="genre-card-watermark">戦闘</div>
         <div class="genre-card-top">
           <div class="genre-card-icon-pill">⚔️</div>
-          <span class="genre-card-count">42 Titles</span>
+          <span class="genre-card-count">7 Titles</span>
         </div>
         <div>
           <div class="genre-card-title">
@@ -90,11 +115,11 @@
       </a>
 
       <!-- Fantasy -->
-      <a class="genre-shelf-card" href="browse.html?genre=fantasy">
+      <a class="genre-shelf-card" href="browse.html?genre=fantasy" data-genre="fantasy">
         <div class="genre-card-watermark">幻想</div>
         <div class="genre-card-top">
           <div class="genre-card-icon-pill">✨</div>
-          <span class="genre-card-count">38 Titles</span>
+          <span class="genre-card-count">6 Titles</span>
         </div>
         <div>
           <div class="genre-card-title">
@@ -109,11 +134,11 @@
       </a>
 
       <!-- Supernatural -->
-      <a class="genre-shelf-card" href="browse.html?genre=supernatural">
+      <a class="genre-shelf-card" href="browse.html?genre=supernatural" data-genre="supernatural">
         <div class="genre-card-watermark">怪異</div>
         <div class="genre-card-top">
           <div class="genre-card-icon-pill">👁️</div>
-          <span class="genre-card-count">29 Titles</span>
+          <span class="genre-card-count">2 Titles</span>
         </div>
         <div>
           <div class="genre-card-title">
@@ -128,11 +153,11 @@
       </a>
 
       <!-- Romance -->
-      <a class="genre-shelf-card" href="browse.html?genre=romance">
+      <a class="genre-shelf-card" href="browse.html?genre=romance" data-genre="romance">
         <div class="genre-card-watermark">恋愛</div>
         <div class="genre-card-top">
           <div class="genre-card-icon-pill">🌸</div>
-          <span class="genre-card-count">33 Titles</span>
+          <span class="genre-card-count">3 Titles</span>
         </div>
         <div>
           <div class="genre-card-title">
@@ -147,11 +172,11 @@
       </a>
 
       <!-- Drama -->
-      <a class="genre-shelf-card" href="browse.html?genre=drama">
+      <a class="genre-shelf-card" href="browse.html?genre=drama" data-genre="drama">
         <div class="genre-card-watermark">演劇</div>
         <div class="genre-card-top">
           <div class="genre-card-icon-pill">🎭</div>
-          <span class="genre-card-count">35 Titles</span>
+          <span class="genre-card-count">5 Titles</span>
         </div>
         <div>
           <div class="genre-card-title">
@@ -166,11 +191,11 @@
       </a>
 
       <!-- Sports -->
-      <a class="genre-shelf-card" href="browse.html?genre=sports">
+      <a class="genre-shelf-card" href="browse.html?genre=sports" data-genre="sports">
         <div class="genre-card-watermark">競技</div>
         <div class="genre-card-top">
           <div class="genre-card-icon-pill">⚽</div>
-          <span class="genre-card-count">19 Titles</span>
+          <span class="genre-card-count">1 Title</span>
         </div>
         <div>
           <div class="genre-card-title">
@@ -185,11 +210,11 @@
       </a>
 
       <!-- Comedy -->
-      <a class="genre-shelf-card" href="browse.html?genre=comedy">
+      <a class="genre-shelf-card" href="browse.html?genre=comedy" data-genre="comedy">
         <div class="genre-card-watermark">喜劇</div>
         <div class="genre-card-top">
           <div class="genre-card-icon-pill">🤣</div>
-          <span class="genre-card-count">27 Titles</span>
+          <span class="genre-card-count">2 Titles</span>
         </div>
         <div>
           <div class="genre-card-title">
@@ -204,11 +229,11 @@
       </a>
 
       <!-- Mecha -->
-      <a class="genre-shelf-card" href="browse.html?genre=mecha">
+      <a class="genre-shelf-card" href="browse.html?genre=mecha" data-genre="mecha">
         <div class="genre-card-watermark">機甲</div>
         <div class="genre-card-top">
           <div class="genre-card-icon-pill">🤖</div>
-          <span class="genre-card-count">16 Titles</span>
+          <span class="genre-card-count">1 Title</span>
         </div>
         <div>
           <div class="genre-card-title">
@@ -223,11 +248,11 @@
       </a>
 
       <!-- Horror & Thriller -->
-      <a class="genre-shelf-card" href="browse.html?genre=horror">
+      <a class="genre-shelf-card" href="browse.html?genre=horror" data-genre="horror">
         <div class="genre-card-watermark">恐怖</div>
         <div class="genre-card-top">
           <div class="genre-card-icon-pill">🩸</div>
-          <span class="genre-card-count">14 Titles</span>
+          <span class="genre-card-count">2 Titles</span>
         </div>
         <div>
           <div class="genre-card-title">
@@ -242,11 +267,11 @@
       </a>
 
       <!-- Music -->
-      <a class="genre-shelf-card" href="browse.html?genre=music">
+      <a class="genre-shelf-card" href="browse.html?genre=music" data-genre="music">
         <div class="genre-card-watermark">音楽</div>
         <div class="genre-card-top">
           <div class="genre-card-icon-pill">🎸</div>
-          <span class="genre-card-count">15 Titles</span>
+          <span class="genre-card-count">2 Titles</span>
         </div>
         <div>
           <div class="genre-card-title">
@@ -261,11 +286,11 @@
       </a>
 
       <!-- Mystery -->
-      <a class="genre-shelf-card" href="browse.html?genre=mystery">
+      <a class="genre-shelf-card" href="browse.html?genre=mystery" data-genre="mystery">
         <div class="genre-card-watermark">謎解</div>
         <div class="genre-card-top">
           <div class="genre-card-icon-pill">🔍</div>
-          <span class="genre-card-count">22 Titles</span>
+          <span class="genre-card-count">2 Titles</span>
         </div>
         <div>
           <div class="genre-card-title">
@@ -280,11 +305,11 @@
       </a>
 
       <!-- Slice of Life -->
-      <a class="genre-shelf-card" href="browse.html?genre=life">
+      <a class="genre-shelf-card" href="browse.html?genre=life" data-genre="life">
         <div class="genre-card-watermark">日常</div>
         <div class="genre-card-top">
           <div class="genre-card-icon-pill">🍜</div>
-          <span class="genre-card-count">26 Titles</span>
+          <span class="genre-card-count">2 Titles</span>
         </div>
         <div>
           <div class="genre-card-title">

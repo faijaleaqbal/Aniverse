@@ -312,6 +312,23 @@ app.get("/api/titles", (req, res) => {
   });
 });
 
+app.get("/api/genres", (req, res) => {
+  const rows = db.prepare("SELECT genres FROM titles").all();
+  const counts = {};
+  for (const row of rows) {
+    if (!row.genres) continue;
+    const list = row.genres.split(",").map((g) => g.trim().toLowerCase()).filter(Boolean);
+    for (const g of list) {
+      counts[g] = (counts[g] || 0) + 1;
+    }
+  }
+  res.json({
+    ok: true,
+    totalTitles: rows.length,
+    counts,
+  });
+});
+
 app.get("/api/titles/:slug", (req, res) => {
   const { slug } = req.params;
   const row = db.prepare("SELECT * FROM titles WHERE slug = ?").get(slug);
@@ -666,7 +683,24 @@ app.get("/api/health", (req, res) => {
    STATIC SITE SERVING
    ========================================================================== */
 
-app.use(express.static(SITE_ROOT));
+/* The poster/banner assets are multi-hundred-KB. Re-downloading them on every
+   navigation saturates the browser's 6 connections per origin and starves the
+   API calls behind them, so they get a short shared cache. HTML is always
+   revalidated so page markup never goes stale. */
+const STATIC_MAX_AGE_MS = 5 * 60 * 1000;
+
+app.use(
+  express.static(SITE_ROOT, {
+    maxAge: STATIC_MAX_AGE_MS,
+    etag: true,
+    lastModified: true,
+    setHeaders(res, filePath) {
+      if (filePath.endsWith(".html") || filePath.endsWith(".js") || filePath.endsWith(".css")) {
+        res.setHeader("Cache-Control", "no-cache, must-revalidate");
+      }
+    },
+  })
+);
 
 // Fallback for HTML routing if requested without extension
 app.get("/:page", (req, res, next) => {
