@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Anime Details - Ani Verse (Zoro UI × Aizen Motion)</title>
+  <meta name="description" content="Anime details, episodes, and recommendations on Ani Verse.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+  <noscript><link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet"></noscript>
+  <link rel="preload" href="css/zoro-aizen.css" as="style">
+  <link rel="preload" href="js/zoro-aizen.js" as="script">
+  <script>
+    /* Warm the API while the app script is still downloading. */
+    window.__zoroPrefetch = {};
+    (function () {
+      var paths = ["/api/auth/me", "/api/titles?limit=18"];
+      paths.forEach(function (path) {
+        var ctl = new AbortController();
+        var to = setTimeout(function () { ctl.abort(); }, 10000);
+        window.__zoroPrefetch[path] = fetch(path, { credentials: "same-origin", signal: ctl.signal })
+          .then(function (r) {
+            clearTimeout(to);
+            return r.json().then(function (d) { return { ok: r.ok, status: r.status, data: d, error: null }; });
+          })
+          .catch(function (e) {
+            clearTimeout(to);
+            return { ok: false, status: 0, data: null, error: String((e && e.message) || e) };
+          });
+      });
+    })();
+  </script>
+  <link rel="stylesheet" href="css/zoro-aizen.css">
+</head>
+<body>
+
+  <div class="ambient-glow"></div>
+
+  <!-- Zoro Top Navigation -->
+  <header class="zoro-header">
+    <div class="header-inner">
+      <div class="header-left">
+        <button class="menu-toggle-btn" type="button" aria-label="Toggle Menu">☰</button>
+        <a class="zoro-brand" href="index.html">
+          <div class="zoro-brand-icon">Z</div>
+          <span>Ani<span class="verse">Verse</span></span>
+        </a>
+      </div>
+
+      <nav class="header-nav" aria-label="Main Navigation">
+        <a class="nav-link" href="index.html">Home</a>
+        <a class="nav-link" href="browse.html">Browse</a>
+        <a class="nav-link" href="genres.html">Genres</a>
+        <a class="nav-link" href="schedule.html">Schedule</a>
+        <a class="nav-link" href="browse.html?genre=action">Movies</a>
+        <a class="nav-link" href="browse.html?sort=newest">Top Airing</a>
+      </nav>
+
+      <div class="search-wrapper">
+        <div class="search-box">
+          <input id="zoro-search-input" type="text" placeholder="Search anime, movie, series..." autocomplete="off">
+          <button class="search-btn" type="button" aria-label="Search">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          </button>
+        </div>
+        <div class="search-dropdown" id="zoro-search-dropdown"></div>
+      </div>
+
+      <div class="header-actions">
+        <button class="icon-action-btn" id="btn-random-anime" type="button" title="Shuffle / Random Anime">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 3h5v5M4 20l7-7m9-10-7 7M4 4l16 16M16 21h5v-5"/></svg>
+        </button>
+        <button class="icon-action-btn" id="btn-replay-intro" type="button" title="Replay Aizen Shutter Intro">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 12 7-7v4c7 0 11 4 11 11-2-5-6-7-11-7v4l-7-5z"/></svg>
+        </button>
+        <div id="header-user-slot" aria-busy="true">
+          <button class="btn-zoro-primary" type="button" disabled style="opacity: 0.55;">···</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main id="detail-stage">
+    <!-- Loading state -->
+    <div id="detail-loading" class="container-main" style="padding: 6rem 1.5rem; text-align: center; color: var(--text-muted);">
+      <div class="zoko-spinner-ring" style="margin: 0 auto 1rem;"></div>
+      Loading anime details…
+    </div>
+
+    <!-- Error state -->
+    <div id="detail-error" class="container-main" hidden style="padding: 6rem 1.5rem; text-align: center;">
+      <p class="detail-error-text" style="color: var(--text-sub); margin-bottom: 1.25rem;">This title could not be loaded.</p>
+      <a class="btn-zoro-primary" href="browse.html" style="padding: 0.6rem 1.5rem;">Browse Catalog</a>
+    </div>
+
+    <!-- Content -->
+    <div id="detail-content" hidden>
+      <!-- Hero -->
+      <section class="detail-hero">
+        <div class="detail-hero-backdrop" id="detail-backdrop"></div>
+        <div class="detail-hero-overlay"></div>
+        <div class="detail-hero-inner container-main">
+          <img class="detail-cover" id="detail-cover" src="" alt="">
+          <div class="detail-info">
+            <div class="detail-badges" id="detail-badges"></div>
+            <h1 class="detail-title" id="detail-title"></h1>
+            <div class="detail-alt-titles" id="detail-alt-titles"></div>
+            <div class="detail-meta" id="detail-meta"></div>
+            <div class="detail-genres" id="detail-genres"></div>
+            <p class="detail-synopsis" id="detail-synopsis"></p>
+            <div class="detail-actions">
+              <a class="btn-watch-now" id="detail-watch-now" href="#">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>
+                Watch Now
+              </a>
+              <button class="btn-zoro-primary" id="detail-add-list" type="button" data-active="false" style="padding: 0.7rem 1.5rem;">+ Add to My List</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Episodes -->
+      <section class="container-main detail-section">
+        <div class="section-header-zoro">
+          <h2 class="section-title">List of <span class="accent">Episodes</span></h2>
+          <span style="font-size: 0.85rem; color: var(--text-muted); font-family: var(--font-mono);">SUB / DUB</span>
+        </div>
+        <div class="detail-episode-list" id="detail-episode-list"></div>
+      </section>
+
+      <!-- Recommendations -->
+      <section class="container-main detail-section" style="margin-bottom: 4rem;">
+        <div class="section-header-zoro">
+          <h2 class="section-title">More Like <span class="accent">This</span></h2>
+        </div>
+        <div class="cards-grid-zoro" id="detail-recommendations"></div>
+      </section>
+    </div>
+  </main>
+
+  <footer style="background: var(--bg-darker); border-top: 1px solid var(--border-subtle); padding: 3rem 0;">
+    <div class="container-main" style="text-align: center; font-size: 0.8rem; color: var(--text-muted);">
+      <p>Ani Verse • Zoro UI layout with Aizen-Verse animation engine.</p>
+    </div>
+  </footer>
+
+  <script src="js/zoro-aizen.js?v=3"></script>
+</body>
+</html>

@@ -17,6 +17,32 @@
       .replace(/'/g, "&#39;");
   }
 
+  /* ---- Real metadata helpers (Phase 1) ----
+     Local cover art is the primary image; the remote URL is only a fallback.
+     Title cards/links navigate to the detail page; explicit "Watch"/"Resume"
+     actions go straight to the watch page. */
+  const COVER_FALLBACK = "img/banner.jpg";
+  function coverOf(t) {
+    return (t && (t.cover || t.coverLocal)) || COVER_FALLBACK;
+  }
+  function bannerOf(t) {
+    return (t && (t.banner || t.bannerLocal || t.cover || t.coverLocal)) || COVER_FALLBACK;
+  }
+  function detailHref(slug) {
+    return `detail.html?slug=${encodeURIComponent(slug)}`;
+  }
+  function watchHref(slug, ep) {
+    return `watch.html?slug=${encodeURIComponent(slug)}&ep=${encodeURIComponent(ep == null ? 1 : ep)}`;
+  }
+  function scoreLabel(t) {
+    return t && t.score != null ? (t.score / 10).toFixed(1) : null;
+  }
+  function statusLabel(s) {
+    if (!s) return "Unknown";
+    const map = { FINISHED: "Finished", RELEASING: "Airing", NOT_YET_RELEASED: "Upcoming", CANCELLED: "Cancelled", HIATUS: "Hiatus" };
+    return map[s] || s;
+  }
+
   /* Every API call is bounded: a stalled connection must never freeze a page
      on fallback content. GETs are retried once (bodyless = safe to repeat). */
   const API_TIMEOUT_MS = 10000;
@@ -181,7 +207,7 @@
      TOAST NOTIFICATIONS
      ========================================================================== */
 
-  function showToast(message, icon = "✓", duration = 3000) {
+  function showToast(message, icon = "✓", duration = 2000) {
     let container = document.querySelector(".aizen-toast-container");
     if (!container) {
       container = document.createElement("div");
@@ -228,7 +254,7 @@
           <nav class="mobile-drawer-links">
             <a class="mobile-drawer-link" href="index.html">🏠 Home</a>
             <a class="mobile-drawer-link" href="browse.html">🔍 Browse Catalog</a>
-            <a class="mobile-drawer-link" href="genres.html">📑 12 Genres</a>
+            <a class="mobile-drawer-link" href="genres.html">📑 All Genres</a>
             <a class="mobile-drawer-link" href="schedule.html">📅 Broadcast Schedule</a>
             <a class="mobile-drawer-link" href="browse.html?genre=action">🔥 Action Anime</a>
             <a class="mobile-drawer-link" href="browse.html?genre=fantasy">✨ Fantasy & Isekai</a>
@@ -526,6 +552,11 @@
       const q = input.value.trim();
       clearTimeout(debounceTimer);
 
+      // Live filter Browse grid if currently on browse page (Bug 11)
+      if (typeof window.__onSearchLiveFilter === "function") {
+        window.__onSearchLiveFilter(q);
+      }
+
       if (!q) {
         dropdown.classList.remove("is-open");
         dropdown.innerHTML = "";
@@ -537,12 +568,12 @@
         if (res.ok && res.data && res.data.titles && res.data.titles.length > 0) {
           dropdown.innerHTML = res.data.titles
             .map((t) => `
-              <a class="search-result-item" href="watch.html?slug=${encodeURIComponent(t.slug)}&ep=1">
-                <img class="search-result-thumb" src="img/narutoposter.jpg" alt="${t.name}">
+              <a class="search-result-item" href="${detailHref(t.slug)}">
+                <img class="search-result-thumb" src="${coverOf(t)}" alt="${escapeHtml(t.name)}" loading="lazy">
                 <div class="search-result-info">
-                  <div class="search-result-title">${t.name}</div>
+                  <div class="search-result-title">${escapeHtml(t.name)}</div>
                   <div class="search-result-meta">
-                    <span>${t.year}</span> • <span>${t.kind}</span> • <span style="color: var(--zoro-sub);">SUB ${t.episodes || 1}</span>
+                    <span>${t.year || 2025}</span> • <span>${t.kind || "Series"}</span> • <span style="color: var(--zoro-sub);">SUB ${t.episodes || 1}</span>
                   </div>
                 </div>
               </a>
@@ -550,10 +581,10 @@
             .join("");
           dropdown.classList.add("is-open");
         } else {
-          dropdown.innerHTML = `<div style="padding: 12px; font-size: 0.8rem; color: var(--text-muted); text-align: center;">No anime found for "${q}"</div>`;
+          dropdown.innerHTML = `<div style="padding: 12px; font-size: 0.8rem; color: var(--text-muted); text-align: center;">No anime found for "${escapeHtml(q)}"</div>`;
           dropdown.classList.add("is-open");
         }
-      }, 250);
+      }, 200);
     });
 
     // Close dropdown on outside click
@@ -563,14 +594,38 @@
       }
     });
 
+    function submitSearch() {
+      const q = input.value.trim();
+      if (!q) return;
+      dropdown.classList.remove("is-open");
+      if (window.location.pathname.endsWith("browse.html")) {
+        const url = new URL(window.location);
+        url.searchParams.set("q", q);
+        window.history.replaceState({}, "", url.toString());
+        if (typeof window.__onSearchLiveFilter === "function") {
+          window.__onSearchLiveFilter(q);
+        }
+      } else {
+        window.location.href = `browse.html?q=${encodeURIComponent(q)}`;
+      }
+    }
+
     // Submit on Enter
     input.addEventListener("keydown", (e) => {
       if (e.key === "Enter") {
         e.preventDefault();
-        const q = input.value.trim();
-        if (q) window.location.href = `browse.html?q=${encodeURIComponent(q)}`;
+        submitSearch();
       }
     });
+
+    // Submit on search button click
+    const searchBtn = input.parentElement ? input.parentElement.querySelector(".search-btn") : null;
+    if (searchBtn) {
+      searchBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        submitSearch();
+      });
+    }
   }
 
   /* ==========================================================================
@@ -585,16 +640,15 @@
     if (!res.ok || !res.data || !res.data.titles || res.data.titles.length === 0) return;
 
     const titles = res.data.titles.slice(0, 5);
-    const posters = ["img/banner.jpg", "img/photo1.jpg", "img/photo2.jpg", "img/photo3.jpg", "img/photo4.jpg"];
 
     sliderContainer.innerHTML = titles
       .map((t, idx) => `
-        <div class="spotlight-slide ${idx === 0 ? "is-active" : ""}" data-index="${idx}" data-poster="${posters[idx % posters.length]}">
+        <div class="spotlight-slide ${idx === 0 ? "is-active" : ""}" data-index="${idx}" data-poster="${bannerOf(t)}">
           <div class="spotlight-backdrop"></div>
           <div class="spotlight-overlay"></div>
           <div class="spotlight-content">
             <span class="spotlight-rank">🔥 #${idx + 1} Spotlight</span>
-            <h1 class="spotlight-title">${t.name}</h1>
+            <h1 class="spotlight-title"><a href="${detailHref(t.slug)}" style="color:inherit;text-decoration:none;">${escapeHtml(t.name)}</a></h1>
             <div class="spotlight-badges">
               <span class="badge badge-sub">SUB ${t.episodes || 1}</span>
               <span class="badge badge-dub">DUB ${t.episodes || 1}</span>
@@ -602,13 +656,13 @@
               <span class="badge badge-hd">HD</span>
               <span style="font-size: 0.8rem; color: var(--text-sub); margin-left: 6px;">${t.year} • ${t.runtimeMin}m</span>
             </div>
-            <p class="spotlight-desc">${t.synopsis || t.tagline}</p>
+            <p class="spotlight-desc">${escapeHtml(t.synopsis || t.tagline)}</p>
             <div class="spotlight-actions">
-              <a class="btn-watch-now" href="watch.html?slug=${encodeURIComponent(t.slug)}&ep=1">
+              <a class="btn-watch-now" href="${watchHref(t.slug, 1)}">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>
                 Watch Now
               </a>
-              <button class="btn-detail btn-add-watchlist" data-slug="${t.slug}" type="button">+ Detail</button>
+              <a class="btn-detail" href="${detailHref(t.slug)}">+ Detail</a>
             </div>
           </div>
         </div>
@@ -680,31 +734,12 @@
       }
 
       const items = res.data.items;
-      const sampleImages = [
-        "img/onepiece.jpg",
-        "img/narutoposter.jpg",
-        "img/photo1.jpg",
-        "img/photo2.jpg",
-        "img/photo3.jpg",
-        "img/photo4.jpg",
-      ];
 
       function formatSec(s) {
         const sec = Math.floor(Math.max(0, s || 0));
         const m = Math.floor(sec / 60);
         const rem = sec % 60;
         return `${m}:${rem < 10 ? "0" : ""}${rem}`;
-      }
-
-      function getPoster(slug, idx) {
-        if (slug === "one-piece") return "img/onepiece.jpg";
-        if (slug === "naruto") return "img/narutoposter.jpg";
-        if (slug) {
-          let hash = 0;
-          for (let i = 0; i < slug.length; i++) hash = (hash * 31 + slug.charCodeAt(i)) >>> 0;
-          return sampleImages[hash % sampleImages.length];
-        }
-        return sampleImages[idx % sampleImages.length];
       }
 
       function escapeText(str) {
@@ -718,17 +753,19 @@
       }
 
       row.innerHTML = items
-        .map((item, idx) => {
-          const poster = getPoster(item.slug, idx);
+        .map((item) => {
+          const poster = item.cover || COVER_FALLBACK;
           const safeName = escapeText(item.titleName || item.slug);
           const epNum = item.episodeNum || 1;
-          const watchHref = `watch.html?slug=${encodeURIComponent(item.slug)}&ep=${encodeURIComponent(epNum)}`;
+          const detailLink = detailHref(item.slug);
+          // Resume keeps going straight to the saved episode (correct behaviour).
+          const resumeHref = `watch.html?slug=${encodeURIComponent(item.slug)}&ep=${encodeURIComponent(epNum)}`;
           const pct = Math.min(100, Math.max(0, typeof item.percent === "number" ? item.percent : 0));
           const timeLabel = item.durationSec ? `${formatSec(item.positionSec)} / ${formatSec(item.durationSec)}` : `${pct}%`;
 
           return `
             <div class="zoro-card" data-slug="${escapeText(item.slug)}">
-              <a class="zoro-card-poster" href="${watchHref}">
+              <a class="zoro-card-poster" href="${detailLink}">
                 <img src="${poster}" alt="${safeName}" loading="lazy" decoding="async" fetchpriority="low">
                 <div class="zoro-play-overlay">
                   <div class="zoro-play-circle">▶</div>
@@ -741,14 +778,14 @@
                 </div>
               </a>
               <div class="zoro-card-info">
-                <a class="zoro-card-title" href="${watchHref}" title="${safeName}">${safeName}</a>
+                <a class="zoro-card-title" href="${detailLink}" title="${safeName}">${safeName}</a>
                 <div class="zoro-card-submeta" style="margin-bottom: 6px;">
                   <span>Episode ${epNum}</span> • <span>${pct}%</span>
                 </div>
                 <div class="progress-track-zoro" style="height: 4px; margin-bottom: 8px;" title="${timeLabel} (${pct}%)">
                   <div class="progress-fill-zoro" style="width: ${pct}%;"></div>
                 </div>
-                <a class="btn-zoro-primary" href="${watchHref}" style="width: 100%; justify-content: center; padding: 0.45rem 0.8rem; font-size: 0.8rem; margin-top: auto; text-decoration: none;">
+                <a class="btn-zoro-primary" href="${resumeHref}" style="width: 100%; justify-content: center; padding: 0.45rem 0.8rem; font-size: 0.8rem; margin-top: auto; text-decoration: none;">
                   ▶ Resume
                 </a>
               </div>
@@ -786,17 +823,15 @@
     if (!res.ok || !res.data || !res.data.titles) return;
     const allTitles = res.data.titles;
 
-    const sampleImages = ["img/onepiece.jpg", "img/narutoposter.jpg", "img/photo1.jpg", "img/photo2.jpg", "img/photo3.jpg", "img/photo4.jpg"];
-
     // 1. Trending Top 10
     if (trendingRail) {
       trendingRail.innerHTML = allTitles.slice(0, 10).map((t, i) => `
-        <a class="trending-item" href="watch.html?slug=${encodeURIComponent(t.slug)}&ep=1">
+        <a class="trending-item" href="${detailHref(t.slug)}">
           <div class="trending-poster-wrap">
-            <img src="${sampleImages[i % sampleImages.length]}" alt="${t.name}" loading="lazy" decoding="async" fetchpriority="low">
+            <img src="${coverOf(t)}" alt="${escapeHtml(t.name)}" loading="lazy" decoding="async" fetchpriority="low">
             <div class="trending-rank-num">${(i + 1 < 10 ? "0" : "") + (i + 1)}</div>
             <div class="trending-info-overlay">
-              <div class="trending-anime-title">${t.name}</div>
+              <div class="trending-anime-title">${escapeHtml(t.name)}</div>
               <div style="font-size: 0.7rem; color: var(--text-muted); margin-top: 2px;">
                 <span style="color: var(--zoro-sub);">SUB ${t.episodes || 1}</span> • <span>${t.year}</span>
               </div>
@@ -809,11 +844,11 @@
     // 2. 4 Columns
     function renderColItems(container, items) {
       if (!container) return;
-      container.innerHTML = items.map((t, idx) => `
-        <a class="col-item" href="watch.html?slug=${encodeURIComponent(t.slug)}&ep=1">
-          <img class="col-thumb" src="${sampleImages[(idx + 2) % sampleImages.length]}" alt="${t.name}" loading="lazy" decoding="async" fetchpriority="low">
+      container.innerHTML = items.map((t) => `
+        <a class="col-item" href="${detailHref(t.slug)}">
+          <img class="col-thumb" src="${coverOf(t)}" alt="${escapeHtml(t.name)}" loading="lazy" decoding="async" fetchpriority="low">
           <div class="col-item-details">
-            <div class="col-item-title">${t.name}</div>
+            <div class="col-item-title">${escapeHtml(t.name)}</div>
             <div class="col-item-meta">
               <span class="badge-mini-sub">SUB</span>
               <span class="badge-mini-dub">DUB</span>
@@ -835,6 +870,7 @@
      ========================================================================== */
 
   let tooltipEl = null;
+  let activeHoverSlug = null;
 
   function createHoverTooltip() {
     if (tooltipEl) return tooltipEl;
@@ -844,6 +880,22 @@
     return tooltipEl;
   }
 
+  function hideHoverTooltip() {
+    activeHoverSlug = null;
+    if (tooltipEl) {
+      tooltipEl.classList.remove("is-visible");
+      tooltipEl.style.display = "none";
+    }
+  }
+
+  // Dismiss preview on click outside, mouse movement over empty space, or scroll (Bug 1)
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest(".zoro-card") && !e.target.closest(".zoro-tooltip")) {
+      hideHoverTooltip();
+    }
+  });
+  window.addEventListener("scroll", hideHoverTooltip, { passive: true });
+
   async function initMainCatalogGrid() {
     const grid = document.getElementById("zoro-main-grid");
     if (!grid) return;
@@ -852,13 +904,19 @@
     if (!res.ok || !res.data || !res.data.titles) return;
 
     const titles = res.data.titles;
-    const sampleImages = ["img/photo1.jpg", "img/photo2.jpg", "img/photo3.jpg", "img/photo4.jpg", "img/narutoposter.jpg", "img/onepiece.jpg"];
 
     function renderCards(list) {
-      grid.innerHTML = list.map((t, i) => `
-        <div class="zoro-card" data-slug="${t.slug}" data-genres="${t.genres ? t.genres.join(" ") : ""}" data-title="${t.name}">
-          <a class="zoro-card-poster" href="watch.html?slug=${encodeURIComponent(t.slug)}&ep=1">
-            <img src="${sampleImages[i % sampleImages.length]}" alt="${t.name}" loading="lazy" decoding="async" fetchpriority="low">
+      hideHoverTooltip();
+      if (!list.length) {
+        grid.innerHTML = `<div style="grid-column: 1 / -1; padding: 3rem 1rem; text-align: center; color: var(--text-muted); font-size: 0.95rem;">No anime found matching your selection.</div>`;
+        markContentReady();
+        return;
+      }
+
+      grid.innerHTML = list.map((t) => `
+        <div class="zoro-card" data-slug="${t.slug}" data-genres="${t.genres ? t.genres.join(" ") : ""}" data-title="${escapeHtml(t.name)}">
+          <a class="zoro-card-poster" href="${detailHref(t.slug)}">
+            <img src="${coverOf(t)}" alt="${escapeHtml(t.name)}" loading="lazy" decoding="async" fetchpriority="low">
             <div class="zoro-play-overlay">
               <div class="zoro-play-circle">▶</div>
             </div>
@@ -871,7 +929,7 @@
             </div>
           </a>
           <div class="zoro-card-info">
-            <a class="zoro-card-title" href="watch.html?slug=${encodeURIComponent(t.slug)}&ep=1">${t.name}</a>
+            <a class="zoro-card-title" href="${detailHref(t.slug)}">${escapeHtml(t.name)}</a>
             <div class="zoro-card-submeta">
               <span>${t.kind}</span> • <span>${t.runtimeMin}m</span>
             </div>
@@ -888,53 +946,96 @@
     const urlParams = new URLSearchParams(window.location.search);
     const initialGenre = urlParams.get("genre");
     const initialQ = urlParams.get("q");
+    const initialSort = urlParams.get("sort");
 
     const chipsWrap = document.getElementById("genre-chips-container");
+    const sortSelect = document.getElementById("catalog-sort-select");
 
-    if (initialQ) {
-      const qLower = initialQ.toLowerCase();
-      const filtered = titles.filter(
-        (t) =>
-          t.name.toLowerCase().includes(qLower) ||
-          (t.synopsis && t.synopsis.toLowerCase().includes(qLower)) ||
-          (t.genres && t.genres.some((g) => g.toLowerCase().includes(qLower)))
-      );
-      renderCards(filtered);
-      const searchInput = document.getElementById("zoro-search-input");
-      if (searchInput) searchInput.value = initialQ;
-    } else if (initialGenre) {
-      if (chipsWrap) {
-        const matchingChip = chipsWrap.querySelector(`[data-genre="${initialGenre.toLowerCase()}"]`);
-        if (matchingChip) {
-          chipsWrap.querySelectorAll(".genre-chip-zoro").forEach((c) => c.classList.remove("active"));
-          matchingChip.classList.add("active");
-        }
+    let currentGenre = (initialGenre || "all").toLowerCase();
+    let currentSearch = (initialQ || "").trim();
+    let currentSort = initialSort || (sortSelect ? sortSelect.value : "popularity");
+
+    if (chipsWrap && currentGenre !== "all") {
+      const match = chipsWrap.querySelector(`[data-genre="${currentGenre}"]`);
+      if (match) {
+        chipsWrap.querySelectorAll(".genre-chip-zoro").forEach((c) => c.classList.remove("active"));
+        match.classList.add("active");
       }
-      const filtered = titles.filter(
-        (t) => t.genres && t.genres.some((g) => g.toLowerCase() === initialGenre.toLowerCase())
-      );
-      renderCards(filtered.length ? filtered : titles);
-    } else {
-      renderCards(titles);
     }
 
-    // Genre filter chips
+    if (sortSelect && currentSort) {
+      sortSelect.value = currentSort;
+    }
+
+    const searchInput = document.getElementById("zoro-search-input");
+    if (searchInput && initialQ) {
+      searchInput.value = initialQ;
+    }
+
+    function applyFilterAndSort() {
+      hideHoverTooltip();
+      let list = titles.slice();
+
+      // 1. Filter by search query
+      if (currentSearch) {
+        const qLower = currentSearch.toLowerCase();
+        list = list.filter(
+          (t) =>
+            t.name.toLowerCase().includes(qLower) ||
+            (t.romajiTitle && t.romajiTitle.toLowerCase().includes(qLower)) ||
+            (t.nativeTitle && t.nativeTitle.toLowerCase().includes(qLower)) ||
+            (t.oldTitle && t.oldTitle.toLowerCase().includes(qLower)) ||
+            (t.synopsis && t.synopsis.toLowerCase().includes(qLower)) ||
+            (t.genres && t.genres.some((g) => g.toLowerCase().includes(qLower)))
+        );
+      }
+
+      // 2. Filter by genre
+      if (currentGenre && currentGenre !== "all") {
+        list = list.filter(
+          (t) => t.genres && t.genres.some((g) => g.toLowerCase() === currentGenre)
+        );
+      }
+
+      // 3. Sort by popularity, release date, or A-Z (Bug 7)
+      if (currentSort === "newest") {
+        list.sort((a, b) => (b.year || 0) - (a.year || 0) || (b.created_at || 0) - (a.created_at || 0));
+      } else if (currentSort === "az") {
+        list.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+      } else if (currentSort === "popularity") {
+        // default catalog order (popularity)
+      }
+
+      renderCards(list);
+    }
+
+    applyFilterAndSort();
+
+    // Genre filter chips (dismiss preview on change)
     if (chipsWrap) {
       chipsWrap.addEventListener("click", (e) => {
         const chip = e.target.closest(".genre-chip-zoro");
         if (!chip) return;
         chipsWrap.querySelectorAll(".genre-chip-zoro").forEach((c) => c.classList.remove("active"));
         chip.classList.add("active");
-
-        const selected = chip.dataset.genre;
-        if (selected === "all") {
-          renderCards(titles);
-        } else {
-          const filtered = titles.filter((t) => t.genres && t.genres.some((g) => g.toLowerCase() === selected.toLowerCase()));
-          renderCards(filtered);
-        }
+        currentGenre = (chip.dataset.genre || "all").toLowerCase();
+        applyFilterAndSort();
       });
     }
+
+    // Sort dropdown change (Bug 7)
+    if (sortSelect) {
+      sortSelect.addEventListener("change", () => {
+        currentSort = sortSelect.value;
+        applyFilterAndSort();
+      });
+    }
+
+    // Hook up live search on Browse (Bug 11)
+    window.__onSearchLiveFilter = (q) => {
+      currentSearch = (q || "").trim();
+      applyFilterAndSort();
+    };
   }
 
   function attachTooltipListeners() {
@@ -944,20 +1045,25 @@
     cards.forEach((card) => {
       card.addEventListener("mouseenter", async (e) => {
         const slug = card.dataset.slug;
+        activeHoverSlug = slug;
+
         const res = await api(`/api/titles/${encodeURIComponent(slug)}`);
+        // If mouse left the card or another card hovered in the meantime, abort (Bug 1)
+        if (activeHoverSlug !== slug || !card.matches(":hover")) return;
         if (!res.ok || !res.data) return;
 
         const t = res.data.title;
+        const rating = scoreLabel(t);
         tip.innerHTML = `
-          <div class="tooltip-title">${t.name}</div>
-          <div class="tooltip-rating">★ 8.89 <span style="color: var(--text-muted); font-size: 0.75rem;">(Zoro Community)</span></div>
-          <div class="tooltip-synopsis">${t.synopsis || t.tagline}</div>
+          <div class="tooltip-title">${escapeHtml(t.name)}</div>
+          <div class="tooltip-rating">${rating ? `★ ${rating} <span style="color: var(--text-muted); font-size: 0.75rem;">(AniList)</span>` : `<span style="color: var(--text-muted); font-size: 0.75rem;">Not yet rated</span>`}</div>
+          <div class="tooltip-synopsis">${escapeHtml(t.synopsis || t.tagline)}</div>
           <div class="tooltip-meta-rows">
             <span><strong>Type:</strong> ${t.kind}</span>
-            <span><strong>Studio:</strong> ${t.studio}</span>
+            <span><strong>Studio:</strong> ${escapeHtml(t.studio)}</span>
             <span><strong>Genres:</strong> ${t.genres ? t.genres.join(", ") : "Action"}</span>
           </div>
-          <a class="btn-zoro-primary" href="watch.html?slug=${encodeURIComponent(t.slug)}&ep=1" style="width: 100%; justify-content: center; margin-top: 10px; padding: 6px;">▶ Watch Now</a>
+          <a class="btn-zoro-primary" href="${watchHref(t.slug, 1)}" style="width: 100%; justify-content: center; margin-top: 10px; padding: 6px;">▶ Watch Now</a>
         `;
 
         const rect = card.getBoundingClientRect();
@@ -965,15 +1071,20 @@
         if (left + 330 > window.innerWidth) {
           left = rect.left - 332;
         }
-        let top = rect.top + window.scrollY;
+        if (left < 10) left = 10;
+
+        // Position: MUST NEVER cover the header (header is height 70px)
+        const minTop = window.scrollY + 76;
+        let top = Math.max(rect.top + window.scrollY, minTop);
 
         tip.style.left = `${left}px`;
         tip.style.top = `${top}px`;
+        tip.style.display = "block";
         tip.classList.add("is-visible");
       });
 
       card.addEventListener("mouseleave", () => {
-        tip.classList.remove("is-visible");
+        hideHoverTooltip();
       });
     });
   }
@@ -982,30 +1093,71 @@
      6B. GENRES PAGE DYNAMIC SHELF COUNTS
      ========================================================================== */
 
+  /* Genre display metadata (icon / kanji / flavour). Cards themselves are
+     rendered from GET /api/genres so every genre in the catalog — including
+     Adventure — appears automatically with its honest title count. */
+  const GENRE_META = {
+    action: { icon: "⚔️", kanji: "戦闘", label: "Action", desc: "High-octane sword fights, jujutsu martial arts, ninja battles, and intense physical confrontations." },
+    adventure: { icon: "🗺️", kanji: "冒険", label: "Adventure", desc: "Grand voyages, uncharted lands, pirate crews, and journeys beyond the horizon." },
+    fantasy: { icon: "✨", kanji: "幻想", label: "Fantasy", desc: "Elven journeys, mystical spells, ancient dungeons, and mythical realms beyond ordinary human time." },
+    supernatural: { icon: "👁️", kanji: "怪異", label: "Supernatural", desc: "Spirits, cursed energy, exorcisms, and dark folklore hidden behind the veneer of modern Tokyo." },
+    romance: { icon: "🌸", kanji: "恋愛", label: "Romance", desc: "Heartwarming confessions, rooftop encounters, unspoken feelings, and winter train stations." },
+    drama: { icon: "🎭", kanji: "演劇", label: "Drama", desc: "Emotional human journeys, moral dilemmas, personal sacrifices, and complex character growth." },
+    sports: { icon: "⚽", kanji: "競技", label: "Sports", desc: "High-stakes tournaments, ego-fueled rivalries, and the relentless pursuit of perfection." },
+    comedy: { icon: "🤣", kanji: "喜劇", label: "Comedy", desc: "Secret agents playing house, chaotic mind games, hilarious misunderstandings, and witty banter." },
+    mecha: { icon: "🤖", kanji: "機甲", label: "Mecha", desc: "Bio-mechanical armor, orbital warfare, cybernetic cockpits, and machines forged to survive the stars." },
+    horror: { icon: "🩸", kanji: "恐怖", label: "Horror", desc: "Abandoned subway lines, psychological time slips, body horror, and midnight supernatural dread." },
+    music: { icon: "🎸", kanji: "音楽", label: "Music", desc: "Basement guitar riffs, bedroom beatmakers, midnight diner jams, and soul-stirring concert climaxes." },
+    mystery: { icon: "🔍", kanji: "謎解", label: "Mystery", desc: "Time loop paradoxes, cold case crimes, cryptic disappearance notices, and cerebral deductions." },
+    life: { icon: "🍜", kanji: "日常", label: "Slice of Life", desc: "Cozy noodle bars after hours, quiet afternoon walks, nostalgic memories, and everyday companionship." },
+  };
+
   async function initGenresPage() {
     const grid = document.querySelector(".genres-shelf-grid");
     if (!grid) return;
 
     const res = await api("/api/genres");
     if (!res.ok || !res.data || !res.data.counts) return;
-
     const counts = res.data.counts;
-    const cards = grid.querySelectorAll(".genre-shelf-card");
-    cards.forEach((card) => {
-      let genreKey = card.dataset.genre;
-      if (!genreKey) {
-        const href = card.getAttribute("href") || "";
-        const m = href.match(/genre=([^&]+)/);
-        if (m) genreKey = decodeURIComponent(m[1]).toLowerCase();
-      }
-      if (!genreKey) return;
 
-      const cnt = counts[genreKey] != null ? counts[genreKey] : 0;
-      const countEl = card.querySelector(".genre-card-count");
-      if (countEl) {
-        countEl.textContent = `${cnt} ${cnt === 1 ? "Title" : "Titles"}`;
-      }
-    });
+    const keys = Object.keys(counts).sort(
+      (a, b) => counts[b] - counts[a] || a.localeCompare(b)
+    );
+
+    grid.innerHTML = keys
+      .map((key) => {
+        const meta = GENRE_META[key] || {
+          icon: "🎬",
+          kanji: "棚",
+          label: key.charAt(0).toUpperCase() + key.slice(1),
+          desc: "Explore this curated shelf of titles.",
+        };
+        const cnt = counts[key];
+        return `
+          <a class="genre-shelf-card" href="browse.html?genre=${encodeURIComponent(key)}" data-genre="${key}">
+            <div class="genre-card-watermark">${meta.kanji}</div>
+            <div class="genre-card-top">
+              <div class="genre-card-icon-pill">${meta.icon}</div>
+              <span class="genre-card-count">${cnt} ${cnt === 1 ? "Title" : "Titles"}</span>
+            </div>
+            <div>
+              <div class="genre-card-title">
+                ${meta.label} <span class="genre-card-kanji-sub">/ ${meta.kanji}</span>
+              </div>
+              <p class="genre-card-desc">${meta.desc}</p>
+            </div>
+            <div class="genre-card-footer">
+              <span>Explore ${meta.label} Shelf</span>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            </div>
+          </a>
+        `;
+      })
+      .join("");
+
+    const heroAccent = document.querySelector(".genres-hero-header h1 .accent");
+    if (heroAccent) heroAccent.textContent = `${keys.length} Genre Shelves`;
+    markContentReady();
   }
 
   /* ==========================================================================
@@ -1184,6 +1336,21 @@
       if (animeTitleH1) animeTitleH1.textContent = titleData.name;
       if (animeDesc) animeDesc.textContent = titleData.synopsis || titleData.tagline || "";
 
+      // Real metadata in the sidebar details card + the player cover backdrop.
+      const setText = (id, val) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = val;
+      };
+      setText("watch-detail-status", statusLabel(titleData.status));
+      setText("watch-detail-studios", titleData.studios || titleData.studio || "—");
+      setText("watch-detail-year", titleData.year || "—");
+      setText("watch-detail-score", scoreLabel(titleData) ? `★ ${scoreLabel(titleData)} / 10` : "—");
+      setText("watch-detail-episodes", titleData.episodes || episodesList.length || "—");
+      setText("watch-detail-duration", `${titleData.runtimeMin || 24}m per ep`);
+      const detailLink = document.getElementById("watch-detail-link");
+      if (detailLink) detailLink.href = detailHref(currentSlug);
+      if (coverOverlay) coverOverlay.style.backgroundImage = `url('${bannerOf(titleData)}')`;
+
       // Watchlist Button State
       if (wlBtn && data.userState) {
         updateWatchlistBtn(data.userState.inWatchlist);
@@ -1317,6 +1484,16 @@
       currentEp = epNum;
       activeEpisode = epNum;
 
+      // Optimistically update the episode heading from the already-cached
+      // episode list so it tracks the URL instantly instead of lagging ~1-2s
+      // behind while the episode fetch runs. The fetch below confirms it.
+      const cachedEp = episodesList.find((e) => Number(e.ep_num ?? e.epNum) === Number(epNum));
+      if (epSubtitle) {
+        epSubtitle.textContent = cachedEp
+          ? `Episode ${epNum}: ${cachedEp.title}`
+          : `Episode ${epNum}`;
+      }
+
       // Reset overlay and show spinner
       if (overlay) overlay.hidden = true;
       if (spinner) spinner.hidden = false;
@@ -1436,11 +1613,13 @@
           showToast(`Switched audio track to ${currentTrack.toUpperCase()}`);
           if (iframe && iframe.src && iframe.src !== "about:blank") {
             const malId = getCustomMalId(currentSlug) || (titleData && titleData.malId);
+            // Read current playback position BEFORE swapping the iframe src (Bug 5)
+            const resumePos = Math.floor(currentPosition || 0);
             const newUrl = getEmbedUrl(malId, currentEp, currentTrack, {
-              autoplay: playerSettings.autoplay,
+              autoplay: true,
               autoskip: playerSettings.autoskip,
               autonext: playerSettings.autonext,
-              startTime: currentPosition,
+              startTime: resumePos > 0 ? resumePos : undefined,
             });
             if (newUrl) iframe.src = newUrl;
           }
@@ -1554,7 +1733,12 @@
     window.addEventListener("message", async (event) => {
       // Hard origin check per spec
       if (event.origin !== "https://zokoanime.video") return;
-      const data = event.data;
+      let data = event.data;
+      if (typeof data === "string") {
+        try {
+          data = JSON.parse(data);
+        } catch {}
+      }
       if (!data || data.channel !== "zokoanime") return;
 
       // Event: ready
@@ -1579,7 +1763,11 @@
 
       // Event: state
       if (data.type === "state") {
-        if (typeof data.position === "number") currentPosition = data.position;
+        const pos = typeof data.position === "number" ? data.position
+                  : typeof data.currentTime === "number" ? data.currentTime
+                  : typeof data.time === "number" ? data.time
+                  : null;
+        if (pos != null) currentPosition = pos;
         if (typeof data.duration === "number" && data.duration > 0) duration = data.duration;
         if (typeof data.paused === "boolean") {
           isPaused = data.paused;
@@ -1589,18 +1777,18 @@
 
       // Event: time or watching-log
       if (data.type === "watching-log" || data.type === "time") {
-        const cur = typeof data.currentTime === "number" ? data.currentTime : (typeof data.position === "number" ? data.position : 0);
+        const cur = typeof data.currentTime === "number" ? data.currentTime
+                  : (typeof data.position === "number" ? data.position
+                  : (typeof data.time === "number" ? data.time
+                  : (typeof data.seconds === "number" ? data.seconds : 0)));
         const dur = typeof data.duration === "number" && data.duration > 0 ? data.duration : duration;
         currentPosition = cur;
         duration = dur;
 
-        // Update progress bar
-        if (progressFill && dur > 0) {
-          const pct = Math.min((cur / dur) * 100, 100);
-          progressFill.style.width = `${pct}%`;
+        // Update time text strictly driven by player events (Bug 10)
+        if (timeText) {
+          timeText.textContent = `${formatTime(cur)} / ${formatTime(dur)}`;
         }
-
-        // Update time text
         if (timeText) {
           timeText.textContent = `${formatTime(cur)} / ${formatTime(dur)}`;
         }
@@ -1830,6 +2018,192 @@
   }
 
   /* ==========================================================================
+     DETAIL PAGE (Phase 1): real metadata hero, episode list, recommendations
+     ========================================================================== */
+
+  async function initDetailPage() {
+    const stage = document.getElementById("detail-stage");
+    if (!stage) return;
+
+    const params = new URLSearchParams(window.location.search);
+    const slug = params.get("slug");
+    const loadingEl = document.getElementById("detail-loading");
+    const errorEl = document.getElementById("detail-error");
+    const contentEl = document.getElementById("detail-content");
+
+    function showError(msg) {
+      if (loadingEl) loadingEl.hidden = true;
+      if (contentEl) contentEl.hidden = true;
+      if (errorEl) {
+        errorEl.hidden = false;
+        const t = errorEl.querySelector(".detail-error-text");
+        if (t) t.textContent = msg;
+      }
+    }
+
+    if (!slug) {
+      showError("No title specified. Browse the catalog to pick an anime.");
+      return;
+    }
+
+    const res = await api(`/api/titles/${encodeURIComponent(slug)}`);
+    if (!res.ok || !res.data || !res.data.title) {
+      showError("This title could not be loaded from the server.");
+      return;
+    }
+    const t = res.data.title;
+    const episodes = Array.isArray(res.data.episodes) ? res.data.episodes : [];
+    const userState = res.data.userState;
+    const epCount = t.episodes || episodes.length || 0;
+
+    // Hero backdrop + cover (local art primary).
+    const backdrop = document.getElementById("detail-backdrop");
+    if (backdrop) backdrop.style.backgroundImage = `url('${bannerOf(t)}')`;
+    const cover = document.getElementById("detail-cover");
+    if (cover) {
+      cover.src = coverOf(t);
+      cover.alt = t.name;
+    }
+    const titleEl = document.getElementById("detail-title");
+    if (titleEl) titleEl.textContent = t.name;
+    const altEl = document.getElementById("detail-alt-titles");
+    if (altEl) {
+      const parts = [];
+      if (t.romajiTitle && t.romajiTitle !== t.name) parts.push(t.romajiTitle);
+      if (t.nativeTitle) parts.push(t.nativeTitle);
+      altEl.textContent = parts.join("  •  ");
+      altEl.hidden = parts.length === 0;
+    }
+    const badges = document.getElementById("detail-badges");
+    if (badges) {
+      badges.innerHTML = `
+        <span class="badge badge-sub">SUB ${epCount || 1}</span>
+        <span class="badge badge-dub">DUB ${epCount || 1}</span>
+        <span class="badge badge-type">${t.kind}</span>
+        <span class="badge badge-hd">HD</span>
+        ${scoreLabel(t) ? `<span class="badge badge-score">★ ${scoreLabel(t)}</span>` : ""}
+      `;
+    }
+    const meta = document.getElementById("detail-meta");
+    if (meta) {
+      meta.innerHTML = `
+        <span><strong>Year:</strong> ${t.year || "—"}</span>
+        <span><strong>Status:</strong> ${statusLabel(t.status)}</span>
+        <span><strong>Episodes:</strong> ${epCount}</span>
+        <span><strong>Studios:</strong> ${escapeHtml(t.studios || t.studio || "—")}</span>
+        <span><strong>Duration:</strong> ${t.runtimeMin || 24}m</span>
+      `;
+    }
+    const genresEl = document.getElementById("detail-genres");
+    if (genresEl) {
+      genresEl.innerHTML = (t.genres || [])
+        .map((g) => `<a class="genre-chip-zoro" href="browse.html?genre=${encodeURIComponent(g)}">${escapeHtml(g)}</a>`)
+        .join("");
+    }
+    const syn = document.getElementById("detail-synopsis");
+    if (syn) syn.textContent = t.synopsis || t.tagline || "";
+    const watchNow = document.getElementById("detail-watch-now");
+    if (watchNow) watchNow.href = watchHref(slug, 1);
+    document.title = `${t.name} - Ani Verse`;
+
+    // Add to My List (reuses the existing watchlist API).
+    const listBtn = document.getElementById("detail-add-list");
+    function setListBtn(inList) {
+      if (!listBtn) return;
+      listBtn.dataset.active = inList ? "true" : "false";
+      listBtn.textContent = inList ? "✓ In My List" : "+ Add to My List";
+      listBtn.style.color = inList ? "var(--zoro-lime)" : "";
+    }
+    setListBtn(userState ? userState.inWatchlist : false);
+    if (listBtn) {
+      listBtn.addEventListener("click", async () => {
+        if (!currentUser) {
+          openAuthModal("login");
+          return;
+        }
+        const active = listBtn.dataset.active === "true";
+        const r = await api(`/api/watchlist/${encodeURIComponent(slug)}`, {
+          method: active ? "DELETE" : "POST",
+        });
+        if (r.ok) {
+          setListBtn(!active);
+          showToast(!active ? "Added to your Watchlist!" : "Removed from Watchlist.");
+        } else {
+          showToast("Could not update your list. Please try again.", "!");
+        }
+      });
+    }
+    window.addEventListener("zoro:auth", async () => {
+      const r = await api(`/api/titles/${encodeURIComponent(slug)}`);
+      setListBtn(r.ok && r.data && r.data.userState ? r.data.userState.inWatchlist : false);
+    });
+
+    // Episode list (all episodes, each links to the watch page).
+    const epList = document.getElementById("detail-episode-list");
+    if (epList) {
+      if (!episodes.length) {
+        epList.innerHTML = `<p style="color:var(--text-muted);padding:12px 0;">No episodes available for this title.</p>`;
+      } else {
+        epList.innerHTML = episodes
+          .map((e) => {
+            const n = e.ep_num;
+            const padded = String(n).padStart(3, "0");
+            return `
+              <a class="detail-episode-row" href="${watchHref(slug, n)}">
+                <span class="detail-episode-num">${padded}</span>
+                <span class="detail-episode-title">${escapeHtml(e.title || `Episode ${n}`)}</span>
+                <span class="detail-episode-duration">${Math.round((e.duration_sec || 1440) / 60)}m</span>
+                <span class="detail-episode-play">▶</span>
+              </a>
+            `;
+          })
+          .join("");
+      }
+    }
+
+    // Recommendations: up to 6 same-genre titles.
+    const recWrap = document.getElementById("detail-recommendations");
+    if (recWrap) {
+      const allRes = await api("/api/titles?limit=100");
+      if (allRes.ok && allRes.data && Array.isArray(allRes.data.titles)) {
+        const myGenres = new Set((t.genres || []).map((g) => g.toLowerCase()));
+        const recs = allRes.data.titles
+          .filter((o) => o.slug !== slug)
+          .map((o) => ({ o, shared: (o.genres || []).filter((g) => myGenres.has(g.toLowerCase())).length }))
+          .filter((x) => x.shared > 0)
+          .sort((a, b) => b.shared - a.shared || (b.o.score || 0) - (a.o.score || 0))
+          .slice(0, 6)
+          .map((x) => x.o);
+        recWrap.innerHTML = recs.length
+          ? recs
+              .map((o) => `
+                <div class="zoro-card" data-slug="${o.slug}">
+                  <a class="zoro-card-poster" href="${detailHref(o.slug)}">
+                    <img src="${coverOf(o)}" alt="${escapeHtml(o.name)}" loading="lazy" decoding="async">
+                    <div class="zoro-play-overlay"><div class="zoro-play-circle">▶</div></div>
+                    <div class="zoro-poster-badges">
+                      <div class="badges-left"><span class="badge-mini-sub">SUB</span><span class="badge-mini-dub">DUB</span></div>
+                      <span class="badge-mini-ep">Ep ${o.episodes || 1}</span>
+                    </div>
+                  </a>
+                  <div class="zoro-card-info">
+                    <a class="zoro-card-title" href="${detailHref(o.slug)}">${escapeHtml(o.name)}</a>
+                    <div class="zoro-card-submeta"><span>${o.kind}</span> • <span>${o.year}</span></div>
+                  </div>
+                </div>
+              `)
+              .join("")
+          : `<p style="color:var(--text-muted);">No similar titles yet.</p>`;
+      }
+    }
+
+    if (loadingEl) loadingEl.hidden = true;
+    if (errorEl) errorEl.hidden = true;
+    if (contentEl) contentEl.hidden = false;
+    markContentReady();
+  }
+
+  /* ==========================================================================
      SCHEDULE PAGE LOGIC
      ========================================================================== */
 
@@ -1868,9 +2242,19 @@
     ],
   };
 
-  function initSchedulePage() {
+  async function initSchedulePage() {
     const timelineEl = document.getElementById("schedule-timeline-container");
     if (!timelineEl) return;
+
+    // Real titles + local covers come from the catalog (coalesced/prefetched),
+    // so the schedule never shows the old placeholder names or stock photos.
+    const titleMap = {};
+    try {
+      const tRes = await fetchTitles(18);
+      if (tRes.ok && tRes.data && Array.isArray(tRes.data.titles)) {
+        for (const t of tRes.data.titles) titleMap[t.slug] = t;
+      }
+    } catch {}
 
     // Live Tokyo Clock
     const clockEl = document.getElementById("live-jst-clock");
@@ -1890,10 +2274,10 @@
       setInterval(updateJstClock, 1000);
     }
 
-    // Determine current day of week in JST
+    // Determine current day of week by visitor's LOCAL date (Bug 6)
     const dayNames = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
-    const nowJst = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Tokyo" }));
-    const currentDayName = dayNames[nowJst.getDay()];
+    const nowLocal = new Date();
+    const currentDayName = dayNames[nowLocal.getDay()];
 
     function renderScheduleForDay(dayKey) {
       const items = SCHEDULE_DATA[dayKey] || [];
@@ -1902,34 +2286,42 @@
         return;
       }
 
-      timelineEl.innerHTML = items.map((item) => `
+      timelineEl.innerHTML = items.map((item) => {
+        const real = titleMap[item.slug] || {};
+        const name = real.name || item.title;
+        const cover = real.cover || item.img;
+        const studio = real.studio || item.studio;
+        const dHref = detailHref(item.slug);
+        const wHref = `watch.html?slug=${encodeURIComponent(item.slug)}&ep=${item.ep}`;
+        return `
         <div class="schedule-item-card">
           <div class="schedule-item-left">
             <div class="schedule-slot-time">${item.time}</div>
-            <a class="schedule-thumb" href="watch.html?slug=${encodeURIComponent(item.slug)}&ep=${item.ep}">
-              <img src="${item.img}" alt="${item.title}" loading="lazy">
+            <a class="schedule-thumb" href="${dHref}">
+              <img src="${cover}" alt="${escapeHtml(name)}" loading="lazy">
             </a>
             <div class="schedule-title-block">
-              <a class="schedule-title-link" href="watch.html?slug=${encodeURIComponent(item.slug)}&ep=${item.ep}">${item.title}</a>
+              <a class="schedule-title-link" href="${dHref}">${escapeHtml(name)}</a>
               <div class="schedule-meta-badges">
                 <span class="badge-mini-sub">SUB</span>
                 <span class="badge-mini-dub">DUB</span>
                 <span class="badge-mini-ep">Ep ${item.ep}</span>
-                <span style="color: var(--text-muted); font-size: 0.75rem;">• ${item.studio}</span>
+                <span style="color: var(--text-muted); font-size: 0.75rem;">• ${escapeHtml(studio)}</span>
               </div>
             </div>
           </div>
           <div class="schedule-item-right">
-            <button class="btn-remind-slot" type="button" data-title="${item.title}">
+            <button class="btn-remind-slot" type="button" data-title="${escapeHtml(name)}">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
               Remind Me
             </button>
-            <a class="btn-zoro-primary" href="watch.html?slug=${encodeURIComponent(item.slug)}&ep=${item.ep}" style="padding: 0.55rem 1rem;">
+            <a class="btn-zoro-primary" href="${wHref}" style="padding: 0.55rem 1rem;">
               ▶ Watch Ep ${item.ep}
             </a>
           </div>
         </div>
-      `).join("");
+      `;
+      }).join("");
 
       // Remind buttons
       timelineEl.querySelectorAll(".btn-remind-slot").forEach((btn) => {
@@ -1993,6 +2385,7 @@
     initMainCatalogGrid();
     initGenresPage();
     initWatchPage();
+    initDetailPage();
 
     /* The continue-watching rail needs the resolved auth state. */
     authReady.then(() => initContinueWatchingRail());
@@ -2002,7 +2395,8 @@
       document.getElementById("zoro-main-grid") ||
       document.getElementById("spotlight-slider-container") ||
       document.getElementById("schedule-timeline-container") ||
-      document.getElementById("zoro-video-stage")
+      document.getElementById("zoro-video-stage") ||
+      document.getElementById("detail-stage")
     );
     if (!hasDynamicContent) markContentReady();
 
@@ -2017,7 +2411,7 @@
         const res = await api("/api/titles?limit=50");
         if (res.ok && res.data && res.data.titles.length > 0) {
           const rand = res.data.titles[Math.floor(Math.random() * res.data.titles.length)];
-          window.location.href = `watch.html?slug=${encodeURIComponent(rand.slug)}&ep=1`;
+          window.location.href = detailHref(rand.slug);
         }
       });
     }

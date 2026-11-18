@@ -31,7 +31,20 @@ export function initSchema() {
       synopsis TEXT,
       mal_id INTEGER DEFAULT 21,
       anilist_id INTEGER DEFAULT 21,
-      created_at TEXT NOT NULL
+      created_at TEXT NOT NULL,
+      old_title TEXT,
+      real_title TEXT,
+      romaji_title TEXT,
+      native_title TEXT,
+      score INTEGER,
+      status TEXT,
+      studios TEXT,
+      anilist_genres TEXT,
+      anilist_episodes INTEGER,
+      cover_local TEXT,
+      banner_local TEXT,
+      cover_remote TEXT,
+      banner_remote TEXT
     );
 
     CREATE TABLE IF NOT EXISTS episodes (
@@ -130,6 +143,28 @@ export function initSchema() {
   try {
     db.exec("ALTER TABLE titles ADD COLUMN anilist_id INTEGER DEFAULT 21;");
   } catch (e) {}
+
+  // Real-metadata columns (Phase 1). Added idempotently for existing databases.
+  const metaColumns = [
+    "old_title TEXT",
+    "real_title TEXT",
+    "romaji_title TEXT",
+    "native_title TEXT",
+    "score INTEGER",
+    "status TEXT",
+    "studios TEXT",
+    "anilist_genres TEXT",
+    "anilist_episodes INTEGER",
+    "cover_local TEXT",
+    "banner_local TEXT",
+    "cover_remote TEXT",
+    "banner_remote TEXT",
+  ];
+  for (const col of metaColumns) {
+    try {
+      db.exec(`ALTER TABLE titles ADD COLUMN ${col};`);
+    } catch (e) {}
+  }
 }
 
 // Auto-initialize schema on load

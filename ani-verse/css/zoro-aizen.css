@@ -54,6 +54,7 @@
 html {
   color-scheme: dark;
   scroll-behavior: smooth;
+  overflow-x: hidden;
 }
 
 body {
@@ -258,7 +259,7 @@ img {
   left: 0;
   width: 100%;
   height: 70px;
-  z-index: 1000;
+  z-index: 10000;
   background: rgba(12, 13, 18, 0.85);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
@@ -650,31 +651,43 @@ img {
 .spotlight-hero {
   position: relative;
   width: 100%;
-  min-height: 540px;
+  height: 520px;
+  min-height: 520px;
   overflow: hidden;
   background: var(--bg-darker);
+}
+
+#spotlight-slider-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
 }
 
 .spotlight-slide {
   position: absolute;
   inset: 0;
+  width: 100%;
+  height: 100%;
   display: flex;
   align-items: center;
   opacity: 0;
   visibility: hidden;
+  overflow: hidden;
   transition: opacity 0.8s ease, visibility 0.8s ease;
 }
 
 .spotlight-slide.is-active {
   opacity: 1;
   visibility: visible;
-  position: relative;
+  z-index: 1;
 }
 
 /* Background Banner with Dynamic Gradient */
 .spotlight-backdrop {
   position: absolute;
   inset: 0;
+  width: 100%;
+  height: 100%;
   background-size: cover;
   background-position: center top;
   filter: brightness(0.65) contrast(1.1);
@@ -698,8 +711,9 @@ img {
   z-index: 10;
   max-width: 1440px;
   width: 100%;
+  height: 100%;
   margin: 0 auto;
-  padding: 4rem 1.5rem;
+  padding: 3.5rem 1.5rem;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -903,12 +917,17 @@ img {
   gap: 1.25rem;
   overflow-x: auto;
   padding-bottom: 1rem;
+  padding-right: 1.5rem;
+  scroll-padding: 0 1.5rem;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
 }
 
 .trending-item {
   flex: 0 0 210px;
+  scroll-snap-align: start;
   display: flex;
   position: relative;
   background: var(--bg-surface);
@@ -985,13 +1004,15 @@ img {
 
 .four-col-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 1.5rem;
   margin-top: 2rem;
   margin-bottom: 3.5rem;
+  width: 100%;
 }
 
 .col-block {
+  min-width: 0;
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: 12px;
@@ -1259,7 +1280,7 @@ img {
 /* Zoro Hover Tooltip */
 .zoro-tooltip {
   position: absolute;
-  z-index: 9999;
+  z-index: 9000;
   width: 320px;
   background: rgba(26, 28, 36, 0.95);
   border: 1px solid var(--border-active);
@@ -1512,10 +1533,12 @@ img {
 .ep-buttons-grid {
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
-  max-height: 380px;
+  gap: 6px;
+  max-height: 350px;
   overflow-y: auto;
-  padding-right: 4px;
+  padding: 2px 4px 2px 0;
+  scroll-padding: 2px;
+  scroll-snap-type: y proximity;
 }
 
 .ep-btn,
@@ -1523,10 +1546,12 @@ img {
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  height: 38px;
+  min-height: 38px;
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
-  padding: 0.5rem 0.75rem;
+  padding: 0 0.75rem;
   cursor: pointer;
   transition: all 0.15s ease;
   text-align: left;
@@ -1535,6 +1560,7 @@ img {
   color: var(--text-sub);
   font-family: inherit;
   text-decoration: none;
+  scroll-snap-align: start;
 }
 
 .ep-btn:hover,
@@ -1790,8 +1816,8 @@ img {
 
 .aizen-toast-container {
   position: fixed;
-  bottom: 2rem;
-  right: 2rem;
+  top: 5rem;
+  right: 1.5rem;
   z-index: 100000;
   display: flex;
   flex-direction: column;
@@ -1807,13 +1833,13 @@ img {
   background: rgba(22, 24, 32, 0.95);
   border: 1px solid var(--border-active);
   backdrop-filter: blur(16px);
-  padding: 0.85rem 1.25rem;
+  padding: 0.75rem 1.15rem;
   border-radius: 12px;
   color: #fff;
-  font-size: 0.9rem;
+  font-size: 0.875rem;
   font-weight: 500;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8), 0 0 20px rgba(202, 233, 98, 0.2);
-  transform: translateY(20px);
+  transform: translateY(-15px);
   opacity: 0;
   animation: aizenToastIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
 }
@@ -1841,7 +1867,7 @@ img {
 }
 
 @keyframes aizenToastOut {
-  to { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(-15px); opacity: 0; }
 }
 
 /* ==========================================================================
@@ -2317,13 +2343,38 @@ img {
   color: var(--zoro-lime);
 }
 
+.sort-control-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.sort-select-zoro {
+  background: var(--bg-surface);
+  color: var(--text-main);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 0.45rem 1rem;
+  font-size: 0.85rem;
+  font-family: inherit;
+  cursor: pointer;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.sort-select-zoro:hover,
+.sort-select-zoro:focus {
+  border-color: var(--zoro-lime);
+  background: var(--bg-card);
+}
+
 /* ==========================================================================
    RESPONSIVE MEDIA QUERIES
    ========================================================================== */
 
 @media (max-width: 1200px) {
   .cards-grid-zoro { grid-template-columns: repeat(4, 1fr); }
-  .four-col-grid { grid-template-columns: repeat(2, 1fr); }
+  .four-col-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .genres-shelf-grid { grid-template-columns: repeat(3, 1fr); }
 }
 
@@ -2340,13 +2391,34 @@ img {
 
 @media (max-width: 600px) {
   .cards-grid-zoro { grid-template-columns: repeat(2, 1fr); gap: 0.75rem; }
-  .four-col-grid { grid-template-columns: 1fr; }
+  .four-col-grid { grid-template-columns: minmax(0, 1fr); }
   .genres-shelf-grid { grid-template-columns: 1fr; }
   .genres-hero-header h1 { font-size: 2rem; }
-  .search-wrapper { max-width: 160px; }
+  .search-wrapper { max-width: 140px; }
+  .spotlight-hero { height: auto; min-height: 460px; }
   .spotlight-title { font-size: 1.8rem; }
   .schedule-slot-time { font-size: 1rem; min-width: 60px; padding: 0.3rem 0.5rem; }
   .schedule-item-left { gap: 0.85rem; }
+  .container-main { padding: 0 1rem; }
+}
+
+@media (max-width: 420px) {
+  .header-inner { padding: 0 0.75rem; gap: 0.5rem; }
+  .header-actions { gap: 0.4rem; }
+  #btn-replay-intro { display: none; }
+  .search-wrapper { max-width: 110px; }
+  .search-box { padding: 0.35rem 0.65rem; }
+  .search-box input { font-size: 0.75rem; }
+  .btn-zoro-primary { padding: 0.4rem 0.85rem; font-size: 0.8rem; }
+  .zoro-brand { font-size: 1.3rem; }
+  .spotlight-content { padding: 2rem 1rem 4rem; }
+  .spotlight-title { font-size: 1.5rem; }
+  .spotlight-actions { gap: 0.5rem; }
+  .btn-watch-now { padding: 0.65rem 1.25rem; font-size: 0.9rem; }
+  .btn-detail { padding: 0.65rem 1rem; font-size: 0.9rem; }
+  .spotlight-nav { bottom: 1rem; right: 1rem; }
+  .spotlight-arrow { width: 38px; height: 38px; }
+  .zoro-player-bar { padding: 0.6rem 0.85rem; }
 }
 
 /* ==========================================================================
@@ -2389,4 +2461,97 @@ img {
   padding: 12px 0;
   font-size: 0.85rem;
   color: var(--text-muted, #8b8f9c);
+}
+
+/* ==========================================================================
+   DETAIL PAGE (Phase 1)
+   ========================================================================== */
+
+.detail-hero {
+  position: relative;
+  overflow: hidden;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.detail-hero-backdrop {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center 20%;
+  filter: blur(2px) brightness(0.5);
+  transform: scale(1.05);
+}
+.detail-hero-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(12, 13, 18, 0.55) 0%, rgba(12, 13, 18, 0.82) 60%, var(--bg-main) 100%);
+}
+.detail-hero-inner {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  gap: 2rem;
+  align-items: flex-start;
+  padding-top: 3rem;
+  padding-bottom: 2.5rem;
+}
+.detail-cover {
+  width: 230px;
+  flex-shrink: 0;
+  aspect-ratio: 3 / 4.2;
+  object-fit: cover;
+  border-radius: 12px;
+  border: 1px solid var(--border-active);
+  box-shadow: 0 16px 40px -8px rgba(0, 0, 0, 0.8), 0 0 24px rgba(202, 233, 98, 0.12);
+}
+.detail-info { flex: 1; min-width: 0; }
+.detail-badges { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-bottom: 0.9rem; }
+.badge-score { background: var(--zoro-lime); color: #0c0d12; font-weight: 800; }
+.detail-title { font-size: 2.4rem; font-weight: 900; letter-spacing: -0.5px; line-height: 1.1; color: #fff; }
+.detail-alt-titles { margin-top: 0.4rem; font-size: 0.95rem; color: var(--text-sub); }
+.detail-meta { display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem; margin-top: 1rem; font-size: 0.875rem; color: var(--text-sub); }
+.detail-meta strong { color: #fff; font-weight: 600; }
+.detail-genres { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1rem; }
+.detail-genres .genre-chip-zoro { text-decoration: none; }
+.detail-synopsis { margin-top: 1.1rem; font-size: 0.95rem; line-height: 1.65; color: var(--text-sub); max-width: 760px; }
+.detail-actions { display: flex; flex-wrap: wrap; gap: 0.9rem; margin-top: 1.5rem; align-items: center; }
+
+.detail-section { padding-top: 2.5rem; }
+.detail-episode-list {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.6rem;
+}
+.detail-episode-row {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 0.7rem 1rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  text-decoration: none;
+  transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
+}
+.detail-episode-row:hover {
+  border-color: var(--border-active);
+  background: var(--bg-card);
+  transform: translateX(3px);
+}
+.detail-episode-num {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: var(--zoro-lime);
+  font-size: 0.9rem;
+  min-width: 34px;
+}
+.detail-episode-title { flex: 1; color: var(--text-main); font-size: 0.9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.detail-episode-duration { color: var(--text-muted); font-size: 0.75rem; font-family: var(--font-mono); }
+.detail-episode-play { color: var(--zoro-lime); font-size: 0.8rem; }
+
+@media (max-width: 900px) {
+  .detail-hero-inner { flex-direction: column; align-items: center; text-align: center; }
+  .detail-cover { width: 180px; }
+  .detail-meta, .detail-genres, .detail-actions, .detail-badges { justify-content: center; }
+  .detail-episode-list { grid-template-columns: 1fr; }
+  .detail-title { font-size: 1.9rem; }
 }
