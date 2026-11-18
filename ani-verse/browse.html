@@ -93,7 +93,7 @@
     </div>
 
     <!-- Filter Bar -->
-    <div class="filter-bar-zoro">
+    <div class="filter-bar-zoro" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
       <div class="genre-chips-wrap" id="genre-chips-container">
         <button class="genre-chip-zoro active" data-genre="all" type="button">All</button>
         <button class="genre-chip-zoro" data-genre="action" type="button">Action</button>
@@ -104,6 +104,14 @@
         <button class="genre-chip-zoro" data-genre="romance" type="button">Romance</button>
         <button class="genre-chip-zoro" data-genre="sports" type="button">Sports</button>
       </div>
+      <div class="sort-control-wrap">
+        <label for="catalog-sort-select" style="font-size: 0.85rem; color: var(--text-muted); font-weight: 500;">Sort by:</label>
+        <select id="catalog-sort-select" class="sort-select-zoro" aria-label="Sort Anime Catalog">
+          <option value="popularity">Popularity</option>
+          <option value="newest">Release date</option>
+          <option value="az">A–Z</option>
+        </select>
+      </div>
     </div>
 
     <!-- Zoro Card Grid with Hover Tooltip System -->
@@ -112,12 +120,29 @@
     </div>
   </main>
 
-  <footer style="background: var(--bg-darker); border-top: 1px solid var(--border-subtle); padding: 3rem 0;">
-    <div class="container-main" style="text-align: center; font-size: 0.8rem; color: var(--text-muted);">
-      <p>Ani Verse • Zoro UI Catalog with Aizen-Verse animation engine.</p>
+  <!-- Zoro Footer with Aizen Cyber Accents -->
+  <footer style="background: var(--bg-darker); border-top: 1px solid var(--border-subtle); padding: 3.5rem 0 2rem; margin-top: 4rem;">
+    <div class="container-main">
+      <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 2rem; padding-bottom: 2rem; border-bottom: 1px solid rgba(255,255,255,0.06);">
+        <a class="zoro-brand" href="index.html">
+          <div class="zoro-brand-icon">Z</div>
+          <span>Ani<span class="verse">Verse</span></span>
+        </a>
+        <div style="display: flex; gap: 1.5rem; font-size: 0.875rem; color: var(--text-sub);">
+          <a href="index.html">Home</a>
+          <a href="browse.html">Catalog</a>
+          <a href="schedule.html">Schedule</a>
+          <a href="genres.html">Genres</a>
+          <a href="watch.html?slug=kagerou-protocol&ep=7">Watch</a>
+        </div>
+      </div>
+      <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; margin-top: 1.5rem; font-size: 0.75rem; color: var(--text-muted);">
+        <p>Ani Verse does not store any files on its server. Combining Zoro.to UI components with Aizen-Verse cinematic animation engine.</p>
+        <p style="font-family: var(--font-mono); color: var(--zoro-lime);">ZORO × AIZEN HYBRID ENGINE 2026</p>
+      </div>
     </div>
   </footer>
 
-  <script src="js/zoro-aizen.js"></script>
+  <script src="js/zoro-aizen.js?v=3"></script>
 </body>
 </html>
