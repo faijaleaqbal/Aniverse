@@ -144,17 +144,12 @@
         <div class="zoko-toasts" id="zoko-toasts" aria-live="polite"></div>
 
         <!-- Player Control Bar -->
-        <div class="zoro-player-bar">
-          <button id="btn-player-playpause" type="button" style="background: none; font-size: 1.1rem; color: var(--zoro-lime); cursor: pointer; width: 28px;">▶</button>
-          <div class="progress-track-zoro" id="video-progress-track">
-            <div class="progress-fill-zoro" id="video-progress-fill"></div>
+        <div class="zoro-player-bar" style="display: flex; justify-content: space-between; align-items: center;">
+          <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <button class="icon-action-btn" id="btn-skip-back" type="button" title="Skip -10s" style="width: 44px; height: 32px; font-size: 0.8rem; font-weight: 700; border-radius: 6px;">-10s</button>
+            <button class="icon-action-btn" id="btn-skip-forward" type="button" title="Skip +10s" style="width: 44px; height: 32px; font-size: 0.8rem; font-weight: 700; border-radius: 6px;">+10s</button>
           </div>
-          <span id="video-time-text" style="font-size: 0.75rem; font-family: var(--font-mono); color: var(--text-muted);">00:00 / --:--</span>
-          <div style="display: flex; gap: 0.5rem;">
-            <button class="icon-action-btn" id="btn-skip-back" type="button" title="Skip -10s" style="width: 32px; height: 32px;">-10s</button>
-            <button class="icon-action-btn" id="btn-skip-forward" type="button" title="Skip +10s" style="width: 32px; height: 32px;">+10s</button>
-            <button class="icon-action-btn" id="btn-fullscreen" type="button" title="Fullscreen" style="width: 32px; height: 32px;">⛶</button>
-          </div>
+          <span id="video-time-text" style="font-size: 0.8rem; font-family: var(--font-mono); color: var(--text-muted); letter-spacing: 0.05em;">00:00 / --:--</span>
         </div>
 
         <!-- Action Bar: Add to Watchlist & Next/Prev -->
@@ -247,27 +242,47 @@
           </div>
         </div>
 
-        <!-- Quick Info Card -->
+        <!-- Quick Info Card (real metadata) -->
         <div style="background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 12px; padding: 1.25rem;">
           <h3 style="font-size: 0.95rem; font-weight: 800; color: var(--zoro-lime); margin-bottom: 0.85rem;">Anime Details</h3>
           <div style="display: grid; gap: 0.6rem; font-size: 0.825rem; color: var(--text-sub);">
-            <div><strong style="color: #fff;">Country:</strong> Japan</div>
-            <div><strong style="color: #fff;">Status:</strong> Completed</div>
-            <div><strong style="color: #fff;">Studios:</strong> Verse Works Film</div>
-            <div><strong style="color: #fff;">Duration:</strong> 24m per ep</div>
+            <div><strong style="color: #fff;">Status:</strong> <span id="watch-detail-status">—</span></div>
+            <div><strong style="color: #fff;">Studios:</strong> <span id="watch-detail-studios">—</span></div>
+            <div><strong style="color: #fff;">Year:</strong> <span id="watch-detail-year">—</span></div>
+            <div><strong style="color: #fff;">Score:</strong> <span id="watch-detail-score">—</span></div>
+            <div><strong style="color: #fff;">Episodes:</strong> <span id="watch-detail-episodes">—</span></div>
+            <div><strong style="color: #fff;">Duration:</strong> <span id="watch-detail-duration">—</span></div>
             <div><strong style="color: #fff;">Quality:</strong> Ultra HD 1080p</div>
           </div>
+          <a id="watch-detail-link" href="browse.html" style="display:inline-block;margin-top:0.9rem;font-size:0.8rem;color:var(--zoro-lime);font-weight:600;">View Full Details →</a>
         </div>
       </div>
     </div>
   </main>
 
-  <footer style="background: var(--bg-darker); border-top: 1px solid var(--border-subtle); padding: 3rem 0; margin-top: 4rem;">
-    <div class="container-main" style="text-align: center; font-size: 0.8rem; color: var(--text-muted);">
-      <p>Ani Verse • Zoro UI layout with Aizen-Verse animation engine.</p>
+  <!-- Zoro Footer with Aizen Cyber Accents -->
+  <footer style="background: var(--bg-darker); border-top: 1px solid var(--border-subtle); padding: 3.5rem 0 2rem; margin-top: 4rem;">
+    <div class="container-main">
+      <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 2rem; padding-bottom: 2rem; border-bottom: 1px solid rgba(255,255,255,0.06);">
+        <a class="zoro-brand" href="index.html">
+          <div class="zoro-brand-icon">Z</div>
+          <span>Ani<span class="verse">Verse</span></span>
+        </a>
+        <div style="display: flex; gap: 1.5rem; font-size: 0.875rem; color: var(--text-sub);">
+          <a href="index.html">Home</a>
+          <a href="browse.html">Catalog</a>
+          <a href="schedule.html">Schedule</a>
+          <a href="genres.html">Genres</a>
+          <a href="watch.html?slug=kagerou-protocol&ep=7">Watch</a>
+        </div>
+      </div>
+      <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; margin-top: 1.5rem; font-size: 0.75rem; color: var(--text-muted);">
+        <p>Ani Verse does not store any files on its server. Combining Zoro.to UI components with Aizen-Verse cinematic animation engine.</p>
+        <p style="font-family: var(--font-mono); color: var(--zoro-lime);">ZORO × AIZEN HYBRID ENGINE 2026</p>
+      </div>
     </div>
   </footer>
 
-  <script src="js/zoro-aizen.js?v=2"></script>
+  <script src="js/zoro-aizen.js?v=3"></script>
 </body>
 </html>

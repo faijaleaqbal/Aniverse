@@ -2,7 +2,7 @@ import { db } from "./db.js";
 import { CATALOG } from "./catalog.js";
 import { hashPassword, nowIso } from "./utils.js";
 
-const EPISODE_NAMES_POOL = [
+export const EPISODE_NAMES_POOL = [
   "Ryomen Sukuna / The Awakening",
   "For Myself",
   "Girl of Steel",
@@ -24,6 +24,15 @@ const EPISODE_NAMES_POOL = [
   "The Final Valley",
   "A New Dawn",
 ];
+
+/* Distinct episode title for a given episode number. Real episode names are
+   used where known (the pool above); beyond the pool we fall back to
+   "Episode N". NEVER modulo-wrap the pool — that is what made episodes
+   021-024 repeat 001-004. Every episode gets a unique title. */
+export function episodeTitleFor(slug, ep) {
+  if (slug === "kagerou-protocol" && ep === 7) return "The Long Way Down";
+  return EPISODE_NAMES_POOL[ep - 1] || `Episode ${ep}`;
+}
 
 export async function seed() {
   console.log("Beginning Ani Verse database seed with ZokoAnime streaming mappings...");
@@ -98,12 +107,7 @@ export async function seed() {
       } else {
         const count = item.episodes || 12;
         for (let ep = 1; ep <= count; ep++) {
-          let epTitle;
-          if (item.slug === "kagerou-protocol" && ep === 7) {
-            epTitle = "The Long Way Down";
-          } else {
-            epTitle = EPISODE_NAMES_POOL[(ep - 1) % EPISODE_NAMES_POOL.length] || `Episode ${ep}`;
-          }
+          const epTitle = episodeTitleFor(item.slug, ep);
 
           insertEpisode.run(
             item.slug,

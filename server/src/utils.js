@@ -118,6 +118,10 @@ export function userView(row) {
 
 export function titleView(row) {
   if (!row) return null;
+  const coverLocal = row.cover_local || null;
+  const coverRemote = row.cover_remote || null;
+  const bannerLocal = row.banner_local || null;
+  const bannerRemote = row.banner_remote || null;
   return {
     slug: row.slug,
     name: row.name,
@@ -132,5 +136,22 @@ export function titleView(row) {
     synopsis: row.synopsis,
     malId: row.mal_id != null ? Number(row.mal_id) : null,
     anilistId: row.anilist_id != null ? Number(row.anilist_id) : null,
+    // Real metadata (Phase 1). `name` already carries the real display title.
+    oldTitle: row.old_title || null,
+    realTitle: row.real_title || row.name,
+    romajiTitle: row.romaji_title || null,
+    nativeTitle: row.native_title || null,
+    score: row.score != null ? Number(row.score) : null,
+    status: row.status || null,
+    studios: row.studios || null,
+    anilistGenres: row.anilist_genres ? row.anilist_genres.split(",").filter(Boolean) : [],
+    anilistEpisodes: row.anilist_episodes != null ? Number(row.anilist_episodes) : null,
+    // Local image is primary; remote URL is the fallback. Never hotlink as primary.
+    cover: coverLocal || coverRemote,
+    coverLocal,
+    coverRemote,
+    banner: bannerLocal || bannerRemote,
+    bannerLocal,
+    bannerRemote,
   };
 }
