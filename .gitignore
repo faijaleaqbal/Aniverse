@@ -7,3 +7,4 @@ node_modules/
 Thumbs.db
 ani-verse/js/zoko-*.js
 ani-verse/css/zoko-*.css
+.tmp-test/
