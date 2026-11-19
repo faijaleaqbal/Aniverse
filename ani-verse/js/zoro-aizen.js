@@ -1624,8 +1624,8 @@
       if (!fallbackNote || activeServer !== "zoko") return;
       fallbackOfferVisible = true;
       fallbackNote.innerHTML = `
-        <span class="zoko-fallback-text">Main player isn't responding — Try backup player</span>
-        <button class="btn-zoro-primary" id="fallback-try-btn" type="button">Try backup player</button>
+        <span class="zoko-fallback-text">Main player isn't responding — Try TVplus player</span>
+        <button class="btn-zoro-primary" id="fallback-try-btn" type="button">Try TVplus player</button>
         <button class="fallback-dismiss" id="fallback-dismiss-btn" type="button" aria-label="Dismiss notice">✕</button>`;
       fallbackNote.hidden = false;
       const tryBtn = fallbackNote.querySelector("#fallback-try-btn");
@@ -1676,7 +1676,7 @@
         backupFailTimer = null;
         if (token !== loadToken || activeServer !== "backup" || playerReady) return;
         if (spinner) spinner.hidden = true;
-        showBackupNote("Backup player isn't responding.");
+        showBackupNote("TVplus player isn't responding.");
       }, BACKUP_NO_READY_TIMEOUT_MS);
     }
 
@@ -1692,7 +1692,7 @@
       try { sessionStorage.setItem(SS_SERVER_KEY, server); } catch {}
       applyServerUI();
       if (server === "backup") {
-        showBackupNote("Backup player active — Sub only. Press Play inside the player.");
+        showBackupNote("TVplus player active — Sub only. Press Play inside the player.");
       } else {
         hideFallbackNote();
       }
@@ -1709,7 +1709,7 @@
           p.classList.toggle("active", p.dataset.server === activeServer);
         });
       }
-      if (iframe) iframe.title = onBackup ? "animeTVplus backup player" : "ZokoAnime player";
+      if (iframe) iframe.title = onBackup ? "TVplus player" : "ZokoAnime player";
       if (trackSwitcher) {
         trackSwitcher.querySelectorAll(".server-pill").forEach((p) => {
           const t = p.dataset.track || "sub";
@@ -1718,8 +1718,8 @@
             p.classList.toggle("active", t === "sub");
             p.disabled = t !== "sub";
             p.classList.toggle("is-disabled", t !== "sub");
-            p.title = t === "dub" ? "Dub isn't available on the backup player"
-                    : t === "hsub" ? "Hard-sub isn't available on the backup player"
+            p.title = t === "dub" ? "Dub isn't available on the TVplus player"
+                    : t === "hsub" ? "Hard-sub isn't available on the TVplus player"
                     : "";
           } else {
             p.disabled = false;
@@ -1735,14 +1735,14 @@
           const label = cb.closest(".zoko-toggle");
           if (label) {
             label.classList.toggle("is-disabled", onBackup);
-            label.title = onBackup ? "Not available on the backup player" : "";
+            label.title = onBackup ? "Not available on the TVplus player" : "";
           }
         });
       }
       const coverBadge = document.getElementById("player-cover-badge");
       if (coverBadge) {
         coverBadge.innerHTML = onBackup
-          ? '<span style="color: var(--zoro-lime);">⚡</span> Stream with animeTVplus (Sub · press Play)'
+          ? '<span style="color: var(--zoro-lime);">⚡</span> Stream with TVplus (Sub · press Play)'
           : '<span style="color: var(--zoro-lime);">⚡</span> Stream with ZokoAnime (Auto-Skip)';
       }
       updateTrackLabel();
@@ -2323,7 +2323,7 @@
 
       if (iframe) {
         iframe.src = streamUrl;
-        iframe.title = activeServer === "backup" ? "animeTVplus backup player" : "ZokoAnime player";
+        iframe.title = activeServer === "backup" ? "TVplus player" : "ZokoAnime player";
         /* playerEp flips when the NEW player reports `ready` — until then,
            in-flight events from the old document still belong to playerEp. */
       }
@@ -2672,16 +2672,16 @@
              press Play INSIDE it. Our overlays must never block that click. */
           if (spinner) spinner.hidden = true;
           if (coverOverlay) coverOverlay.style.display = "none";
-          showToast("Backup player ready — press Play inside the player", "▶", 4000);
+          showToast("TVplus player ready — press Play inside the player", "▶", 4000);
         } else if (bdata.type === "error") {
           if (backupFailTimer) { clearTimeout(backupFailTimer); backupFailTimer = null; }
           if (spinner) spinner.hidden = true;
           if (coverOverlay) coverOverlay.style.display = "none";
           /* The embed shows its own error screen inside the frame; the site
              adds the honest way back to the primary player. */
-          const msg = bdata.error === "no_episode" ? "This episode isn't available on the backup player."
-                    : bdata.error === "unknown_title" ? "This title isn't available on the backup player."
-                    : "The backup player couldn't load this episode.";
+          const msg = bdata.error === "no_episode" ? "This episode isn't available on the TVplus player."
+                    : bdata.error === "unknown_title" ? "This title isn't available on the TVplus player."
+                    : "The TVplus player couldn't load this episode.";
           showBackupNote(msg);
         }
         return;
@@ -3025,7 +3025,7 @@
            honest from the first frame. */
         applyServerUI();
         if (activeServer === "backup") {
-          showBackupNote("Backup player active — Sub only. Press Play inside the player.");
+          showBackupNote("TVplus player active — Sub only. Press Play inside the player.");
         }
         await startWatch();
       } catch (err) {
