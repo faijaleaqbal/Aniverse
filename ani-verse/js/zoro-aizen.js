@@ -22,6 +22,18 @@
      Title cards/links navigate to the detail page; explicit "Watch"/"Resume"
      actions go straight to the watch page. */
   const COVER_FALLBACK = "img/banner.jpg";
+  /* Truncate at a WORD boundary. The hero's CSS 3-line clamp alone sliced
+     mid-word ("romantic lov…") — pre-trimming the synopsis means the clamp
+     never has to cut a word. */
+  function truncateWords(text, max = 200) {
+    const t = String(text || "").trim();
+    if (t.length <= max) return t;
+    const cut = t.slice(0, max);
+    const lastSpace = cut.lastIndexOf(" ");
+    const base = lastSpace > 40 ? cut.slice(0, lastSpace) : cut;
+    return base.replace(/[\s.,;:!?-]+$/, "") + "…";
+  }
+
   function coverOf(t) {
     return (t && (t.cover || t.coverLocal)) || COVER_FALLBACK;
   }
@@ -755,7 +767,7 @@
               <span class="badge badge-hd">HD</span>
               <span style="font-size: 0.8rem; color: var(--text-sub); margin-left: 6px;">${t.year} • ${t.runtimeMin}m</span>
             </div>
-            <p class="spotlight-desc">${escapeHtml(t.synopsis || t.tagline)}</p>
+            <p class="spotlight-desc">${escapeHtml(truncateWords(t.synopsis || t.tagline, 200))}</p>
             <div class="spotlight-actions">
               <a class="btn-watch-now" href="${watchHref(t.slug, 1)}">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>
@@ -1031,6 +1043,9 @@
     const grid = document.getElementById("zoro-main-grid");
     if (!grid) return;
 
+    const isBrowse = window.location.pathname.endsWith("browse.html");
+    const PAGE_SIZE = 12;
+
     /* First paint must never be a blank dark grid: skeleton cards hold the
        layout until the catalog API answers (~1s), then real posters replace
        them. Above-the-fold posters load eagerly (see renderCards). */
@@ -1046,19 +1061,89 @@
       `).join("");
     }
 
+    /* URL state is read BEFORE any await so the sort dropdown, heading and
+       nav highlight never flash the wrong default (the sort select used to
+       show "Popularity" for a full fetch round-trip before correcting to
+       "Release date" on ?sort=newest). */
+    const urlParams = new URLSearchParams(window.location.search);
+    const initialGenre = urlParams.get("genre");
+    const initialQ = urlParams.get("q");
+    const initialSort = urlParams.get("sort");
+    const initialKind = (urlParams.get("kind") || "").toLowerCase();
+
+    const chipsWrap = document.getElementById("genre-chips-container");
+    const sortSelect = document.getElementById("catalog-sort-select");
+    const headingEl = document.getElementById("browse-heading");
+    const subheadingEl = document.getElementById("browse-subheading");
+    const paginationWrap = document.getElementById("catalog-pagination");
+
+    let currentGenre = (initialGenre || "all").toLowerCase();
+    let currentSearch = (initialQ || "").trim();
+    let currentSort = ["popularity", "newest", "az"].includes(initialSort) ? initialSort : "popularity";
+    let currentKind = initialKind === "film" ? "film" : "";
+    let currentPage = 1;
+
+    if (sortSelect) sortSelect.value = currentSort;
+
+    const searchInput = document.getElementById("zoro-search-input");
+    if (searchInput && initialQ) searchInput.value = initialQ;
+
+    /* Browse page modes: search results (?q=), Movies (?kind=film), Top
+       Airing (?sort=newest) or the plain shelf. Heading AND header nav
+       highlight follow the mode — Movies/Top Airing used to show "Explore
+       Anime Shelf" with Browse highlighted. */
+    function browseMode() {
+      if (currentSearch) return "search";
+      if (currentKind === "film") return "movies";
+      if (currentSort === "newest") return "topairing";
+      return "browse";
+    }
+
+    function setActiveNav() {
+      if (!isBrowse) return;
+      const mode = browseMode();
+      const wantHref =
+        mode === "movies" ? "browse.html?kind=film" :
+        mode === "topairing" ? "browse.html?sort=newest" :
+        "browse.html";
+      document.querySelectorAll(".header-nav .nav-link").forEach((a) => {
+        a.classList.toggle("active", a.getAttribute("href") === wantHref);
+      });
+    }
+
+    function updateHeading(count) {
+      if (!headingEl) return;
+      const mode = browseMode();
+      if (mode === "search") {
+        const countPart = count == null ? "" : ` (${count} ${count === 1 ? "result" : "results"})`;
+        headingEl.innerHTML = `Results for '<span class="accent">${escapeHtml(currentSearch)}</span>'${countPart}`;
+        if (subheadingEl) subheadingEl.textContent = "Refine with the genre filters below, or clear the search to see the full shelf.";
+      } else if (mode === "movies") {
+        headingEl.innerHTML = "Movies";
+        if (subheadingEl) subheadingEl.textContent = "Every film in the catalog — feature-length titles ready to stream.";
+      } else if (mode === "topairing") {
+        headingEl.innerHTML = `Top <span class="accent">Airing</span>`;
+        if (subheadingEl) subheadingEl.textContent = "The newest releases first — sorted by release date.";
+      } else {
+        headingEl.innerHTML = `Explore <span class="accent">Anime Shelf</span>`;
+        if (subheadingEl) subheadingEl.textContent = "Filter by genre, sort by popularity or release date.";
+      }
+      setActiveNav();
+    }
+    /* Set heading + nav synchronously (count lands with the first render). */
+    updateHeading(null);
+
     /* Genre chips are rendered from GET /api/genres so EVERY genre that has
-       titles gets a working chip. The old hardcoded seven missed Supernatural,
-       Comedy, Music, Mystery, Slice of Life and Adventure (and invented Sports,
-       which has no titles). */
-    const chipsWrapEarly = document.getElementById("genre-chips-container");
-    if (chipsWrapEarly) {
+       titles gets a working chip. The pills persist across searches — they
+       are never collapsed down to just "All". */
+    if (chipsWrap) {
       const gRes = await api("/api/genres");
       if (gRes.ok && gRes.data && gRes.data.counts) {
         const counts = gRes.data.counts;
         const keys = Object.keys(counts).sort(
           (a, b) => counts[b] - counts[a] || a.localeCompare(b)
         );
-        chipsWrapEarly.innerHTML =
+        chipsWrap.innerHTML =
           `<button class="genre-chip-zoro active" data-genre="all" type="button">All</button>` +
           keys
             .map((k) => {
@@ -1066,6 +1151,13 @@
               return `<button class="genre-chip-zoro" data-genre="${encodeURIComponent(k)}" type="button">${escapeHtml(label)}</button>`;
             })
             .join("");
+        if (currentGenre !== "all") {
+          const match = chipsWrap.querySelector(`[data-genre="${currentGenre}"]`);
+          if (match) {
+            chipsWrap.querySelectorAll(".genre-chip-zoro").forEach((c) => c.classList.remove("active"));
+            match.classList.add("active");
+          }
+        }
       }
     }
 
@@ -1074,9 +1166,71 @@
 
     const titles = res.data.titles;
 
+    function filteredList() {
+      let list = titles.slice();
+
+      // 1. Filter by search query — REAL titles only (english/romaji/native).
+      // The fictional placeholder name (oldTitle) must not match: searching
+      // "Ronin" used to surface One Piece. Synopsis/genres are not titles.
+      if (currentSearch) {
+        const qLower = currentSearch.toLowerCase();
+        list = list.filter(
+          (t) =>
+            t.name.toLowerCase().includes(qLower) ||
+            (t.romajiTitle && t.romajiTitle.toLowerCase().includes(qLower)) ||
+            (t.nativeTitle && t.nativeTitle.toLowerCase().includes(qLower))
+        );
+      }
+
+      // 2. Filter by kind (Movies nav = films only)
+      if (currentKind === "film") {
+        list = list.filter((t) => (t.kind || "").toLowerCase() === "film");
+      }
+
+      // 3. Filter by genre
+      if (currentGenre && currentGenre !== "all") {
+        list = list.filter(
+          (t) => t.genres && t.genres.some((g) => g.toLowerCase() === currentGenre)
+        );
+      }
+
+      // 4. Sort by popularity, release date, or A-Z
+      if (currentSort === "newest") {
+        list.sort((a, b) => (b.year || 0) - (a.year || 0) || (b.created_at || 0) - (a.created_at || 0));
+      } else if (currentSort === "az") {
+        list.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+      } else if (currentSort === "popularity") {
+        // default catalog order (popularity)
+      }
+
+      return list;
+    }
+
+    /* Client-side pagination: Browse shows 12 titles per page; the controls
+       render only when the filtered list spans MORE than one page. Home
+       keeps its full "Latest Episodes" shelf (no pagination). */
+    function renderPagination(totalItems) {
+      if (!paginationWrap) return;
+      const totalPages = Math.ceil(totalItems / PAGE_SIZE);
+      if (!isBrowse || totalPages <= 1) {
+        paginationWrap.hidden = true;
+        paginationWrap.innerHTML = "";
+        return;
+      }
+      if (currentPage > totalPages) currentPage = totalPages;
+      let html = `<button class="page-btn" type="button" data-page="${currentPage - 1}"${currentPage === 1 ? " disabled" : ""} aria-label="Previous page">‹ Prev</button>`;
+      for (let p = 1; p <= totalPages; p++) {
+        html += `<button class="page-btn${p === currentPage ? " active" : ""}" type="button" data-page="${p}"${p === currentPage ? ' aria-current="page"' : ""}>${p}</button>`;
+      }
+      html += `<button class="page-btn" type="button" data-page="${currentPage + 1}"${currentPage === totalPages ? " disabled" : ""} aria-label="Next page">Next ›</button>`;
+      paginationWrap.innerHTML = html;
+      paginationWrap.hidden = false;
+    }
+
     function renderCards(list) {
       hideHoverTooltip();
       const mainEl = grid.closest("main");
+      updateHeading(list.length);
       if (!list.length) {
         grid.innerHTML = `
           <div class="zoro-empty-state" id="zoro-empty-state">
@@ -1094,12 +1248,18 @@
         /* Tight layout: the empty state sits naturally above the footer
            instead of leaving the full-grid bottom padding as a dead gap. */
         if (mainEl) mainEl.classList.add("grid-is-empty");
+        renderPagination(0);
         markContentReady();
         return;
       }
 
       if (mainEl) mainEl.classList.remove("grid-is-empty");
-      grid.innerHTML = list.map((t, i) => `
+      const totalPages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
+      if (currentPage > totalPages) currentPage = totalPages;
+      const pageItems = isBrowse
+        ? list.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
+        : list;
+      grid.innerHTML = pageItems.map((t, i) => `
         <div class="zoro-card" data-slug="${t.slug}" data-genres="${t.genres ? t.genres.join(" ") : ""}" data-title="${escapeHtml(t.name)}">
           <a class="zoro-card-poster" href="${detailHref(t.slug)}">
             <img src="${coverOf(t)}" alt="${escapeHtml(t.name)}" loading="${i < 6 ? "eager" : "lazy"}" decoding="async" fetchpriority="${i < 6 ? "high" : "low"}">
@@ -1124,74 +1284,14 @@
       `).join("");
 
       attachTooltipListeners();
+      renderPagination(list.length);
       /* The card grid is the page's real content: release the intro. */
       markContentReady();
     }
 
-    // Check URL parameters
-    const urlParams = new URLSearchParams(window.location.search);
-    const initialGenre = urlParams.get("genre");
-    const initialQ = urlParams.get("q");
-    const initialSort = urlParams.get("sort");
-
-    const chipsWrap = document.getElementById("genre-chips-container");
-    const sortSelect = document.getElementById("catalog-sort-select");
-
-    let currentGenre = (initialGenre || "all").toLowerCase();
-    let currentSearch = (initialQ || "").trim();
-    let currentSort = initialSort || (sortSelect ? sortSelect.value : "popularity");
-
-    if (chipsWrap && currentGenre !== "all") {
-      const match = chipsWrap.querySelector(`[data-genre="${currentGenre}"]`);
-      if (match) {
-        chipsWrap.querySelectorAll(".genre-chip-zoro").forEach((c) => c.classList.remove("active"));
-        match.classList.add("active");
-      }
-    }
-
-    if (sortSelect && currentSort) {
-      sortSelect.value = currentSort;
-    }
-
-    const searchInput = document.getElementById("zoro-search-input");
-    if (searchInput && initialQ) {
-      searchInput.value = initialQ;
-    }
-
     function applyFilterAndSort() {
-      hideHoverTooltip();
-      let list = titles.slice();
-
-      // 1. Filter by search query — REAL titles only (english/romaji/native).
-      // The fictional placeholder name (oldTitle) must not match: searching
-      // "Ronin" used to surface One Piece. Synopsis/genres are not titles.
-      if (currentSearch) {
-        const qLower = currentSearch.toLowerCase();
-        list = list.filter(
-          (t) =>
-            t.name.toLowerCase().includes(qLower) ||
-            (t.romajiTitle && t.romajiTitle.toLowerCase().includes(qLower)) ||
-            (t.nativeTitle && t.nativeTitle.toLowerCase().includes(qLower))
-        );
-      }
-
-      // 2. Filter by genre
-      if (currentGenre && currentGenre !== "all") {
-        list = list.filter(
-          (t) => t.genres && t.genres.some((g) => g.toLowerCase() === currentGenre)
-        );
-      }
-
-      // 3. Sort by popularity, release date, or A-Z (Bug 7)
-      if (currentSort === "newest") {
-        list.sort((a, b) => (b.year || 0) - (a.year || 0) || (b.created_at || 0) - (a.created_at || 0));
-      } else if (currentSort === "az") {
-        list.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
-      } else if (currentSort === "popularity") {
-        // default catalog order (popularity)
-      }
-
-      renderCards(list);
+      currentPage = 1;
+      renderCards(filteredList());
     }
 
     applyFilterAndSort();
@@ -1208,7 +1308,7 @@
       });
     }
 
-    // Sort dropdown change (Bug 7)
+    // Sort dropdown change
     if (sortSelect) {
       sortSelect.addEventListener("change", () => {
         currentSort = sortSelect.value;
@@ -1216,9 +1316,24 @@
       });
     }
 
+    // Pagination controls (delegated; re-rendered on every page change)
+    if (paginationWrap) {
+      paginationWrap.addEventListener("click", (e) => {
+        const btn = e.target.closest(".page-btn");
+        if (!btn || btn.disabled) return;
+        const p = Number(btn.dataset.page);
+        if (!Number.isFinite(p) || p === currentPage) return;
+        currentPage = p;
+        renderCards(filteredList());
+        /* Bring the grid top back into view (below the sticky header). */
+        const top = grid.getBoundingClientRect().top + window.scrollY - 90;
+        window.scrollTo({ top: Math.max(0, top), behavior: "instant" });
+      });
+    }
+
     // Hook up live search on Browse ONLY. On Home the same grid exists, but
     // the header search must never filter it (it only suggests + navigates).
-    if (window.location.pathname.endsWith("browse.html")) {
+    if (isBrowse) {
       window.__onSearchLiveFilter = (q) => {
         currentSearch = (q || "").trim();
         applyFilterAndSort();
@@ -1249,7 +1364,7 @@
           <div class="tooltip-meta-rows">
             <span><strong>Type:</strong> ${t.kind}</span>
             <span><strong>Studio:</strong> ${escapeHtml(t.studio)}</span>
-            <span><strong>Genres:</strong> ${t.genres ? t.genres.join(", ") : "Action"}</span>
+            <span><strong>Genres:</strong> ${t.genres ? t.genres.map(genreLabel).join(", ") : "Action"}</span>
           </div>
           <a class="btn-zoro-primary" href="${watchHref(t.slug, 1)}" style="width: 100%; justify-content: center; margin-top: 10px; padding: 6px;">▶ Watch Now</a>
         `;
@@ -1299,6 +1414,14 @@
     mystery: { icon: "🔍", kanji: "謎解", label: "Mystery", desc: "Time loop paradoxes, cold case crimes, cryptic disappearance notices, and cerebral deductions." },
     life: { icon: "🍜", kanji: "日常", label: "Slice of Life", desc: "Cozy noodle bars after hours, quiet afternoon walks, nostalgic memories, and everyday companionship." },
   };
+
+  /* One display label per genre everywhere: the curated label when known
+     ("life" -> "Slice of Life"), otherwise capitalised ("drama" -> "Drama").
+     Raw lowercase keys must never leak into chips/tooltips. */
+  function genreLabel(g) {
+    const k = String(g || "").toLowerCase();
+    return (GENRE_META[k] && GENRE_META[k].label) || k.charAt(0).toUpperCase() + k.slice(1);
+  }
 
   async function initGenresPage() {
     const grid = document.querySelector(".genres-shelf-grid");
@@ -3112,6 +3235,26 @@
       });
     }
 
+    /* Signed-out state: posting requires sign-in, so the box must LOOK
+       unavailable — disabled textarea, "Sign in to comment" placeholder and
+       a button that opens the auth modal instead of pretending to post. */
+    const submitBtn = form ? form.querySelector('button[type="submit"]') : null;
+    function applyCommentAuthState() {
+      if (!form || !input) return;
+      const signedIn = !!currentUser;
+      form.classList.toggle("is-signed-out", !signedIn);
+      input.disabled = !signedIn;
+      input.placeholder = signedIn
+        ? "Join the discussion... Share your thoughts about this episode!"
+        : "Sign in to comment";
+      if (submitBtn) submitBtn.textContent = signedIn ? "Post Comment" : "Sign in to Comment";
+    }
+    applyCommentAuthState();
+    if (form && form.dataset.zoroCommentAuthBound !== "true") {
+      form.dataset.zoroCommentAuthBound = "true";
+      window.addEventListener("zoro:auth", applyCommentAuthState);
+    }
+
     reloadComments = loadComments;
     loadComments();
   }
@@ -3231,7 +3374,7 @@
     const genresEl = document.getElementById("detail-genres");
     if (genresEl) {
       genresEl.innerHTML = (t.genres || [])
-        .map((g) => `<a class="genre-chip-zoro" href="browse.html?genre=${encodeURIComponent(g)}">${escapeHtml(g)}</a>`)
+        .map((g) => `<a class="genre-chip-zoro" href="browse.html?genre=${encodeURIComponent(g)}">${escapeHtml(genreLabel(g))}</a>`)
         .join("");
     }
     const syn = document.getElementById("detail-synopsis");
@@ -3293,6 +3436,8 @@
           })
           .join("");
       }
+      /* A film's single row spans the full list width (2-col grid otherwise). */
+      epList.classList.toggle("single-episode", episodes.length === 1);
     }
 
     // Recommendations: up to 6 same-genre titles.
@@ -3341,38 +3486,43 @@
      SCHEDULE PAGE LOGIC
      ========================================================================== */
 
+  /* Broadcast slots carry ONLY the time + catalog slug. Episode counts,
+     kind, studio and cover art are derived from the LIVE catalog at render
+     time — the old static ep/kind/studio/img filler drifted from the real
+     counts (Chainsaw Man "Ep 22" vs 12, Naruto "Ep 24" vs 220, Frieren
+     "Ep 25" vs 28, films labelled with week-long episode numbers). */
   const SCHEDULE_DATA = {
     monday: [
-      { time: "20:30", title: "Moonlit Ramen", slug: "moonlit-ramen", ep: 12, kind: "Series", studio: "CloverWorks", img: "img/photo1.jpg" },
-      { time: "22:00", title: "Cobalt Season", slug: "cobalt-season", ep: 25, kind: "Series", studio: "Madhouse", img: "img/photo2.jpg" },
-      { time: "23:45", title: "Deep Frame", slug: "deep-frame", ep: 22, kind: "Series", studio: "MAPPA", img: "img/photo3.jpg" },
+      { time: "20:30", slug: "moonlit-ramen" },
+      { time: "22:00", slug: "cobalt-season" },
+      { time: "23:45", slug: "deep-frame" },
     ],
     tuesday: [
-      { time: "21:00", title: "Sakura Static", slug: "sakura-static", ep: 12, kind: "Series", studio: "A-1 Pictures", img: "img/photo4.jpg" },
-      { time: "23:15", title: "Ghost Line 9", slug: "ghost-line-9", ep: 10, kind: "Series", studio: "Wit Studio", img: "img/narutoposter.jpg" },
+      { time: "21:00", slug: "sakura-static" },
+      { time: "23:15", slug: "ghost-line-9" },
     ],
     wednesday: [
-      { time: "20:45", title: "Kagerou Protocol", slug: "kagerou-protocol", ep: 12, kind: "Series", studio: "MAPPA", img: "img/onepiece.jpg" },
-      { time: "22:00", title: "The Last Train to Aomori", slug: "the-last-train-to-aomori", ep: 13, kind: "Series", studio: "CloverWorks", img: "img/photo1.jpg" },
-      { time: "23:30", title: "Iron Bloom", slug: "iron-bloom", ep: 13, kind: "Series", studio: "Bones", img: "img/photo2.jpg" },
+      { time: "20:45", slug: "kagerou-protocol" },
+      { time: "22:00", slug: "the-last-train-to-aomori" },
+      { time: "23:30", slug: "iron-bloom" },
     ],
     thursday: [
-      { time: "21:00", title: "Sea of Stars", slug: "sea-of-stars", ep: 24, kind: "Series", studio: "Pierrot", img: "img/narutoposter.jpg" },
-      { time: "22:30", title: "Zero Gravity Club", slug: "zero-gravity-club", ep: 12, kind: "Series", studio: "Eight Bit", img: "img/photo3.jpg" },
+      { time: "21:00", slug: "sea-of-stars" },
+      { time: "22:30", slug: "zero-gravity-club" },
     ],
     friday: [
-      { time: "20:00", title: "Ronin of the Neon Ward", slug: "ronin-of-the-neon-ward", ep: 24, kind: "Series", studio: "Toei Animation", img: "img/onepiece.jpg" },
-      { time: "22:45", title: "Salt and Cinder", slug: "salt-and-cinder", ep: 16, kind: "Series", studio: "Pierrot", img: "img/photo4.jpg" },
+      { time: "20:00", slug: "ronin-of-the-neon-ward" },
+      { time: "22:45", slug: "salt-and-cinder" },
     ],
     saturday: [
-      { time: "19:30", title: "The Fox Who Counted Rain", slug: "the-fox-who-counted-rain", ep: 1, kind: "Film", studio: "ufotable", img: "img/photo2.jpg" },
-      { time: "21:15", title: "Second Wind", slug: "second-wind", ep: 12, kind: "Series", studio: "A-1 Pictures", img: "img/photo1.jpg" },
-      { time: "23:00", title: "Corner Store Hours", slug: "corner-store-hours", ep: 14, kind: "Series", studio: "Wit Studio", img: "img/photo3.jpg" },
+      { time: "19:30", slug: "the-fox-who-counted-rain" },
+      { time: "21:15", slug: "second-wind" },
+      { time: "23:00", slug: "corner-store-hours" },
     ],
     sunday: [
-      { time: "18:30", title: "Paper Cranes at Dawn", slug: "paper-cranes-at-dawn", ep: 1, kind: "Film", studio: "Kyoto Animation", img: "img/photo4.jpg" },
-      { time: "20:30", title: "Encore, One More", slug: "encore-one-more", ep: 1, kind: "Film", studio: "A-1 Pictures", img: "img/narutoposter.jpg" },
-      { time: "22:15", title: "The Quiet Ward", slug: "the-quiet-ward", ep: 8, kind: "Series", studio: "A-1 Pictures", img: "img/photo2.jpg" },
+      { time: "18:30", slug: "paper-cranes-at-dawn" },
+      { time: "20:30", slug: "encore-one-more" },
+      { time: "22:15", slug: "the-quiet-ward" },
     ],
   };
 
@@ -3414,23 +3564,39 @@
     const currentDayName = dayNames[nowLocal.getDay()];
 
     function renderScheduleForDay(dayKey) {
-      const items = SCHEDULE_DATA[dayKey] || [];
+      const slots = SCHEDULE_DATA[dayKey] || [];
+      if (!Object.keys(titleMap).length) {
+        timelineEl.innerHTML = `<p style="color: var(--text-muted); padding: 2rem; text-align: center;">Schedule is temporarily unavailable — the catalog could not be loaded.</p>`;
+        return;
+      }
+      /* Only real catalog entries render — never placeholder filler. */
+      const items = slots
+        .map((slot) => ({ slot, real: titleMap[slot.slug] }))
+        .filter((x) => x.real && x.real.name);
       if (!items.length) {
         timelineEl.innerHTML = `<p style="color: var(--text-muted); padding: 2rem; text-align: center;">No scheduled releases for this day.</p>`;
         return;
       }
 
-      timelineEl.innerHTML = items.map((item) => {
-        const real = titleMap[item.slug] || {};
-        const name = real.name || item.title;
-        const cover = real.cover || item.img;
-        const studio = real.studio || item.studio;
-        const dHref = detailHref(item.slug);
-        const wHref = `watch.html?slug=${encodeURIComponent(item.slug)}&ep=${item.ep}`;
+      timelineEl.innerHTML = items.map(({ slot, real }) => {
+        const isFilm = (real.kind || "").toLowerCase() === "film";
+        const epCount = real.episodes || 1;
+        /* Series link to their LATEST available episode (the catalog count);
+           films are a single feature. */
+        const watchEp = isFilm ? 1 : epCount;
+        const name = real.name;
+        const cover = coverOf(real);
+        const studio = real.studio || real.studios || "—";
+        const dHref = detailHref(real.slug);
+        const wHref = watchHref(real.slug, watchEp);
+        const epBadge = isFilm
+          ? `<span class="badge-mini-ep">Film • ${real.runtimeMin || 130}m</span>`
+          : `<span class="badge-mini-ep">Ep ${epCount}</span>`;
+        const watchLabel = isFilm ? "▶ Watch Film" : `▶ Watch Ep ${watchEp}`;
         return `
         <div class="schedule-item-card">
           <div class="schedule-item-left">
-            <div class="schedule-slot-time">${item.time}</div>
+            <div class="schedule-slot-time">${slot.time}</div>
             <a class="schedule-thumb" href="${dHref}">
               <img src="${cover}" alt="${escapeHtml(name)}" loading="lazy">
             </a>
@@ -3439,7 +3605,7 @@
               <div class="schedule-meta-badges">
                 <span class="badge-mini-sub">SUB</span>
                 ${real.dubCount > 0 ? `<span class="badge-mini-dub">DUB ${real.dubCount}</span>` : ""}
-                <span class="badge-mini-ep">Ep ${item.ep}</span>
+                ${epBadge}
                 <span style="color: var(--text-muted); font-size: 0.75rem;">• ${escapeHtml(studio)}</span>
               </div>
             </div>
@@ -3450,7 +3616,7 @@
               Remind Me
             </button>
             <a class="btn-zoro-primary" href="${wHref}" style="padding: 0.55rem 1rem;">
-              ▶ Watch Ep ${item.ep}
+              ${watchLabel}
             </a>
           </div>
         </div>
@@ -3471,6 +3637,16 @@
 
     // Day tabs
     const dayTabs = document.querySelectorAll(".schedule-day-tab");
+    /* The date numbers follow the CURRENT week (Monday-start) — the old
+       static 16–22 were filler that went stale every week. */
+    const weekMonday = new Date(nowLocal);
+    weekMonday.setDate(nowLocal.getDate() - ((nowLocal.getDay() + 6) % 7));
+    dayTabs.forEach((tab, i) => {
+      const d = new Date(weekMonday);
+      d.setDate(weekMonday.getDate() + i);
+      const dateEl = tab.querySelector(".tab-day-date");
+      if (dateEl) dateEl.textContent = String(d.getDate());
+    });
     dayTabs.forEach((tab) => {
       const tabDay = tab.dataset.day;
       if (tabDay === currentDayName) {
@@ -3549,6 +3725,24 @@
         }
       });
     }
+
+    /* Back-to-top button (every page): appears after scrolling down and
+       returns to the top on click. */
+    const backTop = document.createElement("button");
+    backTop.type = "button";
+    backTop.className = "back-to-top";
+    backTop.setAttribute("aria-label", "Back to top");
+    backTop.textContent = "↑";
+    document.body.appendChild(backTop);
+    const toggleBackTop = () => backTop.classList.toggle("is-visible", window.scrollY > 400);
+    window.addEventListener("scroll", toggleBackTop, { passive: true });
+    toggleBackTop();
+    backTop.addEventListener("click", () => window.scrollTo({ top: 0, behavior: "smooth" }));
+
+    /* Footer (c) year follows the current year. */
+    document.querySelectorAll(".js-footer-year").forEach((el) => {
+      el.textContent = String(new Date().getFullYear());
+    });
 
     // Header scroll background toggle
     const header = document.querySelector(".zoro-header");

@@ -10,8 +10,8 @@
   <!-- Loaded async: a slow Google Fonts response must never block the app script or render. -->
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
   <noscript><link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet"></noscript>
-  <link rel="preload" href="css/zoro-aizen.css" as="style">
-  <link rel="preload" href="js/zoro-aizen.js" as="script">
+  <link rel="preload" href="css/zoro-aizen.css?v=9" as="style">
+  <link rel="preload" href="js/zoro-aizen.js?v=9" as="script">
   <script>
     /* Warm the API while the app script is still downloading: this removes a
        full round trip from the critical path. The app script adopts these
@@ -33,7 +33,7 @@
           });
       });
     })();
-  </script>  <link rel="stylesheet" href="css/zoro-aizen.css">
+  </script>  <link rel="stylesheet" href="css/zoro-aizen.css?v=9">
 </head>
 <body>
 
@@ -56,7 +56,7 @@
         <a class="nav-link" href="browse.html">Browse</a>
         <a class="nav-link" href="genres.html">Genres</a>
         <a class="nav-link" href="schedule.html">Schedule</a>
-        <a class="nav-link" href="browse.html?genre=action">Movies</a>
+        <a class="nav-link" href="browse.html?kind=film">Movies</a>
         <a class="nav-link" href="browse.html?sort=newest">Top Airing</a>
       </nav>
 
@@ -159,9 +159,11 @@
         })();
       </script>
 
-      <div class="spotlight-nav">
-        <button class="spotlight-arrow" id="spotlight-prev" type="button" aria-label="Previous Slide">‹</button>
-        <button class="spotlight-arrow" id="spotlight-next" type="button" aria-label="Next Slide">›</button>
+      <div class="spotlight-nav-anchor">
+        <div class="spotlight-nav">
+          <button class="spotlight-arrow" id="spotlight-prev" type="button" aria-label="Previous Slide">‹</button>
+          <button class="spotlight-arrow" id="spotlight-next" type="button" aria-label="Next Slide">›</button>
+        </div>
       </div>
     </section>
 
@@ -254,9 +256,10 @@
         <p>Ani Verse does not store any files on its server. Combining Zoro.to UI components with Aizen-Verse cinematic animation engine.</p>
         <p style="font-family: var(--font-mono); color: var(--zoro-lime);">ZORO × AIZEN HYBRID ENGINE 2026</p>
       </div>
+      <p style="margin-top: 1.25rem; font-size: 0.75rem; color: var(--text-muted);">© <span class="js-footer-year">2026</span> Ani Verse. All rights reserved.</p>
     </div>
   </footer>
 
-  <script src="js/zoro-aizen.js?v=6"></script>
+  <script src="js/zoro-aizen.js?v=9"></script>
 </body>
 </html>
