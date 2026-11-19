@@ -1067,9 +1067,16 @@ img {
   font-size: 0.875rem;
   font-weight: 700;
   color: #fff;
-  white-space: nowrap;
+  line-height: 1.35;
+  /* Same 2-line clamp as the Browse cards — long titles wrap instead of
+     truncating mid-word ("Frieren: Beyond Jour…"). */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
   text-overflow: ellipsis;
+  word-break: normal;
+  overflow-wrap: break-word;
 }
 
 /* ==========================================================================
@@ -1142,10 +1149,17 @@ img {
   font-size: 0.85rem;
   font-weight: 600;
   color: #fff;
-  white-space: nowrap;
+  line-height: 1.35;
+  margin-bottom: 0.25rem;
+  /* Same 2-line clamp as the Browse cards — ranked-list titles wrap instead
+     of truncating mid-word ("Attack on Titan Final Season Par…"). */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
   text-overflow: ellipsis;
-  margin-bottom: 0.25rem;
+  word-break: normal;
+  overflow-wrap: break-word;
 }
 
 .col-item:hover .col-item-title {
@@ -1372,6 +1386,63 @@ img {
   border: 1px dashed rgba(255, 255, 255, 0.12);
   border-radius: 16px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+/* When the grid shows its empty state, the page must not keep the full
+   grid's bottom padding + footer margin as a dead black gap: the card sits
+   naturally above the footer. (inline padding on <main> needs !important) */
+main.grid-is-empty {
+  padding-bottom: 1.5rem !important;
+}
+main.grid-is-empty + footer {
+  margin-top: 1.5rem !important;
+}
+main.grid-is-empty .zoro-empty-state {
+  margin-bottom: 0.5rem;
+  padding: 3.5rem 1.5rem;
+}
+
+/* Skeleton placeholders: first paint shows shimmering card shapes, never
+   blank dark cards, while the catalog API answers. */
+@keyframes skeleton-shimmer {
+  0% { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+.skeleton-shimmer {
+  background: linear-gradient(90deg, #171a23 0%, #232736 40%, #171a23 80%);
+  background-size: 800px 100%;
+  animation: skeleton-shimmer 1.4s linear infinite;
+}
+.zoro-card-skeleton {
+  pointer-events: none;
+}
+.zoro-card-skeleton .zoro-card-poster {
+  background: #171a23;
+}
+.skeleton-line {
+  height: 12px;
+  border-radius: 4px;
+  margin-bottom: 8px;
+}
+.genre-shelf-skeleton {
+  pointer-events: none;
+  min-height: 180px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 12px;
+}
+.trending-item-skeleton {
+  pointer-events: none;
+}
+.trending-item-skeleton .trending-poster-wrap {
+  background: #171a23;
+}
+.col-item-skeleton {
+  pointer-events: none;
+}
+.col-item-skeleton .col-thumb {
+  background: #171a23;
 }
 
 .zoro-empty-state-icon {

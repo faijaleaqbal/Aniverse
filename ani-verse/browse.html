@@ -95,14 +95,9 @@
     <!-- Filter Bar -->
     <div class="filter-bar-zoro" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
       <div class="genre-chips-wrap" id="genre-chips-container">
+        <!-- Genre chips are rendered from GET /api/genres by zoro-aizen.js so
+             every genre with titles gets a chip (no hardcoded subset). -->
         <button class="genre-chip-zoro active" data-genre="all" type="button">All</button>
-        <button class="genre-chip-zoro" data-genre="action" type="button">Action</button>
-        <button class="genre-chip-zoro" data-genre="drama" type="button">Drama</button>
-        <button class="genre-chip-zoro" data-genre="fantasy" type="button">Fantasy</button>
-        <button class="genre-chip-zoro" data-genre="horror" type="button">Horror</button>
-        <button class="genre-chip-zoro" data-genre="mecha" type="button">Mecha</button>
-        <button class="genre-chip-zoro" data-genre="romance" type="button">Romance</button>
-        <button class="genre-chip-zoro" data-genre="sports" type="button">Sports</button>
       </div>
       <div class="sort-control-wrap">
         <label for="catalog-sort-select" style="font-size: 0.85rem; color: var(--text-muted); font-weight: 500;">Sort by:</label>

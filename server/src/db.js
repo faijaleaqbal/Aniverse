@@ -14,6 +14,9 @@ export const db = new Database(DB_PATH);
 db.pragma("journal_mode = WAL");
 db.pragma("foreign_keys = ON");
 db.pragma("synchronous = NORMAL");
+// The dub-probe script and the API server write from separate processes;
+// wait briefly for a write lock instead of throwing SQLITE_BUSY.
+db.pragma("busy_timeout = 5000");
 
 export function initSchema() {
   db.exec(`
@@ -134,6 +137,21 @@ export function initSchema() {
     );
 
     CREATE INDEX IF NOT EXISTS idx_comments_target ON comments(title_slug, episode_num, created_at DESC);
+
+    /* Persisted per-episode dub probe results (the SAME probe the watch page
+       uses). available: 1 = real dub, 0 = dub is the sub file / absent,
+       NULL = probe failed (unknown — never counted as a dub). The per-title
+       DUB count shown anywhere in the UI is COUNT(available = 1) from here,
+       never a copy of the episode count. */
+    CREATE TABLE IF NOT EXISTS dub_checks (
+      title_slug TEXT NOT NULL,
+      ep_num INTEGER NOT NULL,
+      available INTEGER,
+      reason TEXT,
+      checked_at TEXT NOT NULL,
+      PRIMARY KEY (title_slug, ep_num),
+      FOREIGN KEY (title_slug) REFERENCES titles(slug) ON DELETE CASCADE
+    );
   `);
 
   try {

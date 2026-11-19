@@ -34,6 +34,9 @@
       });
     })();
   </script>  <link rel="stylesheet" href="css/zoro-aizen.css">
+  <!-- Player-specific styles (spinner overlay, resume note, toasts). Without
+       this sheet the spinner rendered as plain text BELOW the player. -->
+  <link rel="stylesheet" href="css/zoko-player.css">
 </head>
 <body>
 
@@ -122,12 +125,40 @@
             allow="fullscreen; autoplay"
             allowfullscreen
           ></iframe>
-          <div class="player-cover-overlay" id="video-cover-overlay" style="background-image: url('img/photo1.jpg');">
+          <div class="player-cover-overlay" id="video-cover-overlay">
             <button class="player-big-play" type="button" aria-label="Play Episode">▶</button>
             <div style="position: absolute; bottom: 20px; font-family: var(--font-mono); font-size: 0.8rem; color: #fff; background: rgba(0,0,0,0.7); padding: 5px 14px; border-radius: 999px; border: 1px solid rgba(202, 233, 98, 0.4); display: flex; align-items: center; gap: 6px;">
               <span style="color: var(--zoro-lime);">⚡</span> Stream with ZokoAnime (Auto-Skip)
             </div>
           </div>
+          <script>
+            /* The loading poster must be THIS title's own art — never a
+               hardcoded stock photo. Start the title fetch at parse time and
+               paint the cover/banner the moment it lands (before the app
+               script even runs). The app adopts this in-flight request. */
+            (function () {
+              var slug = new URLSearchParams(location.search).get("slug") || "kagerou-protocol";
+              var path = "/api/titles/" + encodeURIComponent(slug);
+              window.__zoroPrefetch = window.__zoroPrefetch || {};
+              var ctl = new AbortController();
+              var to = setTimeout(function () { ctl.abort(); }, 10000);
+              window.__zoroPrefetch[path] = fetch(path, { credentials: "same-origin", signal: ctl.signal })
+                .then(function (r) {
+                  clearTimeout(to);
+                  return r.json().then(function (d) {
+                    var t = d && d.title;
+                    var art = t && (t.banner || t.bannerLocal || t.cover || t.coverLocal);
+                    var el = document.getElementById("video-cover-overlay");
+                    if (el && art) el.style.backgroundImage = "url('" + art + "')";
+                    return { ok: r.ok, status: r.status, data: d, error: null };
+                  });
+                })
+                .catch(function (e) {
+                  clearTimeout(to);
+                  return { ok: false, status: 0, data: null, error: String((e && e.message) || e) };
+                });
+            })();
+          </script>
           <div class="zoko-player-spinner" id="zoko-player-spinner" hidden>
             <div class="zoko-spinner-ring"></div>
             <span>Loading stream…</span>
@@ -221,7 +252,7 @@
         <div class="episodes-card-zoro">
           <div class="ep-range-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
             <h3 style="font-size: 1rem; font-weight: 800; color: #fff;">List of Episodes</h3>
-            <span style="font-size: 0.75rem; color: var(--zoro-lime); font-family: var(--font-mono);" id="track-label">SUB / DUB</span>
+            <span style="font-size: 0.75rem; color: var(--zoro-lime); font-family: var(--font-mono);" id="track-label">SUB</span>
           </div>
 
           <div class="ep-search-wrap" style="margin-bottom: 0.75rem;">

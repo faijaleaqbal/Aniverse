@@ -83,8 +83,19 @@ async function probe(malId, ep) {
     fetchWithTimeout(`${base}/sub?${qs}`),
     fetchWithTimeout(`${base}/dub?${qs}`),
   ]);
-  const sub = payloadOf(subHtml);
-  const dub = payloadOf(dubHtml);
+  /* A page that LOADS but carries no __P payload is the provider's definitive
+     "no stream here" answer (e.g. an episode beyond the title's real range,
+     or a title with no dub at all) — not a transient failure. Classify it:
+     no dub payload -> no dub (false); only a missing SUB payload with a
+     present dub stays unknown (nothing to compare against). */
+  let sub = null;
+  let dub = null;
+  try { sub = payloadOf(subHtml); } catch {}
+  try { dub = payloadOf(dubHtml); } catch {}
+  if (!dub) {
+    return { available: false, reason: sub ? "no-dub-stream" : "no-stream" };
+  }
+  if (!sub) throw new Error("sub embed payload not found");
 
   if (!sub.src || !dub.src) throw new Error("embed payload has no stream src");
   if (sub.src === dub.src || (sub.video_id != null && sub.video_id === dub.video_id)) {
