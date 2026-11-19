@@ -8,7 +8,7 @@ export const CATALOG = [
     name: "Kagerou Protocol",
     kind: "Series",
     year: 2026,
-    episodes: 12,
+    episodes: 24, // JJK S1 = 24 (AniList); Zoko payload verified ep 13 & 24 (was 12)
     runtimeMin: 24,
     genres: ["action", "supernatural"],
     tone: 1,
@@ -24,7 +24,7 @@ export const CATALOG = [
     name: "Ronin of the Neon Ward",
     kind: "Series",
     year: 2025,
-    episodes: 1084,
+    episodes: 1180, // One Piece (ongoing): provider max verified ep 1180 yes / 1181 no (was 1084)
     runtimeMin: 24,
     genres: ["action", "fantasy"],
     tone: 2,
@@ -40,7 +40,7 @@ export const CATALOG = [
     name: "Zero Gravity Club",
     kind: "Series",
     year: 2026,
-    episodes: 12,
+    episodes: 13, // Fruits Basket The Final = 13 (AniList idMal 42938); Zoko ep 13 payload verified (was 12)
     runtimeMin: 24,
     genres: ["romance", "drama"],
     tone: 3,
@@ -72,7 +72,7 @@ export const CATALOG = [
     name: "Ghost Line 9",
     kind: "Series",
     year: 2025,
-    episodes: 75,
+    episodes: 25, // AoT S1 (MAL 16498) = 25 (AniList); Zoko NO payload ep 26/75 (was 75 - 50 dead eps)
     runtimeMin: 23,
     genres: ["horror", "mystery"],
     tone: 1,
@@ -104,7 +104,7 @@ export const CATALOG = [
     name: "Sakura Static",
     kind: "Series",
     year: 2024,
-    episodes: 24,
+    episodes: 12, // Kaguya S1 (MAL 37999) = 12 (AniList); Zoko NO payload ep 13/24 (was 24 - 12 dead eps)
     runtimeMin: 24,
     genres: ["romance", "music"],
     tone: 3,
@@ -120,7 +120,7 @@ export const CATALOG = [
     name: "Cobalt Season",
     kind: "Series",
     year: 2025,
-    episodes: 25,
+    episodes: 28, // Frieren S1 = 28 (AniList); Zoko payload verified ep 26 & 28 (was 25)
     runtimeMin: 24,
     genres: ["fantasy", "adventure"],
     tone: 4,
@@ -169,7 +169,7 @@ export const CATALOG = [
     kind: "Film",
     year: 2024,
     episodes: 1,
-    runtimeMin: 92,
+    runtimeMin: 130, // A Silent Voice = 2:09:42 (player duration 7783s; AniList 130; was 92)
     genres: ["life", "drama"],
     tone: 3,
     studio: "Kyoto Animation / Quiet Hour",
@@ -184,7 +184,7 @@ export const CATALOG = [
     name: "Sea of Stars",
     kind: "Series",
     year: 2025,
-    episodes: 24,
+    episodes: 220, // Naruto = 220 (AniList); Zoko payload verified ep 25 & 220 (was 24)
     runtimeMin: 24,
     genres: ["action", "fantasy"],
     tone: 1,
@@ -200,7 +200,7 @@ export const CATALOG = [
     name: "The Quiet Ward",
     kind: "Series",
     year: 2024,
-    episodes: 8,
+    episodes: 12, // ERASED = 12 (AniList); Zoko payload verified ep 9 & 12 (was 8 - 4 missing)
     runtimeMin: 25,
     genres: ["horror", "mystery"],
     tone: 2,
@@ -232,7 +232,7 @@ export const CATALOG = [
     name: "Deep Frame",
     kind: "Series",
     year: 2023,
-    episodes: 22,
+    episodes: 12, // Chainsaw Man (MAL 44511) = 12 (AniList); Zoko NO payload ep 13/22 (was 22 - 10 dead eps)
     runtimeMin: 24,
     genres: ["action", "supernatural"],
     tone: 4,
@@ -248,7 +248,7 @@ export const CATALOG = [
     name: "Corner Store Hours",
     kind: "Series",
     year: 2025,
-    episodes: 24,
+    episodes: 12, // SPY x FAMILY S1 (MAL 50265) = 12 (AniList); Zoko NO payload ep 13/24 (was 24 - 12 dead eps)
     runtimeMin: 24,
     genres: ["comedy", "action"],
     tone: 1,
@@ -283,12 +283,12 @@ export const CATALOG = [
     name: "Salt and Cinder",
     kind: "Series",
     year: 2024,
-    episodes: 16,
+    episodes: 12, // MAL 48583 = AoT Final Season Part 2 = 12 (AniList 131681); Zoko NO payload ep 13/14/16 (was 16)
     runtimeMin: 24,
     genres: ["fantasy", "action"],
     tone: 3,
     studio: "Pierrot / Tide Atlas",
-    malId: 48583, // Bleach: Thousand-Year Blood War
+    malId: 48583, // Attack on Titan Final Season Part 2 - NOT Bleach TYBW (old comment was wrong; trust mal_id)
     anilistId: 114446,
     tagline: "The Soul Society faces an extermination war against the Wandenreich.",
     synopsis:

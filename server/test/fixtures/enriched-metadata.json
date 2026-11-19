@@ -273,6 +273,21 @@
       "title": "A Fatal Vulnerability"
     },
     {
+      "title_slug": "cobalt-season",
+      "ep_num": 26,
+      "title": "The Height of Magic"
+    },
+    {
+      "title_slug": "cobalt-season",
+      "ep_num": 27,
+      "title": "An Era of Humans"
+    },
+    {
+      "title_slug": "cobalt-season",
+      "ep_num": 28,
+      "title": "It Would Be Embarrassing When We Met Again"
+    },
+    {
       "title_slug": "corner-store-hours",
       "ep_num": 1,
       "title": "OPERATION STRIX"
@@ -333,66 +348,6 @@
       "title": "PENGUIN PARK"
     },
     {
-      "title_slug": "corner-store-hours",
-      "ep_num": 13,
-      "title": "Episode 13"
-    },
-    {
-      "title_slug": "corner-store-hours",
-      "ep_num": 14,
-      "title": "Episode 14"
-    },
-    {
-      "title_slug": "corner-store-hours",
-      "ep_num": 15,
-      "title": "Episode 15"
-    },
-    {
-      "title_slug": "corner-store-hours",
-      "ep_num": 16,
-      "title": "Episode 16"
-    },
-    {
-      "title_slug": "corner-store-hours",
-      "ep_num": 17,
-      "title": "Episode 17"
-    },
-    {
-      "title_slug": "corner-store-hours",
-      "ep_num": 18,
-      "title": "Episode 18"
-    },
-    {
-      "title_slug": "corner-store-hours",
-      "ep_num": 19,
-      "title": "Episode 19"
-    },
-    {
-      "title_slug": "corner-store-hours",
-      "ep_num": 20,
-      "title": "Episode 20"
-    },
-    {
-      "title_slug": "corner-store-hours",
-      "ep_num": 21,
-      "title": "Episode 21"
-    },
-    {
-      "title_slug": "corner-store-hours",
-      "ep_num": 22,
-      "title": "Episode 22"
-    },
-    {
-      "title_slug": "corner-store-hours",
-      "ep_num": 23,
-      "title": "Episode 23"
-    },
-    {
-      "title_slug": "corner-store-hours",
-      "ep_num": 24,
-      "title": "Episode 24"
-    },
-    {
       "title_slug": "deep-frame",
       "ep_num": 1,
       "title": "DOG & CHAINSAW"
@@ -451,56 +406,6 @@
       "title_slug": "deep-frame",
       "ep_num": 12,
       "title": "KATANA VS. CHAINSAW"
-    },
-    {
-      "title_slug": "deep-frame",
-      "ep_num": 13,
-      "title": "Episode 13"
-    },
-    {
-      "title_slug": "deep-frame",
-      "ep_num": 14,
-      "title": "Episode 14"
-    },
-    {
-      "title_slug": "deep-frame",
-      "ep_num": 15,
-      "title": "Episode 15"
-    },
-    {
-      "title_slug": "deep-frame",
-      "ep_num": 16,
-      "title": "Episode 16"
-    },
-    {
-      "title_slug": "deep-frame",
-      "ep_num": 17,
-      "title": "Episode 17"
-    },
-    {
-      "title_slug": "deep-frame",
-      "ep_num": 18,
-      "title": "Episode 18"
-    },
-    {
-      "title_slug": "deep-frame",
-      "ep_num": 19,
-      "title": "Episode 19"
-    },
-    {
-      "title_slug": "deep-frame",
-      "ep_num": 20,
-      "title": "Episode 20"
-    },
-    {
-      "title_slug": "deep-frame",
-      "ep_num": 21,
-      "title": "Episode 21"
-    },
-    {
-      "title_slug": "deep-frame",
-      "ep_num": 22,
-      "title": "Episode 22"
     },
     {
       "title_slug": "encore-one-more",
@@ -691,256 +596,6 @@
       "title_slug": "ghost-line-9",
       "ep_num": 25,
       "title": "Wall"
-    },
-    {
-      "title_slug": "ghost-line-9",
-      "ep_num": 26,
-      "title": "Episode 26"
-    },
-    {
-      "title_slug": "ghost-line-9",
-      "ep_num": 27,
-      "title": "Episode 27"
-    },
-    {
-      "title_slug": "ghost-line-9",
-      "ep_num": 28,
-      "title": "Episode 28"
-    },
-    {
-      "title_slug": "ghost-line-9",
-      "ep_num": 29,
-      "title": "Episode 29"
-    },
-    {
-      "title_slug": "ghost-line-9",
-      "ep_num": 30,
-      "title": "Episode 30"
-    },
-    {
-      "title_slug": "ghost-line-9",
-      "ep_num": 31,
-      "title": "Episode 31"
-    },
-    {
-      "title_slug": "ghost-line-9",
-      "ep_num": 32,
-      "title": "Episode 32"
-    },
-    {
-      "title_slug": "ghost-line-9",
-      "ep_num": 33,
-      "title": "Episode 33"
-    },
-    {
-      "title_slug": "ghost-line-9",
-      "ep_num": 34,
-      "title": "Episode 34"
-    },
-    {
-      "title_slug": "ghost-line-9",
-      "ep_num": 35,
-      "title": "Episode 35"
-    },
-    {
-      "title_slug": "ghost-line-9",
-      "ep_num": 36,
-      "title": "Episode 36"
-    },
-    {
-      "title_slug": "ghost-line-9",
-      "ep_num": 37,
-      "title": "Episode 37"
-    },
-    {
-      "title_slug": "ghost-line-9",
-      "ep_num": 38,
-      "title": "Episode 38"
-    },
-    {
-      "title_slug": "ghost-line-9",
-      "ep_num": 39,
-      "title": "Episode 39"
-    },
-    {
-      "title_slug": "ghost-line-9",
-      "ep_num": 40,
-      "title": "Episode 40"
-    },
-    {
-      "title_slug": "ghost-line-9",
-      "ep_num": 41,
-      "title": "Episode 41"
-    },
-    {
-      "title_slug": "ghost-line-9",
-      "ep_num": 42,
-      "title": "Episode 42"
-    },
-    {
-      "title_slug": "ghost-line-9",
-      "ep_num": 43,
-      "title": "Episode 43"
-    },
-    {
-      "title_slug": "ghost-line-9",
-      "ep_num": 44,
-      "title": "Episode 44"
-    },
-    {
-      "title_slug": "ghost-line-9",
-      "ep_num": 45,
-      "title": "Episode 45"
-    },
-    {
-      "title_slug": "ghost-line-9",
-      "ep_num": 46,
-      "title": "Episode 46"
-    },
-    {
-      "title_slug": "ghost-line-9",
-      "ep_num": 47,
-      "title": "Episode 47"
-    },
-    {
-      "title_slug": "ghost-line-9",
-      "ep_num": 48,
-      "title": "Episode 48"
-    },
-    {
-      "title_slug": "ghost-line-9",
-      "ep_num": 49,
-      "title": "Episode 49"
-    },
-    {
-      "title_slug": "ghost-line-9",
-      "ep_num": 50,
-      "title": "Episode 50"
-    },
-    {
-      "title_slug": "ghost-line-9",
-      "ep_num": 51,
-      "title": "Episode 51"
-    },
-    {
-      "title_slug": "ghost-line-9",
-      "ep_num": 52,
-      "title": "Episode 52"
-    },
-    {
-      "title_slug": "ghost-line-9",
-      "ep_num": 53,
-      "title": "Episode 53"
-    },
-    {
-      "title_slug": "ghost-line-9",
-      "ep_num": 54,
-      "title": "Episode 54"
-    },
-    {
-      "title_slug": "ghost-line-9",
-      "ep_num": 55,
-      "title": "Episode 55"
-    },
-    {
-      "title_slug": "ghost-line-9",
-      "ep_num": 56,
-      "title": "Episode 56"
-    },
-    {
-      "title_slug": "ghost-line-9",
-      "ep_num": 57,
-      "title": "Episode 57"
-    },
-    {
-      "title_slug": "ghost-line-9",
-      "ep_num": 58,
-      "title": "Episode 58"
-    },
-    {
-      "title_slug": "ghost-line-9",
-      "ep_num": 59,
-      "title": "Episode 59"
-    },
-    {
-      "title_slug": "ghost-line-9",
-      "ep_num": 60,
-      "title": "Episode 60"
-    },
-    {
-      "title_slug": "ghost-line-9",
-      "ep_num": 61,
-      "title": "Episode 61"
-    },
-    {
-      "title_slug": "ghost-line-9",
-      "ep_num": 62,
-      "title": "Episode 62"
-    },
-    {
-      "title_slug": "ghost-line-9",
-      "ep_num": 63,
-      "title": "Episode 63"
-    },
-    {
-      "title_slug": "ghost-line-9",
-      "ep_num": 64,
-      "title": "Episode 64"
-    },
-    {
-      "title_slug": "ghost-line-9",
-      "ep_num": 65,
-      "title": "Episode 65"
-    },
-    {
-      "title_slug": "ghost-line-9",
-      "ep_num": 66,
-      "title": "Episode 66"
-    },
-    {
-      "title_slug": "ghost-line-9",
-      "ep_num": 67,
-      "title": "Episode 67"
-    },
-    {
-      "title_slug": "ghost-line-9",
-      "ep_num": 68,
-      "title": "Episode 68"
-    },
-    {
-      "title_slug": "ghost-line-9",
-      "ep_num": 69,
-      "title": "Episode 69"
-    },
-    {
-      "title_slug": "ghost-line-9",
-      "ep_num": 70,
-      "title": "Episode 70"
-    },
-    {
-      "title_slug": "ghost-line-9",
-      "ep_num": 71,
-      "title": "Episode 71"
-    },
-    {
-      "title_slug": "ghost-line-9",
-      "ep_num": 72,
-      "title": "Episode 72"
-    },
-    {
-      "title_slug": "ghost-line-9",
-      "ep_num": 73,
-      "title": "Episode 73"
-    },
-    {
-      "title_slug": "ghost-line-9",
-      "ep_num": 74,
-      "title": "Episode 74"
-    },
-    {
-      "title_slug": "ghost-line-9",
-      "ep_num": 75,
-      "title": "Episode 75"
     },
     {
       "title_slug": "iron-bloom",
@@ -1321,6 +976,66 @@
       "title_slug": "kagerou-protocol",
       "ep_num": 12,
       "title": "To You Someday"
+    },
+    {
+      "title_slug": "kagerou-protocol",
+      "ep_num": 13,
+      "title": "Tomorrow"
+    },
+    {
+      "title_slug": "kagerou-protocol",
+      "ep_num": 14,
+      "title": "Kyoto Sister School Goodwill Event - Team Battle, Part 0"
+    },
+    {
+      "title_slug": "kagerou-protocol",
+      "ep_num": 15,
+      "title": "Kyoto Sister School Goodwill Event - Team Battle, Part 1"
+    },
+    {
+      "title_slug": "kagerou-protocol",
+      "ep_num": 16,
+      "title": "Kyoto Sister School Goodwill Event - Team Battle, Part 2"
+    },
+    {
+      "title_slug": "kagerou-protocol",
+      "ep_num": 17,
+      "title": "Kyoto Sister School Goodwill Event - Team Battle, Part 3"
+    },
+    {
+      "title_slug": "kagerou-protocol",
+      "ep_num": 18,
+      "title": "Sage"
+    },
+    {
+      "title_slug": "kagerou-protocol",
+      "ep_num": 19,
+      "title": "Black Flash"
+    },
+    {
+      "title_slug": "kagerou-protocol",
+      "ep_num": 20,
+      "title": "Nonstandard"
+    },
+    {
+      "title_slug": "kagerou-protocol",
+      "ep_num": 21,
+      "title": "Jujutsu Koshien"
+    },
+    {
+      "title_slug": "kagerou-protocol",
+      "ep_num": 22,
+      "title": "The Origin of Obedience"
+    },
+    {
+      "title_slug": "kagerou-protocol",
+      "ep_num": 23,
+      "title": "The Origin of Obedience, Part 2"
+    },
+    {
+      "title_slug": "kagerou-protocol",
+      "ep_num": 24,
+      "title": "Accomplices"
     },
     {
       "title_slug": "moonlit-ramen",
@@ -6808,6 +6523,486 @@
       "title": "Time to Depart - The Land of Wano and the Straw Hats"
     },
     {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1085,
+      "title": "The Last Curtain! Luffy and Momonosuke's Vow"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1086,
+      "title": "A New Emperor! Buggy the Genius Jester!"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1087,
+      "title": "The War on the Island of Women! A Case Involving Koby the Hero"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1088,
+      "title": "Luffy's Dream"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1089,
+      "title": "Entering a New Chapter! Luffy and Sabo's Paths!"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1090,
+      "title": "A New Island! Future Island Egghead"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1091,
+      "title": "Brimming with the Future! An Adventure on the Island of Science!"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1092,
+      "title": "Bonney's Lamentation! Darkness Lurking on the Future Island"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1093,
+      "title": "The Winner Takes All! Law vs. Blackbeard!"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1094,
+      "title": "The Mystery Deepens! Egghead Labophase"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1095,
+      "title": "The Brain of a Genius - Six Vegapunks!"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1096,
+      "title": "A Forbidden Piece of History! A Theory Concerning a Kingdom"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1097,
+      "title": "The Will of Ohara! The Inherited Research"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1098,
+      "title": "The Eccentric Dream of a Genius!"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1099,
+      "title": "Preparations for Interception! Rob Lucci Strikes!"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1100,
+      "title": "Powers on a Different Level! Luffy vs. Lucci!"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1101,
+      "title": "The Strongest Form of Humanity! The Seraphim's Abilities!"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1102,
+      "title": "Sinister Schemes! The Operation to Escape Egghead"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1103,
+      "title": "Turn Back My Father! Bonney's Futile Wish!"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1104,
+      "title": "A Desperate Situation! The Seraphim's All-out Attack!"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1105,
+      "title": "\"A Beautiful Act of Treason! The Spy, Stussy!"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1106,
+      "title": "Trouble Occurs! Seek Dr. Vegapunk!"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1107,
+      "title": "Episode 1107"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1108,
+      "title": "Episode 1108"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1109,
+      "title": "Episode 1109"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1110,
+      "title": "Episode 1110"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1111,
+      "title": "Episode 1111"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1112,
+      "title": "Episode 1112"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1113,
+      "title": "Episode 1113"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1114,
+      "title": "Episode 1114"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1115,
+      "title": "Episode 1115"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1116,
+      "title": "Episode 1116"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1117,
+      "title": "Episode 1117"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1118,
+      "title": "Episode 1118"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1119,
+      "title": "Episode 1119"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1120,
+      "title": "Episode 1120"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1121,
+      "title": "Episode 1121"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1122,
+      "title": "Episode 1122"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1123,
+      "title": "Episode 1123"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1124,
+      "title": "Episode 1124"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1125,
+      "title": "Episode 1125"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1126,
+      "title": "Episode 1126"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1127,
+      "title": "Episode 1127"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1128,
+      "title": "Episode 1128"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1129,
+      "title": "Episode 1129"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1130,
+      "title": "Episode 1130"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1131,
+      "title": "Episode 1131"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1132,
+      "title": "Episode 1132"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1133,
+      "title": "Episode 1133"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1134,
+      "title": "Episode 1134"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1135,
+      "title": "Episode 1135"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1136,
+      "title": "Episode 1136"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1137,
+      "title": "Episode 1137"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1138,
+      "title": "Episode 1138"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1139,
+      "title": "Episode 1139"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1140,
+      "title": "Episode 1140"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1141,
+      "title": "Episode 1141"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1142,
+      "title": "Episode 1142"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1143,
+      "title": "Episode 1143"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1144,
+      "title": "Episode 1144"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1145,
+      "title": "Episode 1145"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1146,
+      "title": "Episode 1146"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1147,
+      "title": "Episode 1147"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1148,
+      "title": "Episode 1148"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1149,
+      "title": "Episode 1149"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1150,
+      "title": "Episode 1150"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1151,
+      "title": "Episode 1151"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1152,
+      "title": "Episode 1152"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1153,
+      "title": "Episode 1153"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1154,
+      "title": "Episode 1154"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1155,
+      "title": "Episode 1155"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1156,
+      "title": "Episode 1156"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1157,
+      "title": "Episode 1157"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1158,
+      "title": "Episode 1158"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1159,
+      "title": "Episode 1159"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1160,
+      "title": "Episode 1160"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1161,
+      "title": "Episode 1161"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1162,
+      "title": "Episode 1162"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1163,
+      "title": "Episode 1163"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1164,
+      "title": "Episode 1164"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1165,
+      "title": "Episode 1165"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1166,
+      "title": "Episode 1166"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1167,
+      "title": "Episode 1167"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1168,
+      "title": "Episode 1168"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1169,
+      "title": "Episode 1169"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1170,
+      "title": "Episode 1170"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1171,
+      "title": "Episode 1171"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1172,
+      "title": "Episode 1172"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1173,
+      "title": "Episode 1173"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1174,
+      "title": "Episode 1174"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1175,
+      "title": "Episode 1175"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1176,
+      "title": "Episode 1176"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1177,
+      "title": "Episode 1177"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1178,
+      "title": "Episode 1178"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1179,
+      "title": "Episode 1179"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1180,
+      "title": "Episode 1180"
+    },
+    {
       "title_slug": "sakura-static",
       "ep_num": 1,
       "title": "I Will Make You Invite Me to a Movie / Kaguya Wants to Be Stopped / Kaguya Wants It"
@@ -6868,66 +7063,6 @@
       "title": "I Can't Hear the Fireworks, Part 2 / Kaguya Doesn't Want to Avoid Him"
     },
     {
-      "title_slug": "sakura-static",
-      "ep_num": 13,
-      "title": "Episode 13"
-    },
-    {
-      "title_slug": "sakura-static",
-      "ep_num": 14,
-      "title": "Episode 14"
-    },
-    {
-      "title_slug": "sakura-static",
-      "ep_num": 15,
-      "title": "Episode 15"
-    },
-    {
-      "title_slug": "sakura-static",
-      "ep_num": 16,
-      "title": "Episode 16"
-    },
-    {
-      "title_slug": "sakura-static",
-      "ep_num": 17,
-      "title": "Episode 17"
-    },
-    {
-      "title_slug": "sakura-static",
-      "ep_num": 18,
-      "title": "Episode 18"
-    },
-    {
-      "title_slug": "sakura-static",
-      "ep_num": 19,
-      "title": "Episode 19"
-    },
-    {
-      "title_slug": "sakura-static",
-      "ep_num": 20,
-      "title": "Episode 20"
-    },
-    {
-      "title_slug": "sakura-static",
-      "ep_num": 21,
-      "title": "Episode 21"
-    },
-    {
-      "title_slug": "sakura-static",
-      "ep_num": 22,
-      "title": "Episode 22"
-    },
-    {
-      "title_slug": "sakura-static",
-      "ep_num": 23,
-      "title": "Episode 23"
-    },
-    {
-      "title_slug": "sakura-static",
-      "ep_num": 24,
-      "title": "Episode 24"
-    },
-    {
       "title_slug": "salt-and-cinder",
       "ep_num": 1,
       "title": "Judgement"
@@ -6986,26 +7121,6 @@
       "title_slug": "salt-and-cinder",
       "ep_num": 12,
       "title": "The Dawn of Humanity"
-    },
-    {
-      "title_slug": "salt-and-cinder",
-      "ep_num": 13,
-      "title": "Episode 13"
-    },
-    {
-      "title_slug": "salt-and-cinder",
-      "ep_num": 14,
-      "title": "Episode 14"
-    },
-    {
-      "title_slug": "salt-and-cinder",
-      "ep_num": 15,
-      "title": "Episode 15"
-    },
-    {
-      "title_slug": "salt-and-cinder",
-      "ep_num": 16,
-      "title": "Episode 16"
     },
     {
       "title_slug": "sea-of-stars",
@@ -7126,6 +7241,986 @@
       "title_slug": "sea-of-stars",
       "ep_num": 24,
       "title": "Start Your Engines: The Chunin Exam Begins!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 25,
+      "title": "The Tenth Question: All or Nothing!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 26,
+      "title": "Special Report: Live from the Forest of Death!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 27,
+      "title": "The Chunin Exam Stage 2: The Forest of Death"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 28,
+      "title": "Eat or be Eaten: Panic in the Forest"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 29,
+      "title": "Naruto's Counterattack: Never Give In!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 30,
+      "title": "The Sharingan Revived: Dragon-Flame Jutsu!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 31,
+      "title": "Bushy Brow's Pledge: Undying Love and Protection!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 32,
+      "title": "Sakura Blossoms!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 33,
+      "title": "Battle Formation: Ino-Shika-Cho!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 34,
+      "title": "Akamaru Trembles: Gaara's Cruel Strength!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 35,
+      "title": "The Scroll's Secret: No Peeking Allowed"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 36,
+      "title": "Clone vs. Clone: Mine are Better than Yours!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 37,
+      "title": "Surviving the Cut! The Rookie Nine Together Again!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 38,
+      "title": "Narrowing the Field: Sudden Death Elimination!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 39,
+      "title": "Bushy Brow's Jealousy: Lions Barrage Unleashed!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 40,
+      "title": "Kakashi and Orochimaru: Face-to-Face!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 41,
+      "title": "Kunoichi Rumble: The Rivals Get Serious!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 42,
+      "title": "The Ultimate Battle: Cha!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 43,
+      "title": "Killer Kunoichi and a Shaky Shikamaru"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 44,
+      "title": "Akamaru Unleashed! Who's Top Dog Now?"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 45,
+      "title": "Surprise Attack! Naruto's Secret Weapon!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 46,
+      "title": "Byakugan Battle: Hinata Grows Bold!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 47,
+      "title": "A Failure Stands Tall!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 48,
+      "title": "Gaara vs. Rock Lee: The Power of Youth Explodes!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 49,
+      "title": "Lee's Hidden Strength: Forbidden Secret Jutsu!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 50,
+      "title": "The Fifth Gate: A Splendid Ninja is Born"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 51,
+      "title": "A Shadow in Darkness: Danger Approaches Sasuke"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 52,
+      "title": "Ebisu Returns: Naruto's Toughest Training Yet!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 53,
+      "title": "Long Time No See: Jiraiya Returns!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 54,
+      "title": "The Summoning Jutsu: Wisdom of the Toad Sage!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 55,
+      "title": "A Feeling of Yearning, A Flower Full of Hope"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 56,
+      "title": "Live or Die: Risk it All to Win it All!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 57,
+      "title": "He Flies! He Jumps! He Lurks! Chief Toad Appears!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 58,
+      "title": "Hospital Besieged: The Evil Hand Revealed!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 59,
+      "title": "The Final Rounds: Rush to the Battle Arena!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 60,
+      "title": "Byakugan vs. Shadow Clone"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 61,
+      "title": "Ultimate Defense: Zero Blind Spot!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 62,
+      "title": "A Failure's True Power"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 63,
+      "title": "Hit it or Quit it: The Final Rounds Get Complicated!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 64,
+      "title": "Zero Motivation: The Guy with Cloud Envy!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 65,
+      "title": "Dancing Leaf, Squirming Sand"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 66,
+      "title": "Bushy Brow's Jutsu: Sasuke Style!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 67,
+      "title": "Late for the Show, But Ready to Go! The Ultimate Secret Technique is Born!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 68,
+      "title": "Zero Hour! The Destruction of the Hidden Leaf Village Begins!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 69,
+      "title": "Village in Distress: A New A-Ranked Mission!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 70,
+      "title": "A Shirker's Call to Action: A Layabout No More!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 71,
+      "title": "An Unrivaled Match: Hokage Battle Royale!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 72,
+      "title": "A Mistake from the Past: A Face Revealed!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 73,
+      "title": "Forbidden Secret Technique: Reaper Death Seal!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 74,
+      "title": "Astonishing Truth! Gaara's Identity Emerges!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 75,
+      "title": "Sasuke's Decision: Pushed to the Edge!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 76,
+      "title": "Assassin of the Moonlit Night"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 77,
+      "title": "Light vs. Dark: The Two Faces of Gaara"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 78,
+      "title": "Naruto's Ninja Handbook"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 79,
+      "title": "Beyond the Limit of Darkness and Light"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 80,
+      "title": "The Third Hokage, Forever..."
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 81,
+      "title": "Return of the Morning Mist"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 82,
+      "title": "Eye to Eye: Sharingan vs. Sharingan!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 83,
+      "title": "Jiraiya: Naruto's Potential Disaster!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 84,
+      "title": "Roar, Chidori! Brother vs. Brother!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 85,
+      "title": "Hate Among the Uchihas: The Last of the Clan!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 86,
+      "title": "A New Training Begins: I Will Be Strong!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 87,
+      "title": "Keep on Training: Pop Goes the Water Balloon!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 88,
+      "title": "Focal Point: The Mark of the Leaf"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 89,
+      "title": "An Impossible Choice: The Pain Within Tsunade's Heart"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 90,
+      "title": "Unforgivable! A Total Lack of Respect!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 91,
+      "title": "Inheritence! The Necklace of Death!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 92,
+      "title": "A Dubious Offer! Tsunade's Choice!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 93,
+      "title": "Breakdown! The Deal is Off!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 94,
+      "title": "Attack! Fury of the Rasengan!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 95,
+      "title": "The Fifth Hokage! A Life on the Line!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 96,
+      "title": "Deadlock! Sannin Showdown!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 97,
+      "title": "Kidnapped! Naruto's Hot Spring Adventure!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 98,
+      "title": "Tsunade's Warning: Ninja No More!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 99,
+      "title": "The Will of Fire Still Burns!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 100,
+      "title": "Sensei and Student: The Bond of the Shinobi"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 101,
+      "title": "Gotta See! Gotta Know! Kakashi-Sensei's True Face!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 102,
+      "title": "Mission: Help an Old Friend in the Land of Tea"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 103,
+      "title": "The Race is on! Trouble on the High Seas!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 104,
+      "title": "Run Idate Run! Nagi Island Awaits!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 105,
+      "title": "A Fierce Battle of Rolling Thunder!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 106,
+      "title": "The Last Leg: A Final Act of Desperation"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 107,
+      "title": "The Battle Begins: Naruto vs. Sasuke"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 108,
+      "title": "Bitter Rivals and Broken Bonds"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 109,
+      "title": "An Invitation from the Sound"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 110,
+      "title": "Formation! The Sasuke Retrieval Squad"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 111,
+      "title": "Sound vs. Leaf"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 112,
+      "title": "Squad Mutiny: Everything Falls Apart!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 113,
+      "title": "Full Throttle Power! Choji, Ablaze!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 114,
+      "title": "Good-bye Old Friend...! I'll Always Believe in You!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 115,
+      "title": "Your Opponent Is Me!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 116,
+      "title": "360 Degrees of Vision: The Byakugan's Blind Spot"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 117,
+      "title": "Losing is Not an Option!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 118,
+      "title": "The Vessel Arrives Too Late"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 119,
+      "title": "Miscalculation: A New Enemy Appears!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 120,
+      "title": "Roar and Howl! The Ultimate Tag Team"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 121,
+      "title": "To Each His Own Battle"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 122,
+      "title": "Fakeout: Shikamaru's Comeback!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 123,
+      "title": "The Leaf's Handsome Devil!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 124,
+      "title": "The Beast Within"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 125,
+      "title": "The Sand Shinobi: Allies of the Leaf"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 126,
+      "title": "Showdown: Gaara vs. Kimimaro!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 127,
+      "title": "Vengeful Strike! The Bracken Dance"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 128,
+      "title": "A Cry on Deaf Ears"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 129,
+      "title": "Brothers: Distance Among the Uchiha"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 130,
+      "title": "Father and Son, the Broken Crest"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 131,
+      "title": "The Secrets of the Mangekyo Sharingan!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 132,
+      "title": "For a Friend"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 133,
+      "title": "A Plea From a Friend"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 134,
+      "title": "The End of Tears"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 135,
+      "title": "The Promise That Could Not Be Kept"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 136,
+      "title": "Deep Cover!? A Super S-Ranked Mission!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 137,
+      "title": "A Town of Outlaws, the Shadow of the Fuma Clan"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 138,
+      "title": "Pure Betrayal, and a Fleeting Plea!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 139,
+      "title": "Pure Terror! The House of Orochimaru"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 140,
+      "title": "Two Heartbeats: Kabuto's Trap"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 141,
+      "title": "Sakura's Determination"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 142,
+      "title": "The Three Villains from the Maximum Security Prison"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 143,
+      "title": "Tonton! I'm Counting on You!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 144,
+      "title": "A New Squad! Two People and a Dog?!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 145,
+      "title": "A New Formation: Ino-Shika-Cho!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 146,
+      "title": "Orochimaru's Shadow"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 147,
+      "title": "A Clash of Fate: You Can't Bring Me Down"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 148,
+      "title": "Search for the Rare Bikochu Beetle"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 149,
+      "title": "What's the Difference? Don't All Insects Look Alike?"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 150,
+      "title": "A Battle of Bugs: The Deceivers and the Deceived"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 151,
+      "title": "Blaze Away Byakugan: This Is My Ninja Way"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 152,
+      "title": "Funeral March for the Living"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 153,
+      "title": "A Lesson Learned: The Iron Fist of Love"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 154,
+      "title": "The Enemy of the Byakugan"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 155,
+      "title": "The Dark Creeping Clouds"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 156,
+      "title": "Raiga's Counterattack"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 157,
+      "title": "Run! The Curry of Life"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 158,
+      "title": "Follow My Lead! The Great Survival Challenge"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 159,
+      "title": "Bounty Hunter from the Wilderness"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 160,
+      "title": "Hunt or Be Hunted?! Showdown at the O.K. Temple!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 161,
+      "title": "The Appearance of Strange Visitors"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 162,
+      "title": "The Cursed Warrior"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 163,
+      "title": "The Tactician's Intent"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 164,
+      "title": "Too Late for Help"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 165,
+      "title": "The Death of Naruto"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 166,
+      "title": "When Time Stands Still"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 167,
+      "title": "When Egrets Flap Their Wings"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 168,
+      "title": "Mix It, Stretch It, Boil It Up! Burn, Copper Pot, Burn!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 169,
+      "title": "Remembrance: The Lost Page"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 170,
+      "title": "The Closed Door"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 171,
+      "title": "Infiltration: The Set-Up!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 172,
+      "title": "Despair: A Fractured Heart"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 173,
+      "title": "The Battle at Sea: The Power Unleashed!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 174,
+      "title": "Impossible! Celebrity Ninja Art - Money Style Jutsu!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 175,
+      "title": "The Treasure Hunt is On!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 176,
+      "title": "Run, Dodge, Zigzag! Chase or Be Chased!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 177,
+      "title": "Please, Mr. Postman!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 178,
+      "title": "Encounter! The Boy with a Star's Name"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 179,
+      "title": "The Remembered Lullaby"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 180,
+      "title": "Hidden Jutsu: The Price of The Ninja Art: Kujaku"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 181,
+      "title": "Hoshikage, The Buried Truth"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 182,
+      "title": "Reunion, The Remaining time"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 183,
+      "title": "The Star's Radiance"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 184,
+      "title": "Kiba's Long Day!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 185,
+      "title": "A Legend from the Hidden Leaf: The Onbaa!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 186,
+      "title": "Laughing Shino"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 187,
+      "title": "Open for Business! The Leaf Moving Service"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 188,
+      "title": "Mystery of the Targeted Merchants"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 189,
+      "title": "A Limitless Supply of Ninja Tools"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 190,
+      "title": "The Byakugan Sees the Blind Spot"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 191,
+      "title": "Forecast: Death! Cloudy with Chance of Sun"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 192,
+      "title": "Ino Screams! Chubby Paradise!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 193,
+      "title": "Viva Dojo Challenge! Youth Is All About Passion!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 194,
+      "title": "The Mysterious Curse of the Haunted Castle"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 195,
+      "title": "The Third Super-Beast!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 196,
+      "title": "Hot-Blooded Confrontation: Student vs. Sensei"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 197,
+      "title": "Crisis! The Hidden Leaf 11 Gather!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 198,
+      "title": "The ANBU Gives Up? Naruto's Recollection"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 199,
+      "title": "The Missed Target"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 200,
+      "title": "The Powerful Helper"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 201,
+      "title": "Multiple Traps! Countdown to Destruction"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 202,
+      "title": "The Top 5 Ninja Battles"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 203,
+      "title": "Kurenai's Decision, Squad 8 Left Behind"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 204,
+      "title": "Yakumo's Sealed Ability"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 205,
+      "title": "Kurenai's Top-Secret Mission: The Promise With the Third Hokage"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 206,
+      "title": "Genjutsu or Reality?"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 207,
+      "title": "The Supposed Sealed Ability"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 208,
+      "title": "The Weight of the Prized Artifact!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 209,
+      "title": "The Enemy: Ninja Dropouts"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 210,
+      "title": "The Bewildering Forest"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 211,
+      "title": "Memory of Flames"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 212,
+      "title": "To Each His Own Path"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 213,
+      "title": "Vanished Memories"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 214,
+      "title": "Bringing Back Reality"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 215,
+      "title": "A Past to Be Erased"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 216,
+      "title": "The Targeted Shukaku"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 217,
+      "title": "Sand Alliance With The Leaf Shinobi"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 218,
+      "title": "The Counterattack!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 219,
+      "title": "The Ultimate Weapon Reborn"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 220,
+      "title": "Departure"
     },
     {
       "title_slug": "second-wind",
@@ -7423,6 +8518,26 @@
       "title": "Spiral"
     },
     {
+      "title_slug": "the-quiet-ward",
+      "ep_num": 9,
+      "title": "Closure"
+    },
+    {
+      "title_slug": "the-quiet-ward",
+      "ep_num": 10,
+      "title": "Joy"
+    },
+    {
+      "title_slug": "the-quiet-ward",
+      "ep_num": 11,
+      "title": "Future"
+    },
+    {
+      "title_slug": "the-quiet-ward",
+      "ep_num": 12,
+      "title": "Treasure"
+    },
+    {
       "title_slug": "zero-gravity-club",
       "ep_num": 1,
       "title": "I'll Hold Another Banquet"
@@ -7481,6 +8596,11 @@
       "title_slug": "zero-gravity-club",
       "ep_num": 12,
       "title": "You Fought Well"
+    },
+    {
+      "title_slug": "zero-gravity-club",
+      "ep_num": 13,
+      "title": "See You Again Soon"
     }
   ]
 }
