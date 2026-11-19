@@ -1475,6 +1475,32 @@
        from…" notice, no Restart button. Mirrors the embed's own rules:
        ignore <5s, ignore the last 20s / >95% (counts as finished). */
     const LS_PROGRESS_KEY = "av_zoko_progress";
+
+    /* Signed-out audio preference (one GLOBAL viewer choice, not per-title).
+       It lives next to the resume store above, same "av_zoko_*" naming. The
+       in-memory variable alone died with the page, so a reload forgot a
+       selected Dub (verified live: watch?slug=second-wind&ep=2 came back on
+       Sub). Every SUCCESSFUL track change writes it immediately; a refused
+       Dub click (episode has no dub) never touches it. */
+    const LS_TRACK_KEY = "av_zoko_track";
+    function readPreferredTrack() {
+      try {
+        const v = localStorage.getItem(LS_TRACK_KEY);
+        return v === "dub" || v === "hsub" ? v : "sub";
+      } catch {
+        return "sub";
+      }
+    }
+    function writePreferredTrack(track) {
+      try {
+        localStorage.setItem(LS_TRACK_KEY, track);
+      } catch {}
+    }
+    /* Restore BEFORE the first loadEpisode: the bootstrap at the bottom of
+       this function is what starts the player, and the optimistic pill reads
+       `preferredTrack` on its very first line. */
+    preferredTrack = readPreferredTrack();
+
     function readProgressMap() {
       try {
         return JSON.parse(localStorage.getItem(LS_PROGRESS_KEY) || "{}");
@@ -1614,6 +1640,10 @@
       const data = titleRes.data;
       titleData = data.title;
       episodesList = Array.isArray(data.episodes) ? data.episodes : [];
+      /* Seed per-episode dub availability BEFORE the first loadEpisode runs:
+         the optimistic pill then knows the answer on a cold episode and never
+         flashes Sub → Dub. Runs after every title load, so a retry re-seeds. */
+      seedDubAvailability(data);
 
       if (animeTitle) animeTitle.textContent = titleData.name;
       if (animeTitleH1) animeTitleH1.textContent = titleData.name;
@@ -1962,8 +1992,10 @@
          code overwrote the choice with "sub" and the dub never returned). */
       if (preferredTrack === "dub") {
         /* A dub needs proof: wait for this episode's probe before handing
-           the dub URL to the embed. */
-        const avail = await probePromise;
+           the dub URL to the embed. An answer already in the cache — a warm
+           visit OR the seed from the title payload — IS that proof, so it is
+           used immediately (no cold-load Sub→Dub flicker, no needless wait). */
+        const avail = typeof knownAvail === "boolean" ? knownAvail : await probePromise;
         if (currentEp !== epNum) return; // viewer switched again while probing
         currentTrack = avail === true ? "dub" : "sub";
         applyTrackPill(currentTrack);
@@ -2058,6 +2090,29 @@
     const dubAvailability = new Map(); // ep -> true | false | null
     const dubProbes = new Map();        // ep -> Promise<true | false | null>
 
+    /* Seed the per-episode cache from the title payload the watch page already
+       fetches (/api/titles/:slug), whose per-episode rows come from the same
+       persisted probe results (dub_checks) as the DUB counts everywhere else.
+       This is what kills the cold-load pill flicker: without it the first
+       visit to an episode has no answer, so the optimistic pill had to show
+       Sub and flip to Dub when the probe landed (verified live). A seed is
+       only used for episodes the map does not already know, and unknown /
+       failed probes stay unknown — the conservative Sub rule is unchanged. */
+    function seedDubAvailability(data) {
+      if (!data) return;
+      const confirmed = Array.isArray(data.dubEpisodes) ? data.dubEpisodes : [];
+      const denied = Array.isArray(data.noDubEpisodes) ? data.noDubEpisodes : [];
+      for (const ep of confirmed) {
+        const key = Number(ep);
+        if (Number.isFinite(key) && !dubAvailability.has(key)) dubAvailability.set(key, true);
+      }
+      for (const ep of denied) {
+        const key = Number(ep);
+        if (Number.isFinite(key) && !dubAvailability.has(key)) dubAvailability.set(key, false);
+      }
+      updateTrackLabel();
+    }
+
     function probeDubAvailability(epNum) {
       const key = Number(epNum);
       if (dubProbes.has(key)) return dubProbes.get(key);
@@ -2126,8 +2181,12 @@
 
           /* An explicit click is a statement of preference: it becomes the
              track that plays now AND the track every later episode tries to
-             play (as far as that episode actually has it). */
+             play (as far as that episode actually has it). Persist it
+             immediately so a full page reload keeps the choice — this line is
+             only reachable AFTER the Dub gate above, so a refused Dub click
+             (episode has no dub) never overwrites the stored preference. */
           preferredTrack = requestedTrack;
+          writePreferredTrack(preferredTrack);
           const changed = requestedTrack !== currentTrack;
           currentTrack = requestedTrack;
           applyTrackPill(currentTrack);

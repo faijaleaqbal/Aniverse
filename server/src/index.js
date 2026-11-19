@@ -279,6 +279,14 @@ const dubCountStmt = db.prepare(
 const dubCountsAllStmt = db.prepare(
   "SELECT title_slug, COUNT(*) AS c FROM dub_checks WHERE available = 1 GROUP BY title_slug"
 );
+/* Per-episode rows for ONE title. The watch page seeds its per-episode dub
+   cache from these on load so the track pill is correct on the first frame of
+   a COLD episode (no fresh probe needed). Same table as the DUB count above —
+   no new probe, no new source of truth. NULL = probe failed / unknown and is
+   deliberately omitted (the client stays conservative: Sub until proven). */
+const dubEpisodesStmt = db.prepare(
+  "SELECT ep_num, available FROM dub_checks WHERE title_slug = ? AND available IS NOT NULL ORDER BY ep_num ASC"
+);
 function withDubCount(view) {
   if (!view) return view;
   view.dubCount = dubCountStmt.get(view.slug).c;
@@ -400,10 +408,15 @@ app.get("/api/titles/:slug", (req, res) => {
     };
   }
 
+  const dubRows = dubEpisodesStmt.all(slug);
+
   res.json({
     ok: true,
     title: withDubCount(titleView(row)),
     episodes,
+    /* Seed data for the watch page's per-episode dub cache (probe-backed). */
+    dubEpisodes: dubRows.filter((r) => r.available === 1).map((r) => r.ep_num),
+    noDubEpisodes: dubRows.filter((r) => r.available === 0).map((r) => r.ep_num),
     userState,
   });
 });

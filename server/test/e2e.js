@@ -165,6 +165,12 @@ async function runTests() {
       assert.ok(!/^Episode \d+$/.test(eps[0].title), `ep1 should be a real title, got: ${eps[0].title}`);
       const titles = eps.map((e) => e.title);
       assert.equal(new Set(titles).size, titles.length, "episode titles must be distinct");
+
+      // The watch page seeds its per-episode dub cache from this same payload
+      // (probe-backed dub_checks rows) — both lists must always be arrays,
+      // even when no probe has run yet (fresh test DB).
+      assert.ok(Array.isArray(data.dubEpisodes), "dubEpisodes must be an array");
+      assert.ok(Array.isArray(data.noDubEpisodes), "noDubEpisodes must be an array");
     });
 
     console.log(`\nAll ${passed} E2E integration tests passed successfully!\n`);
