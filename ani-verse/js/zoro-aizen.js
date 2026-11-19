@@ -1963,8 +1963,8 @@
       });
     }
 
-    /* Fullscreen: ONE shared path for the button, the F key and the embed's
-       own fullscreen request. A user-facing action must never fail silently:
+    /* Fullscreen: ONE shared path for the F key and the embed's own
+       fullscreen request. A user-facing action must never fail silently:
        rejections are logged AND shown (the old `.catch(() => {})` swallowed
        every refusal — e.g. a click without user activation or a background
        tab — leaving zero trace of why fullscreen "did nothing"). */
@@ -1995,27 +1995,10 @@
       }
     }
 
-    // Fullscreen button
-    const fsBtn = document.getElementById("btn-fullscreen");
-    if (fsBtn) {
-      fsBtn.addEventListener("click", toggleFullscreen);
-    }
-
-    // Skip buttons: Absolute seek clamped to [0, duration] sent to official origin
-    const skipBack = document.getElementById("btn-skip-back");
-    if (skipBack) {
-      skipBack.addEventListener("click", () => {
-        const target = Math.max(0, currentPosition - 10);
-        sendPlayerCommand({ type: "seek", time: target });
-      });
-    }
-    const skipForward = document.getElementById("btn-skip-forward");
-    if (skipForward) {
-      skipForward.addEventListener("click", () => {
-        const target = Math.min(duration, currentPosition + 10);
-        sendPlayerCommand({ type: "seek", time: target });
-      });
-    }
+    /* The site control bar (-10s / +10s / fullscreen button) was removed from
+       watch.html — every control duplicated the embed's own bar. Fullscreen
+       is still driven by the F key and the embed's fullscreen request; the
+       arrow keys still seek. No dead bindings for removed buttons remain. */
 
     /* "Switch Anime MAL ID" is a debug tool, not a user feature: the button
        was removed from watch.html. It is only recreated when a local debug
