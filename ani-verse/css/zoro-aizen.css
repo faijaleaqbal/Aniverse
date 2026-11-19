@@ -61,10 +61,22 @@ body {
   background-color: var(--bg-main);
   color: var(--text-main);
   font-family: var(--font-main);
-  overflow-x: hidden;
+  /* NO overflow-x here: overflow-x:hidden on body makes body a scroll
+     container (overflow-y computes to auto), which silently defeats the
+     header's position:sticky — it scrolled away with the content. The
+     horizontal clip lives on html (propagates to the viewport) instead. */
   min-height: 100vh;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  /* Sticky-footer layout: main stretches to fill the viewport so the footer
+     always sits at the bottom — no dead black gap on short pages. */
+  display: flex;
+  flex-direction: column;
+}
+
+main {
+  flex: 1 0 auto;
+  width: 100%;
 }
 
 a {
@@ -277,9 +289,9 @@ img {
 
 .header-inner {
   width: 100%;
-  max-width: 1440px;
+  max-width: 1920px;
   margin: 0 auto;
-  padding: 0 1.5rem;
+  padding: 0 2rem;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -709,11 +721,11 @@ img {
 .spotlight-content {
   position: relative;
   z-index: 10;
-  max-width: 1440px;
+  max-width: 1920px;
   width: 100%;
   height: 100%;
   margin: 0 auto;
-  padding: 3.5rem 1.5rem;
+  padding: 3.5rem 2rem;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -843,7 +855,16 @@ img {
   border-color: rgba(255, 255, 255, 0.3);
 }
 
-/* Slider Controls */
+/* Slider Controls — the anchor spans the SAME 1920px content column as
+   .spotlight-content, so the arrows sit at the content edge (inside the
+   column) at every viewport width. They used to pin to the full-bleed
+   hero's right edge, outside the content on wide screens. */
+.spotlight-nav-anchor {
+  position: relative;
+  max-width: 1920px;
+  margin: 0 auto;
+  height: 0;
+}
 .spotlight-nav {
   position: absolute;
   bottom: 2rem;
@@ -887,9 +908,9 @@ img {
 }
 
 .container-main {
-  max-width: 1440px;
+  max-width: 1920px;
   margin: 0 auto;
-  padding: 0 1.5rem;
+  padding: 0 2rem;
 }
 
 .section-header-zoro {
@@ -1172,6 +1193,11 @@ img {
   gap: 0.4rem;
   font-size: 0.725rem;
   color: var(--text-muted);
+  /* Long titles wrap (2-line clamp above), but the badge row stays on ONE
+     line — "Ep 13" used to get pushed alone onto a second line. */
+  flex-wrap: nowrap;
+  white-space: nowrap;
+  overflow: hidden;
 }
 
 /* ==========================================================================
@@ -2300,7 +2326,10 @@ body.drawer-open .zoro-header {
 .genre-card-watermark {
   position: absolute;
   right: 1rem;
-  bottom: -0.5rem;
+  /* Fully inside the card: the old -0.5rem clipped the kanji's bottom edge
+     (and the hover scale/rotate clipped more). 0.5rem keeps even the hover
+     transform (scale 1.08) clear of the overflow:hidden edge. */
+  bottom: 0.5rem;
   font-size: 5.5rem;
   font-weight: 900;
   color: rgba(255, 255, 255, 0.03);
@@ -2784,6 +2813,11 @@ body.drawer-open .zoro-header {
   grid-template-columns: repeat(2, 1fr);
   gap: 0.6rem;
 }
+/* A film has ONE episode row — it spans the full width instead of sitting
+   in half of the 2-column grid. */
+.detail-episode-list.single-episode {
+  grid-template-columns: 1fr;
+}
 .detail-episode-row {
   display: flex;
   align-items: center;
@@ -2817,4 +2851,95 @@ body.drawer-open .zoro-header {
   .detail-meta, .detail-genres, .detail-actions, .detail-badges { justify-content: center; }
   .detail-episode-list { grid-template-columns: 1fr; }
   .detail-title { font-size: 1.9rem; }
+}
+/* ==========================================================================
+   BROWSE PAGINATION (12 titles per page; controls only when >1 page)
+   ========================================================================== */
+.catalog-pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 2.25rem;
+}
+.catalog-pagination[hidden] {
+  display: none;
+}
+.page-btn {
+  min-width: 40px;
+  height: 40px;
+  padding: 0 0.8rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-surface);
+  color: var(--text-sub);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.page-btn:hover:not(:disabled):not(.active) {
+  border-color: var(--border-active);
+  color: #fff;
+}
+.page-btn.active {
+  background: var(--zoro-lime);
+  color: #0c0d12;
+  border-color: var(--zoro-lime);
+  box-shadow: 0 0 12px var(--zoro-lime-glow);
+}
+.page-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ==========================================================================
+   BACK-TO-TOP BUTTON (all pages; visible after scrolling down)
+   ========================================================================== */
+.back-to-top {
+  position: fixed;
+  right: 1.5rem;
+  bottom: 1.5rem;
+  z-index: 9000;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: var(--zoro-lime);
+  color: #0c0d12;
+  font-size: 1.25rem;
+  font-weight: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5), 0 0 16px var(--zoro-lime-glow);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(12px);
+  transition: opacity 0.25s ease, transform 0.25s ease, background 0.2s ease;
+}
+.back-to-top.is-visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+.back-to-top:hover {
+  background: var(--zoro-lime-hover);
+}
+
+/* ==========================================================================
+   COMMENT BOX — SIGNED-OUT STATE (posting requires sign-in)
+   ========================================================================== */
+.comment-input-area.is-signed-out textarea {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.comment-input-area.is-signed-out .user-comment-avatar {
+  opacity: 0.6;
 }
