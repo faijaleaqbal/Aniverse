@@ -1,0 +1,1311 @@
+{
+  "_comment": "Offline snapshot of the real (enriched) metadata for the seeded catalog. test/setup-db.js applies this to a temporary seeded database so the E2E suite passes on a fresh clone with no network and no manual DB steps. Regenerate after catalog/metadata changes with: node test/make-fixture.mjs",
+  "titles": [
+    {
+      "slug": "cobalt-season",
+      "name": "Frieren: Beyond Journey’s End",
+      "old_title": "Cobalt Season",
+      "real_title": "Frieren: Beyond Journey’s End",
+      "romaji_title": "Sousou no Frieren",
+      "native_title": "葬送のフリーレン"
+    },
+    {
+      "slug": "corner-store-hours",
+      "name": "SPY x FAMILY",
+      "old_title": "Corner Store Hours",
+      "real_title": "SPY x FAMILY",
+      "romaji_title": "SPY×FAMILY",
+      "native_title": "SPY×FAMILY"
+    },
+    {
+      "slug": "deep-frame",
+      "name": "Chainsaw Man",
+      "old_title": "Deep Frame",
+      "real_title": "Chainsaw Man",
+      "romaji_title": "Chainsaw Man",
+      "native_title": "チェンソーマン"
+    },
+    {
+      "slug": "encore-one-more",
+      "name": "Kaguya-sama: Love is War -Ultra Romantic-",
+      "old_title": "Encore, One More",
+      "real_title": "Kaguya-sama: Love is War -Ultra Romantic-",
+      "romaji_title": "Kaguya-sama wa Kokurasetai: Ultra Romantic",
+      "native_title": "かぐや様は告らせたい-ウルトラロマンティック-"
+    },
+    {
+      "slug": "ghost-line-9",
+      "name": "Attack on Titan",
+      "old_title": "Ghost Line 9",
+      "real_title": "Attack on Titan",
+      "romaji_title": "Shingeki no Kyojin",
+      "native_title": "進撃の巨人"
+    },
+    {
+      "slug": "iron-bloom",
+      "name": "Fullmetal Alchemist: Brotherhood",
+      "old_title": "Iron Bloom",
+      "real_title": "Fullmetal Alchemist: Brotherhood",
+      "romaji_title": "Hagane no Renkinjutsushi: FULLMETAL ALCHEMIST",
+      "native_title": "鋼の錬金術師 FULLMETAL ALCHEMIST"
+    },
+    {
+      "slug": "kagerou-protocol",
+      "name": "JUJUTSU KAISEN",
+      "old_title": "Kagerou Protocol",
+      "real_title": "JUJUTSU KAISEN",
+      "romaji_title": "Jujutsu Kaisen",
+      "native_title": "呪術廻戦"
+    },
+    {
+      "slug": "moonlit-ramen",
+      "name": "BOCCHI THE ROCK!",
+      "old_title": "Moonlit Ramen",
+      "real_title": "BOCCHI THE ROCK!",
+      "romaji_title": "Bocchi the Rock!",
+      "native_title": "ぼっち・ざ・ろっく！"
+    },
+    {
+      "slug": "paper-cranes-at-dawn",
+      "name": "A Silent Voice",
+      "old_title": "Paper Cranes at Dawn",
+      "real_title": "A Silent Voice",
+      "romaji_title": "Koe no Katachi",
+      "native_title": "聲の形"
+    },
+    {
+      "slug": "ronin-of-the-neon-ward",
+      "name": "ONE PIECE",
+      "old_title": "Ronin of the Neon Ward",
+      "real_title": "ONE PIECE",
+      "romaji_title": "ONE PIECE",
+      "native_title": "ONE PIECE"
+    },
+    {
+      "slug": "sakura-static",
+      "name": "Kaguya-sama: Love is War",
+      "old_title": "Sakura Static",
+      "real_title": "Kaguya-sama: Love is War",
+      "romaji_title": "Kaguya-sama wa Kokurasetai: Tensaitachi no Renai Zunousen",
+      "native_title": "かぐや様は告らせたい～天才たちの恋愛頭脳戦～"
+    },
+    {
+      "slug": "salt-and-cinder",
+      "name": "Attack on Titan Final Season Part 2",
+      "old_title": "Salt and Cinder",
+      "real_title": "Attack on Titan Final Season Part 2",
+      "romaji_title": "Shingeki no Kyojin: The Final Season Part 2",
+      "native_title": "進撃の巨人 The Final Season Part 2"
+    },
+    {
+      "slug": "sea-of-stars",
+      "name": "Naruto",
+      "old_title": "Sea of Stars",
+      "real_title": "Naruto",
+      "romaji_title": "NARUTO",
+      "native_title": "NARUTO -ナルト-"
+    },
+    {
+      "slug": "second-wind",
+      "name": "Solo Leveling",
+      "old_title": "Second Wind",
+      "real_title": "Solo Leveling",
+      "romaji_title": "Ore dake Level Up na Ken",
+      "native_title": "俺だけレベルアップな件"
+    },
+    {
+      "slug": "the-fox-who-counted-rain",
+      "name": "Demon Slayer: Kimetsu no Yaiba",
+      "old_title": "The Fox Who Counted Rain",
+      "real_title": "Demon Slayer: Kimetsu no Yaiba",
+      "romaji_title": "Kimetsu no Yaiba",
+      "native_title": "鬼滅の刃"
+    },
+    {
+      "slug": "the-last-train-to-aomori",
+      "name": "Rascal Does Not Dream of Bunny Girl Senpai",
+      "old_title": "The Last Train to Aomori",
+      "real_title": "Rascal Does Not Dream of Bunny Girl Senpai",
+      "romaji_title": "Seishun Buta Yarou wa Bunny Girl Senpai no Yume wo Minai",
+      "native_title": "青春ブタ野郎はバニーガール先輩の夢を見ない"
+    },
+    {
+      "slug": "the-quiet-ward",
+      "name": "ERASED",
+      "old_title": "The Quiet Ward",
+      "real_title": "ERASED",
+      "romaji_title": "Boku dake ga Inai Machi",
+      "native_title": "僕だけがいない街"
+    },
+    {
+      "slug": "zero-gravity-club",
+      "name": "Fruits Basket The Final Season",
+      "old_title": "Zero Gravity Club",
+      "real_title": "Fruits Basket The Final Season",
+      "romaji_title": "Fruits Basket: The Final",
+      "native_title": "フルーツバスケットThe Final"
+    }
+  ],
+  "episodes": [
+    {
+      "title_slug": "cobalt-season",
+      "ep_num": 1,
+      "title": "The Journey's End"
+    },
+    {
+      "title_slug": "cobalt-season",
+      "ep_num": 2,
+      "title": "It Didn't Have to Be Magic..."
+    },
+    {
+      "title_slug": "cobalt-season",
+      "ep_num": 3,
+      "title": "Killing Magic"
+    },
+    {
+      "title_slug": "cobalt-season",
+      "ep_num": 4,
+      "title": "The Land Where Souls Rest"
+    },
+    {
+      "title_slug": "cobalt-season",
+      "ep_num": 5,
+      "title": "Phantoms of the Dead"
+    },
+    {
+      "title_slug": "cobalt-season",
+      "ep_num": 6,
+      "title": "The Hero of the Village"
+    },
+    {
+      "title_slug": "cobalt-season",
+      "ep_num": 7,
+      "title": "Like a Fairy Tale"
+    },
+    {
+      "title_slug": "cobalt-season",
+      "ep_num": 8,
+      "title": "Frieren the Slayer"
+    },
+    {
+      "title_slug": "cobalt-season",
+      "ep_num": 9,
+      "title": "Aura the Guillotine"
+    },
+    {
+      "title_slug": "cobalt-season",
+      "ep_num": 10,
+      "title": "A Powerful Mage"
+    },
+    {
+      "title_slug": "cobalt-season",
+      "ep_num": 11,
+      "title": "Winter in the Northern Lands"
+    },
+    {
+      "title_slug": "cobalt-season",
+      "ep_num": 12,
+      "title": "A Real Hero"
+    },
+    {
+      "title_slug": "cobalt-season",
+      "ep_num": 13,
+      "title": "Aversion to One's Own Kind"
+    },
+    {
+      "title_slug": "cobalt-season",
+      "ep_num": 14,
+      "title": "Privilege of the Young"
+    },
+    {
+      "title_slug": "cobalt-season",
+      "ep_num": 15,
+      "title": "Smells Like Trouble"
+    },
+    {
+      "title_slug": "cobalt-season",
+      "ep_num": 16,
+      "title": "Long-Lived Friends"
+    },
+    {
+      "title_slug": "cobalt-season",
+      "ep_num": 17,
+      "title": "Take Care"
+    },
+    {
+      "title_slug": "cobalt-season",
+      "ep_num": 18,
+      "title": "First-Class Mage Exam"
+    },
+    {
+      "title_slug": "cobalt-season",
+      "ep_num": 19,
+      "title": "Well-Laid Plans"
+    },
+    {
+      "title_slug": "cobalt-season",
+      "ep_num": 20,
+      "title": "Necessary Killing"
+    },
+    {
+      "title_slug": "cobalt-season",
+      "ep_num": 21,
+      "title": "The World of Magic"
+    },
+    {
+      "title_slug": "cobalt-season",
+      "ep_num": 22,
+      "title": "Future Enemies"
+    },
+    {
+      "title_slug": "cobalt-season",
+      "ep_num": 23,
+      "title": "Conquering the Labyrinth"
+    },
+    {
+      "title_slug": "cobalt-season",
+      "ep_num": 24,
+      "title": "Perfect Replicas"
+    },
+    {
+      "title_slug": "cobalt-season",
+      "ep_num": 25,
+      "title": "A Fatal Vulnerability"
+    },
+    {
+      "title_slug": "corner-store-hours",
+      "ep_num": 1,
+      "title": "OPERATION STRIX"
+    },
+    {
+      "title_slug": "corner-store-hours",
+      "ep_num": 2,
+      "title": "SECURE A WIFE"
+    },
+    {
+      "title_slug": "corner-store-hours",
+      "ep_num": 3,
+      "title": "PREPARE FOR THE INTERVIEW"
+    },
+    {
+      "title_slug": "corner-store-hours",
+      "ep_num": 4,
+      "title": "THE PRESTIGIOUS SCHOOL'S INTERVIEW"
+    },
+    {
+      "title_slug": "corner-store-hours",
+      "ep_num": 5,
+      "title": "WILL THEY PASS OR FAIL?"
+    },
+    {
+      "title_slug": "corner-store-hours",
+      "ep_num": 6,
+      "title": "THE FRIENDSHIP SCHEME"
+    },
+    {
+      "title_slug": "corner-store-hours",
+      "ep_num": 7,
+      "title": "THE TARGET'S SECOND SON"
+    },
+    {
+      "title_slug": "corner-store-hours",
+      "ep_num": 8,
+      "title": "COUNTER-STRATEGIC CAMOUFLAGE AGAINST SECRET POLICE SURVEILLANCE"
+    },
+    {
+      "title_slug": "corner-store-hours",
+      "ep_num": 9,
+      "title": "SHOW OFF HOW IN LOVE YOU ARE"
+    },
+    {
+      "title_slug": "corner-store-hours",
+      "ep_num": 10,
+      "title": "THE GREAT DODGEBALL PLAN"
+    },
+    {
+      "title_slug": "corner-store-hours",
+      "ep_num": 11,
+      "title": "STELLA"
+    },
+    {
+      "title_slug": "corner-store-hours",
+      "ep_num": 12,
+      "title": "PENGUIN PARK"
+    },
+    {
+      "title_slug": "corner-store-hours",
+      "ep_num": 13,
+      "title": "Episode 13"
+    },
+    {
+      "title_slug": "corner-store-hours",
+      "ep_num": 14,
+      "title": "Episode 14"
+    },
+    {
+      "title_slug": "deep-frame",
+      "ep_num": 1,
+      "title": "DOG & CHAINSAW"
+    },
+    {
+      "title_slug": "deep-frame",
+      "ep_num": 2,
+      "title": "ARRIVAL IN TOKYO"
+    },
+    {
+      "title_slug": "deep-frame",
+      "ep_num": 3,
+      "title": "MEOWY'S WHEREABOUTS"
+    },
+    {
+      "title_slug": "deep-frame",
+      "ep_num": 4,
+      "title": "RESCUE"
+    },
+    {
+      "title_slug": "deep-frame",
+      "ep_num": 5,
+      "title": "GUN DEVIL"
+    },
+    {
+      "title_slug": "deep-frame",
+      "ep_num": 6,
+      "title": "KILL DENJI"
+    },
+    {
+      "title_slug": "deep-frame",
+      "ep_num": 7,
+      "title": "TASTE OF A KISS"
+    },
+    {
+      "title_slug": "deep-frame",
+      "ep_num": 8,
+      "title": "GUNFIRE"
+    },
+    {
+      "title_slug": "deep-frame",
+      "ep_num": 9,
+      "title": "FROM KYOTO"
+    },
+    {
+      "title_slug": "deep-frame",
+      "ep_num": 10,
+      "title": "BRUISED & BATTERED"
+    },
+    {
+      "title_slug": "deep-frame",
+      "ep_num": 11,
+      "title": "MISSION START"
+    },
+    {
+      "title_slug": "deep-frame",
+      "ep_num": 12,
+      "title": "KATANA VS. CHAINSAW"
+    },
+    {
+      "title_slug": "deep-frame",
+      "ep_num": 13,
+      "title": "Episode 13"
+    },
+    {
+      "title_slug": "deep-frame",
+      "ep_num": 14,
+      "title": "Episode 14"
+    },
+    {
+      "title_slug": "deep-frame",
+      "ep_num": 15,
+      "title": "Episode 15"
+    },
+    {
+      "title_slug": "deep-frame",
+      "ep_num": 16,
+      "title": "Episode 16"
+    },
+    {
+      "title_slug": "deep-frame",
+      "ep_num": 17,
+      "title": "Episode 17"
+    },
+    {
+      "title_slug": "deep-frame",
+      "ep_num": 18,
+      "title": "Episode 18"
+    },
+    {
+      "title_slug": "deep-frame",
+      "ep_num": 19,
+      "title": "Episode 19"
+    },
+    {
+      "title_slug": "deep-frame",
+      "ep_num": 20,
+      "title": "Episode 20"
+    },
+    {
+      "title_slug": "deep-frame",
+      "ep_num": 21,
+      "title": "Episode 21"
+    },
+    {
+      "title_slug": "deep-frame",
+      "ep_num": 22,
+      "title": "Episode 22"
+    },
+    {
+      "title_slug": "encore-one-more",
+      "ep_num": 1,
+      "title": "Miko Iino Wants to Be Soothed / Kaguya Doesn’t Realize / Chika Fujiwara Wants to Battle"
+    },
+    {
+      "title_slug": "ghost-line-9",
+      "ep_num": 1,
+      "title": "To You Two Thousand Years Later"
+    },
+    {
+      "title_slug": "ghost-line-9",
+      "ep_num": 2,
+      "title": "That Day"
+    },
+    {
+      "title_slug": "ghost-line-9",
+      "ep_num": 3,
+      "title": "Shining Dimly in the Midst of Despair"
+    },
+    {
+      "title_slug": "ghost-line-9",
+      "ep_num": 4,
+      "title": "Night of the Disbanding"
+    },
+    {
+      "title_slug": "ghost-line-9",
+      "ep_num": 5,
+      "title": "First Battle"
+    },
+    {
+      "title_slug": "ghost-line-9",
+      "ep_num": 6,
+      "title": "The World She Saw"
+    },
+    {
+      "title_slug": "ghost-line-9",
+      "ep_num": 7,
+      "title": "The Small Blade"
+    },
+    {
+      "title_slug": "ghost-line-9",
+      "ep_num": 8,
+      "title": "Hearing the Heartbeat"
+    },
+    {
+      "title_slug": "ghost-line-9",
+      "ep_num": 9,
+      "title": "The Left Arm's Trace"
+    },
+    {
+      "title_slug": "ghost-line-9",
+      "ep_num": 10,
+      "title": "Answer"
+    },
+    {
+      "title_slug": "iron-bloom",
+      "ep_num": 1,
+      "title": "Fullmetal Alchemist"
+    },
+    {
+      "title_slug": "iron-bloom",
+      "ep_num": 2,
+      "title": "The First Day"
+    },
+    {
+      "title_slug": "iron-bloom",
+      "ep_num": 3,
+      "title": "City of Heresy"
+    },
+    {
+      "title_slug": "iron-bloom",
+      "ep_num": 4,
+      "title": "An Alchemist's Anguish"
+    },
+    {
+      "title_slug": "iron-bloom",
+      "ep_num": 5,
+      "title": "Rain of Sorrows"
+    },
+    {
+      "title_slug": "iron-bloom",
+      "ep_num": 6,
+      "title": "Road of Hope"
+    },
+    {
+      "title_slug": "iron-bloom",
+      "ep_num": 7,
+      "title": "Hidden Truths"
+    },
+    {
+      "title_slug": "iron-bloom",
+      "ep_num": 8,
+      "title": "The Fifth Laboratory"
+    },
+    {
+      "title_slug": "iron-bloom",
+      "ep_num": 9,
+      "title": "Created Feelings"
+    },
+    {
+      "title_slug": "iron-bloom",
+      "ep_num": 10,
+      "title": "Separate Destinations"
+    },
+    {
+      "title_slug": "iron-bloom",
+      "ep_num": 11,
+      "title": "Miracle at Rush Valley"
+    },
+    {
+      "title_slug": "iron-bloom",
+      "ep_num": 12,
+      "title": "One is All, All is One"
+    },
+    {
+      "title_slug": "iron-bloom",
+      "ep_num": 13,
+      "title": "Beasts of Dublith"
+    },
+    {
+      "title_slug": "kagerou-protocol",
+      "ep_num": 1,
+      "title": "Ryomen Sukuna"
+    },
+    {
+      "title_slug": "kagerou-protocol",
+      "ep_num": 2,
+      "title": "For Myself"
+    },
+    {
+      "title_slug": "kagerou-protocol",
+      "ep_num": 3,
+      "title": "Girl of Steel"
+    },
+    {
+      "title_slug": "kagerou-protocol",
+      "ep_num": 4,
+      "title": "Fearsome Womb"
+    },
+    {
+      "title_slug": "kagerou-protocol",
+      "ep_num": 5,
+      "title": "Fearsome Womb, Part 2"
+    },
+    {
+      "title_slug": "kagerou-protocol",
+      "ep_num": 6,
+      "title": "After the Rain"
+    },
+    {
+      "title_slug": "kagerou-protocol",
+      "ep_num": 7,
+      "title": "Assault"
+    },
+    {
+      "title_slug": "kagerou-protocol",
+      "ep_num": 8,
+      "title": "Boring"
+    },
+    {
+      "title_slug": "kagerou-protocol",
+      "ep_num": 9,
+      "title": "Young Fish and Reverse Punishment"
+    },
+    {
+      "title_slug": "kagerou-protocol",
+      "ep_num": 10,
+      "title": "Idle Transfiguration"
+    },
+    {
+      "title_slug": "kagerou-protocol",
+      "ep_num": 11,
+      "title": "Narrow-Minded"
+    },
+    {
+      "title_slug": "kagerou-protocol",
+      "ep_num": 12,
+      "title": "To You Someday"
+    },
+    {
+      "title_slug": "moonlit-ramen",
+      "ep_num": 1,
+      "title": "Lonely Rolling Bocchi"
+    },
+    {
+      "title_slug": "moonlit-ramen",
+      "ep_num": 2,
+      "title": "See You Tomorrow"
+    },
+    {
+      "title_slug": "moonlit-ramen",
+      "ep_num": 3,
+      "title": "Be Right There"
+    },
+    {
+      "title_slug": "moonlit-ramen",
+      "ep_num": 4,
+      "title": "Jumping Girl(s)"
+    },
+    {
+      "title_slug": "moonlit-ramen",
+      "ep_num": 5,
+      "title": "Flightless Fish"
+    },
+    {
+      "title_slug": "moonlit-ramen",
+      "ep_num": 6,
+      "title": "Eight Views"
+    },
+    {
+      "title_slug": "moonlit-ramen",
+      "ep_num": 7,
+      "title": "To Your House"
+    },
+    {
+      "title_slug": "moonlit-ramen",
+      "ep_num": 8,
+      "title": "Bocchi the Rock"
+    },
+    {
+      "title_slug": "moonlit-ramen",
+      "ep_num": 9,
+      "title": "Enoshima Escar"
+    },
+    {
+      "title_slug": "moonlit-ramen",
+      "ep_num": 10,
+      "title": "After Dark"
+    },
+    {
+      "title_slug": "moonlit-ramen",
+      "ep_num": 11,
+      "title": "Duodecimal Sunset"
+    },
+    {
+      "title_slug": "moonlit-ramen",
+      "ep_num": 12,
+      "title": "Morning Light Falls on You"
+    },
+    {
+      "title_slug": "paper-cranes-at-dawn",
+      "ep_num": 1,
+      "title": "A Silent Voice"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 1,
+      "title": "I'm Luffy! The Man Who's Gonna Be King of the Pirates!"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 2,
+      "title": "Enter the Great Swordsman! Pirate Hunter Roronoa Zoro!"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 3,
+      "title": "Morgan versus Luffy! Who's the Mysterious Pretty Girl?"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 4,
+      "title": "Luffy's Past! Enter Red-Haired Shanks!"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 5,
+      "title": "A Terrifying Mysterious Power! Captain Buggy, the Clown Pirate!"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 6,
+      "title": "Desperate Situation! Beast Tamer Mohji vs. Luffy!"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 7,
+      "title": "Epic Showdown! Swordsman Zoro vs. Acrobat Cabaji!"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 8,
+      "title": "Who is the Victor? Devil Fruit Power Showdown!"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 9,
+      "title": "The Honorable Liar? Captain Usopp!"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 10,
+      "title": "The Weirdest Guy Ever! Jango the Hypnotist!"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 11,
+      "title": "Expose the Plot! Pirate Butler, Captain Kuro!"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 12,
+      "title": "Clash with the Black Cat Pirates! The Great Battle on the Slope!"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 13,
+      "title": "The Terrifying Duo! Meowban Brothers vs. Zoro!"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 14,
+      "title": "Luffy Back in Action! Miss Kaya's Desperate Resistance!"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 15,
+      "title": "Beat Kuro! Usopp the Man's Tearful Resolve!"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 16,
+      "title": "Protect Kaya! The Usopp Pirates' Great Efforts!"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 17,
+      "title": "Angry Explosion! Kuro vs. Luffy! How it Ends!"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 18,
+      "title": "You're the Weird Creature! Gaimon and His Strange Friends!"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 19,
+      "title": "The Three-Sword Style's Past! Zoro and Kuina's Vow!"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 20,
+      "title": "Famous Cook! Sanji of the Sea Restaurant!"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 21,
+      "title": "Unwelcome Customer! Sanji's Food and Gin's Debt!"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 22,
+      "title": "The Strongest Pirate Fleet! Commodore Don Krieg!"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 23,
+      "title": "Protect Baratie! The Great Pirate, Red Foot Zeff!"
+    },
+    {
+      "title_slug": "ronin-of-the-neon-ward",
+      "ep_num": 24,
+      "title": "Hawk-Eye Mihawk! The Great Swordsman Zoro Falls At Sea!"
+    },
+    {
+      "title_slug": "sakura-static",
+      "ep_num": 1,
+      "title": "I Will Make You Invite Me to a Movie / Kaguya Wants to Be Stopped / Kaguya Wants It"
+    },
+    {
+      "title_slug": "sakura-static",
+      "ep_num": 2,
+      "title": "Kaguya Wants to Trade / Chika Wants to Go Somewhere / Miyuki Wants to Hide His Ignorance"
+    },
+    {
+      "title_slug": "sakura-static",
+      "ep_num": 3,
+      "title": "Miyuki Shirogane Still Hasn't Done It / Kaguya Wants to Be Figured Out / Kaguya Wants to Walk"
+    },
+    {
+      "title_slug": "sakura-static",
+      "ep_num": 4,
+      "title": "Kaguya Wants Affection / The Student Council Wants It to Be Said / Kaguya Wants Him to Send It / Miyuki Shirogane Wants to Talk"
+    },
+    {
+      "title_slug": "sakura-static",
+      "ep_num": 5,
+      "title": "Kaguya Wants to Handle It / Miyuki Shirogane Wants to Show Off / Kaguya Wants to Be Covered"
+    },
+    {
+      "title_slug": "sakura-static",
+      "ep_num": 6,
+      "title": "Yu Ishigami Wants to Live / Chika Fujiwara Wants to Test You / Kaguya Wants to Be Noticed"
+    },
+    {
+      "title_slug": "sakura-static",
+      "ep_num": 7,
+      "title": "Miyuki Shirogane Wants to Work / Kaguya Wants Him to Join In / Kaguya Wants to Control It"
+    },
+    {
+      "title_slug": "sakura-static",
+      "ep_num": 8,
+      "title": "Kaguya Wants Her to Say It / Miyuki Shirogane Can't Lose / Yu Ishigami Closes His Eyes"
+    },
+    {
+      "title_slug": "sakura-static",
+      "ep_num": 9,
+      "title": "Kaguya Wants to Give a Gift / Chika Fujiwara Wants to Pay a Visit / About Kaguya Shinomiya, Part 1"
+    },
+    {
+      "title_slug": "sakura-static",
+      "ep_num": 10,
+      "title": "Kaguya Won't Forgive / Kaguya Wants to Forgive / Miyuki Shirogane Wants to Go Somewhere"
+    },
+    {
+      "title_slug": "sakura-static",
+      "ep_num": 11,
+      "title": "Ai Hayasaka Wants to Get Soaked / Chika Fujiwara Really Wants to Eat It / Miyuki Shirogane Wants to See You / I Can't Hear the Fireworks, Part 1"
+    },
+    {
+      "title_slug": "sakura-static",
+      "ep_num": 12,
+      "title": "I Can't Hear the Fireworks, Part 2 / Kaguya Doesn't Want to Avoid Him"
+    },
+    {
+      "title_slug": "salt-and-cinder",
+      "ep_num": 1,
+      "title": "Judgement"
+    },
+    {
+      "title_slug": "salt-and-cinder",
+      "ep_num": 2,
+      "title": "Sneak Attack"
+    },
+    {
+      "title_slug": "salt-and-cinder",
+      "ep_num": 3,
+      "title": "Two Brothers"
+    },
+    {
+      "title_slug": "salt-and-cinder",
+      "ep_num": 4,
+      "title": "Memories of the Future"
+    },
+    {
+      "title_slug": "salt-and-cinder",
+      "ep_num": 5,
+      "title": "From You, 2000 Years Ago"
+    },
+    {
+      "title_slug": "salt-and-cinder",
+      "ep_num": 6,
+      "title": "Thaw"
+    },
+    {
+      "title_slug": "salt-and-cinder",
+      "ep_num": 7,
+      "title": "Sunset"
+    },
+    {
+      "title_slug": "salt-and-cinder",
+      "ep_num": 8,
+      "title": "Pride"
+    },
+    {
+      "title_slug": "salt-and-cinder",
+      "ep_num": 9,
+      "title": "Night of the End"
+    },
+    {
+      "title_slug": "salt-and-cinder",
+      "ep_num": 10,
+      "title": "Traitor"
+    },
+    {
+      "title_slug": "salt-and-cinder",
+      "ep_num": 11,
+      "title": "Retrospective"
+    },
+    {
+      "title_slug": "salt-and-cinder",
+      "ep_num": 12,
+      "title": "The Dawn of Humanity"
+    },
+    {
+      "title_slug": "salt-and-cinder",
+      "ep_num": 13,
+      "title": "Episode 13"
+    },
+    {
+      "title_slug": "salt-and-cinder",
+      "ep_num": 14,
+      "title": "Episode 14"
+    },
+    {
+      "title_slug": "salt-and-cinder",
+      "ep_num": 15,
+      "title": "Episode 15"
+    },
+    {
+      "title_slug": "salt-and-cinder",
+      "ep_num": 16,
+      "title": "Episode 16"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 1,
+      "title": "Enter: Naruto Uzumaki!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 2,
+      "title": "My Name is Konohamaru!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 3,
+      "title": "Sasuke and Sakura: Friends or Foes?"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 4,
+      "title": "Pass or Fail: Survival Test"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 5,
+      "title": "You Failed! Kakashi's Final Decision"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 6,
+      "title": "A Dangerous Mission! Journey to the Land of Waves!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 7,
+      "title": "The Assassin of the Mist!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 8,
+      "title": "The Oath of Pain"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 9,
+      "title": "Kakashi: Sharingan Warrior"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 10,
+      "title": "The Forest of Chakra"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 11,
+      "title": "The Land Where a Hero Once Lived"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 12,
+      "title": "Battle on the Bridge! Zabuza Returns!!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 13,
+      "title": "Haku's Secret Jutsu: Crystal Ice Mirrors"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 14,
+      "title": "The Number One Hyperactive, Knucklehead Ninja Joins the Fight!!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 15,
+      "title": "Zero Visibility: The Sharingan Shatters"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 16,
+      "title": "The Broken Seal"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 17,
+      "title": "White Past: Hidden Ambition"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 18,
+      "title": "The Weapons Known as Shinobi"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 19,
+      "title": "The Demon in the Snow"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 20,
+      "title": "A New Chapter Begins: The Chunin Exam!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 21,
+      "title": "Identify Yourself: Powerful New Rivals"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 22,
+      "title": "Chunin Challenge: Rock Lee vs. Sasuke!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 23,
+      "title": "Genin Takedown! All Nine Rookies Face Off!"
+    },
+    {
+      "title_slug": "sea-of-stars",
+      "ep_num": 24,
+      "title": "Start Your Engines: The Chunin Exam Begins!"
+    },
+    {
+      "title_slug": "second-wind",
+      "ep_num": 1,
+      "title": "I'm Used to It."
+    },
+    {
+      "title_slug": "second-wind",
+      "ep_num": 2,
+      "title": "If I Had One More Chance"
+    },
+    {
+      "title_slug": "second-wind",
+      "ep_num": 3,
+      "title": "It's Like a Game"
+    },
+    {
+      "title_slug": "second-wind",
+      "ep_num": 4,
+      "title": "I've Gotta Get Stronger"
+    },
+    {
+      "title_slug": "second-wind",
+      "ep_num": 5,
+      "title": "A Pretty Good Deal"
+    },
+    {
+      "title_slug": "second-wind",
+      "ep_num": 6,
+      "title": "The Real Hunt Begins"
+    },
+    {
+      "title_slug": "second-wind",
+      "ep_num": 7,
+      "title": "Let's See How Far I Can Go"
+    },
+    {
+      "title_slug": "second-wind",
+      "ep_num": 8,
+      "title": "This Is Frustrating"
+    },
+    {
+      "title_slug": "second-wind",
+      "ep_num": 9,
+      "title": "You've Been Hiding Your Skills"
+    },
+    {
+      "title_slug": "second-wind",
+      "ep_num": 10,
+      "title": "What Is This, a Picnic?"
+    },
+    {
+      "title_slug": "second-wind",
+      "ep_num": 11,
+      "title": "A Knight Who Defends an Empty Throne"
+    },
+    {
+      "title_slug": "second-wind",
+      "ep_num": 12,
+      "title": "Arise"
+    },
+    {
+      "title_slug": "the-fox-who-counted-rain",
+      "ep_num": 1,
+      "title": "Cruelty"
+    },
+    {
+      "title_slug": "the-last-train-to-aomori",
+      "ep_num": 1,
+      "title": "My Senpai is a Bunny Girl"
+    },
+    {
+      "title_slug": "the-last-train-to-aomori",
+      "ep_num": 2,
+      "title": "On First Dates, Trouble Is Essential"
+    },
+    {
+      "title_slug": "the-last-train-to-aomori",
+      "ep_num": 3,
+      "title": "The World Without You"
+    },
+    {
+      "title_slug": "the-last-train-to-aomori",
+      "ep_num": 4,
+      "title": "There Is No Tomorrow For A Rascal"
+    },
+    {
+      "title_slug": "the-last-train-to-aomori",
+      "ep_num": 5,
+      "title": "All the Lies I Have for You"
+    },
+    {
+      "title_slug": "the-last-train-to-aomori",
+      "ep_num": 6,
+      "title": "This World You Chose"
+    },
+    {
+      "title_slug": "the-last-train-to-aomori",
+      "ep_num": 7,
+      "title": "Adolescence Paradox"
+    },
+    {
+      "title_slug": "the-last-train-to-aomori",
+      "ep_num": 8,
+      "title": "Wash It All Away on a Stormy Night"
+    },
+    {
+      "title_slug": "the-last-train-to-aomori",
+      "ep_num": 9,
+      "title": "Sister Panic"
+    },
+    {
+      "title_slug": "the-last-train-to-aomori",
+      "ep_num": 10,
+      "title": "Complex Congratulations"
+    },
+    {
+      "title_slug": "the-last-train-to-aomori",
+      "ep_num": 11,
+      "title": "The Kaede Quest"
+    },
+    {
+      "title_slug": "the-last-train-to-aomori",
+      "ep_num": 12,
+      "title": "Life is a Never-Ending Dream"
+    },
+    {
+      "title_slug": "the-last-train-to-aomori",
+      "ep_num": 13,
+      "title": "The Dawn After an Endless Night"
+    },
+    {
+      "title_slug": "the-quiet-ward",
+      "ep_num": 1,
+      "title": "Flashing Before My Eyes"
+    },
+    {
+      "title_slug": "the-quiet-ward",
+      "ep_num": 2,
+      "title": "Palm of the Hand"
+    },
+    {
+      "title_slug": "the-quiet-ward",
+      "ep_num": 3,
+      "title": "Birthmark"
+    },
+    {
+      "title_slug": "the-quiet-ward",
+      "ep_num": 4,
+      "title": "Accomplishment"
+    },
+    {
+      "title_slug": "the-quiet-ward",
+      "ep_num": 5,
+      "title": "Getaway"
+    },
+    {
+      "title_slug": "the-quiet-ward",
+      "ep_num": 6,
+      "title": "Grim Reaper"
+    },
+    {
+      "title_slug": "the-quiet-ward",
+      "ep_num": 7,
+      "title": "Out of Control"
+    },
+    {
+      "title_slug": "the-quiet-ward",
+      "ep_num": 8,
+      "title": "Spiral"
+    },
+    {
+      "title_slug": "zero-gravity-club",
+      "ep_num": 1,
+      "title": "I'll Hold Another Banquet"
+    },
+    {
+      "title_slug": "zero-gravity-club",
+      "ep_num": 2,
+      "title": "That's an Unwavering Truth"
+    },
+    {
+      "title_slug": "zero-gravity-club",
+      "ep_num": 3,
+      "title": "I Hope It Snows Soon"
+    },
+    {
+      "title_slug": "zero-gravity-club",
+      "ep_num": 4,
+      "title": "I'm ... Home"
+    },
+    {
+      "title_slug": "zero-gravity-club",
+      "ep_num": 5,
+      "title": "I Mean ... You Know, Right?"
+    },
+    {
+      "title_slug": "zero-gravity-club",
+      "ep_num": 6,
+      "title": "It Was So Foolish"
+    },
+    {
+      "title_slug": "zero-gravity-club",
+      "ep_num": 7,
+      "title": "That's Right, It's Empty"
+    },
+    {
+      "title_slug": "zero-gravity-club",
+      "ep_num": 8,
+      "title": "I'm Disappointed in You"
+    },
+    {
+      "title_slug": "zero-gravity-club",
+      "ep_num": 9,
+      "title": "What's Your Name?"
+    },
+    {
+      "title_slug": "zero-gravity-club",
+      "ep_num": 10,
+      "title": "I Just Love Her"
+    },
+    {
+      "title_slug": "zero-gravity-club",
+      "ep_num": 11,
+      "title": "Goodbye"
+    },
+    {
+      "title_slug": "zero-gravity-club",
+      "ep_num": 12,
+      "title": "You Fought Well"
+    }
+  ]
+}

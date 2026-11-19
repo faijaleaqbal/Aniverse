@@ -2048,6 +2048,14 @@ img {
   pointer-events: auto;
 }
 
+/* While the drawer is open the site header must stay ABOVE the backdrop so
+   the hamburger toggle itself remains clickable (it closes the drawer).
+   The drawer's content is padded below the 70px header band, so lifting the
+   header never covers the drawer's × Close button. */
+body.drawer-open .zoro-header {
+  z-index: 10002;
+}
+
 .mobile-nav-drawer {
   position: fixed;
   top: 0;
@@ -2061,7 +2069,9 @@ img {
   transition: transform 0.35s var(--ease-spring);
   display: flex;
   flex-direction: column;
-  padding: 1.5rem;
+  /* Top padding clears the 70px site header (which layers above the open
+     drawer) so the drawer's brand + × row is never covered by it. */
+  padding: calc(70px + 1.5rem) 1.5rem 1.5rem;
   box-shadow: 10px 0 40px rgba(0, 0, 0, 0.7);
 }
 

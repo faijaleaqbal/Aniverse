@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
-import app from "../src/index.js";
-import { db } from "../src/db.js";
+/* Self-contained test database: a temporary seeded + enriched DB (see
+   setup-db.js). `npm test` needs no manual seed/metadata steps and never
+   touches the live database. */
+const { app, db } = await import("./setup-db.js");
 
 console.log("=== Running Ani Verse API & Zoko E2E Integration Tests ===");
 
