@@ -149,8 +149,10 @@
             <button class="icon-action-btn" id="btn-skip-back" type="button" title="Skip -10s" style="width: 44px; height: 32px; font-size: 0.8rem; font-weight: 700; border-radius: 6px;">-10s</button>
             <button class="icon-action-btn" id="btn-skip-forward" type="button" title="Skip +10s" style="width: 44px; height: 32px; font-size: 0.8rem; font-weight: 700; border-radius: 6px;">+10s</button>
             <button class="icon-action-btn" id="btn-fullscreen" type="button" title="Fullscreen (F)" aria-label="Toggle fullscreen" style="width: 44px; height: 32px; font-size: 1rem; border-radius: 6px;">⛶</button>
+            <button class="icon-action-btn" id="btn-mute" type="button" title="Mute (M)" aria-label="Mute">
+              <span id="mute-icon" style="font-size: 1.2rem;">🔊</span>
+            </button>
           </div>
-          <span id="video-time-text" style="font-size: 0.8rem; font-family: var(--font-mono); color: var(--text-muted); letter-spacing: 0.05em;">00:00 / --:--</span>
         </div>
 
         <!-- Action Bar: Add to Watchlist & Next/Prev -->
@@ -225,7 +227,7 @@
         <div class="episodes-card-zoro">
           <div class="ep-range-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
             <h3 style="font-size: 1rem; font-weight: 800; color: #fff;">List of Episodes</h3>
-            <span style="font-size: 0.75rem; color: var(--zoro-lime); font-family: var(--font-mono);">SUB / DUB</span>
+            <span style="font-size: 0.75rem; color: var(--zoro-lime); font-family: var(--font-mono);" id="track-label">SUB / DUB</span>
           </div>
 
           <div class="ep-search-wrap" style="margin-bottom: 0.75rem;">
