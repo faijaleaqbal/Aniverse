@@ -1501,6 +1501,259 @@
        `preferredTrack` on its very first line. */
     preferredTrack = readPreferredTrack();
 
+    /* ------------------------------------------------------------------
+       SERVER STATE — Zoko is PRIMARY; animeTVplus is a fallback only.
+       The choice is session-scoped (sessionStorage): a fresh tab always
+       starts on Zoko, a reload inside the same tab keeps the choice.
+       ?player=backup is a harmless test hook that starts on the backup.
+       ------------------------------------------------------------------ */
+    const SS_SERVER_KEY = "av_player_server";
+    const BACKUP_ORIGIN = "https://embed.animetvplus.site";
+    let activeServer = "zoko";
+    try {
+      if (sessionStorage.getItem(SS_SERVER_KEY) === "backup") activeServer = "backup";
+    } catch {}
+    if (params.get("player") === "backup") {
+      activeServer = "backup";
+      try { sessionStorage.setItem(SS_SERVER_KEY, "backup"); } catch {}
+    }
+
+    /* animeTVplus embed URLs. IDs come from the catalog (titleData.malId /
+       titleData.anilistId) — never invented — with three LIVE-VERIFIED
+       exceptions (tested 2026-11-19), pinned here so a future catalog
+       "correction" cannot silently break the backup: */
+    const BACKUP_ID_EXCEPTIONS = {
+      /* Kaguya-sama: Love is War –Ultra Romantic–: the MAL route (43608)
+         hangs on a black spinner; the AniList route (125367) plays the same
+         file. Force the AniList route for this title. */
+      "encore-one-more": { route: "anilist", id: 125367 },
+      /* UPSTREAM MAPPING BUG: animeTVplus swaps the MAL ids of A Silent
+         Voice and ERASED — its "A Silent Voice" entry lives at mal 28851
+         (ERASED's real MAL id) and its "ERASED" entry at mal 31043 (A Silent
+         Voice's real MAL id); both routes resolve to the same swapped
+         entries. So A Silent Voice is served via ERASED's id. The catalog
+         already carries the provider-space id; this pin documents it.
+         TODO: re-check upstream periodically and drop the pin if fixed. */
+      "paper-cranes-at-dawn": { route: "mal", id: 28851 },
+      /* Same upstream swap, other direction: ERASED is served via A Silent
+         Voice's id (31043). TODO: re-check upstream periodically. */
+      "the-quiet-ward": { route: "mal", id: 31043 },
+      /* Attack on Titan S1 (16498) is FLAKY on animeTVplus (played once,
+         black spinner another time) — deliberately NO special handling. */
+    };
+
+    function getBackupEmbedUrl(epNum, startTime, restart) {
+      const ex = BACKUP_ID_EXCEPTIONS[currentSlug];
+      let route, id;
+      if (ex) {
+        route = ex.route;
+        id = ex.id;
+      } else {
+        /* Catalog ids only. The Zoko debug MAL override (av_zoko_ids) is
+           deliberately NOT applied to the backup — it is a Zoko tool. */
+        if (titleData && titleData.malId) {
+          route = "mal";
+          id = titleData.malId;
+        } else if (titleData && titleData.anilistId) {
+          route = "anilist";
+          id = titleData.anilistId;
+        } else {
+          return null;
+        }
+      }
+      /* accent matches the site lime. No autoplay/mute params exist (the
+         embed ignores them); no nav=1 — the site has its own episode list. */
+      let url = `${BACKUP_ORIGIN}/home/embed/${route}/${id}/${epNum}?accent=cae962`;
+      /* t = whole seconds 1..86400, applied when the viewer presses Play;
+         it takes priority over Uqload's own remembered position. Restart
+         uses t=1: the embed has no resume=0-style switch, and t=1 is the
+         only documented way to override the remembered position. */
+      let t = Math.floor(startTime || 0);
+      if (restart) t = 1;
+      if (t >= 1 && t <= 86400) url += `&t=${t}`;
+      return url;
+    }
+
+    /* ------------------------------------------------------------------
+       ZOKO FAILURE DETECTION (diagnosed against the live embed core JS)
+       1. REAL error signal: the embed emits {channel:'zokoanime',
+          type:'error', message} on JW Player errors ("Unable to play
+          media" arrives this way) and on video-element errors. The embed
+          may still self-heal (edge-host failover), so an error OFFERS the
+          backup — it never auto-switches — and the offer hides again if
+          playback demonstrably recovers (ready/play/time events).
+       2. DEAD provider (domain down / blocked / error-state page): NO
+          events arrive at all. Two honest signals:
+          a) a no-cors fetch of the EXACT embed URL rejects only on a real
+             network failure (blocked/DNS/connection refused) — a slow
+             response still resolves (opaque), so slowness never triggers
+             it. An aborted probe (20s) is UNKNOWN, not failure.
+          b) backstop: 45s without `ready`. A slow-but-working load emits
+             ready/play/time long before that (AoT S1 took ~16s with a
+             Zoko-side loading screen and played fine — ready arrived in
+             under a second). Elapsed time alone never fires while the
+             player is alive.
+       ------------------------------------------------------------------ */
+    const ZOKO_NO_READY_TIMEOUT_MS = 45000;
+    const ZOKO_PROBE_ABORT_MS = 20000;
+    const BACKUP_NO_READY_TIMEOUT_MS = 45000;
+    let loadToken = 0;
+    let zokoFailTimer = null;
+    let backupFailTimer = null;
+    let fallbackOfferVisible = false;
+    /* When the last Zoko error event arrived. Recovery (offer/overlay hide)
+       requires playback evidence MORE than 2s after the error: the old
+       document keeps emitting in-flight time events for ~0.5s after a fatal
+       error, and a single stale event must not withdraw the offer. */
+    let lastZokoErrorAt = 0;
+    const ZOKO_RECOVERY_GUARD_MS = 2000;
+    const fallbackNote = document.getElementById("zoko-fallback-note");
+    const serverSwitcher = document.getElementById("zoko-server-switcher");
+
+    function hideFallbackNote() {
+      fallbackOfferVisible = false;
+      if (fallbackNote) {
+        fallbackNote.hidden = true;
+        fallbackNote.innerHTML = "";
+      }
+    }
+
+    /* The failure OFFER (Zoko context only). The viewer chooses; nothing
+       switches automatically. */
+    function showFallbackOffer() {
+      if (!fallbackNote || activeServer !== "zoko") return;
+      fallbackOfferVisible = true;
+      fallbackNote.innerHTML = `
+        <span class="zoko-fallback-text">Main player isn't responding — Try backup player</span>
+        <button class="btn-zoro-primary" id="fallback-try-btn" type="button">Try backup player</button>
+        <button class="fallback-dismiss" id="fallback-dismiss-btn" type="button" aria-label="Dismiss notice">✕</button>`;
+      fallbackNote.hidden = false;
+      const tryBtn = fallbackNote.querySelector("#fallback-try-btn");
+      if (tryBtn) tryBtn.addEventListener("click", () => switchServer("backup"));
+      const dismissBtn = fallbackNote.querySelector("#fallback-dismiss-btn");
+      if (dismissBtn) dismissBtn.addEventListener("click", hideFallbackNote);
+    }
+
+    /* Backup-context notice: status after a switch, or a backup failure.
+       Always offers the way back to the primary player. */
+    function showBackupNote(message) {
+      if (!fallbackNote) return;
+      fallbackOfferVisible = false;
+      fallbackNote.innerHTML = `
+        <span class="zoko-fallback-text">${escapeHtml(message)}</span>
+        <button class="btn-zoro-primary" id="fallback-back-btn" type="button">Back to Zoko</button>
+        <button class="fallback-dismiss" id="fallback-dismiss-btn" type="button" aria-label="Dismiss notice">✕</button>`;
+      fallbackNote.hidden = false;
+      const backBtn = fallbackNote.querySelector("#fallback-back-btn");
+      if (backBtn) backBtn.addEventListener("click", () => switchServer("zoko"));
+      const dismissBtn = fallbackNote.querySelector("#fallback-dismiss-btn");
+      if (dismissBtn) dismissBtn.addEventListener("click", hideFallbackNote);
+    }
+
+    function armZokoFailureDetection(streamUrl, token) {
+      if (zokoFailTimer) clearTimeout(zokoFailTimer);
+      zokoFailTimer = setTimeout(() => {
+        zokoFailTimer = null;
+        if (token !== loadToken || activeServer !== "zoko" || playerReady) return;
+        showFallbackOffer();
+      }, ZOKO_NO_READY_TIMEOUT_MS);
+      /* Reachability probe of the exact embed URL (see detection notes). */
+      const ctl = new AbortController();
+      const abortTimer = setTimeout(() => ctl.abort(), ZOKO_PROBE_ABORT_MS);
+      fetch(streamUrl, { mode: "no-cors", credentials: "omit", cache: "no-store", signal: ctl.signal })
+        .then(() => { clearTimeout(abortTimer); })
+        .catch((err) => {
+          clearTimeout(abortTimer);
+          if (err && err.name === "AbortError") return; // slow != failed
+          if (token !== loadToken || activeServer !== "zoko" || playerReady) return;
+          showFallbackOffer();
+        });
+    }
+
+    function armBackupFailureDetection(token) {
+      if (backupFailTimer) clearTimeout(backupFailTimer);
+      backupFailTimer = setTimeout(() => {
+        backupFailTimer = null;
+        if (token !== loadToken || activeServer !== "backup" || playerReady) return;
+        if (spinner) spinner.hidden = true;
+        showBackupNote("Backup player isn't responding.");
+      }, BACKUP_NO_READY_TIMEOUT_MS);
+    }
+
+    /* Swap the iframe in place — no page reload, no lost comment draft, no
+       lost resume notice. The last observable position travels with the
+       switch (Zoko reports time events; the backup exposes none, so this
+       captured position is also what a later switch BACK resumes from). */
+    function switchServer(server) {
+      if (server !== "zoko" && server !== "backup") return;
+      if (server === activeServer) return;
+      const pos = Math.floor(currentPosition || 0);
+      activeServer = server;
+      try { sessionStorage.setItem(SS_SERVER_KEY, server); } catch {}
+      applyServerUI();
+      if (server === "backup") {
+        showBackupNote("Backup player active — Sub only. Press Play inside the player.");
+      } else {
+        hideFallbackNote();
+      }
+      loadEpisode(currentEp, null, false, pos);
+    }
+
+    /* One place owns the server-dependent UI: pills, track availability,
+       Zoko-only settings, cover badge. preferredTrack / av_zoko_track are
+       NEVER written here — the viewer's Dub choice survives the backup. */
+    function applyServerUI() {
+      const onBackup = activeServer === "backup";
+      if (serverSwitcher) {
+        serverSwitcher.querySelectorAll(".server-pill").forEach((p) => {
+          p.classList.toggle("active", p.dataset.server === activeServer);
+        });
+      }
+      if (iframe) iframe.title = onBackup ? "animeTVplus backup player" : "ZokoAnime player";
+      if (trackSwitcher) {
+        trackSwitcher.querySelectorAll(".server-pill").forEach((p) => {
+          const t = p.dataset.track || "sub";
+          if (onBackup) {
+            /* The backup serves Sub only and exposes no track control. */
+            p.classList.toggle("active", t === "sub");
+            p.disabled = t !== "sub";
+            p.classList.toggle("is-disabled", t !== "sub");
+            p.title = t === "dub" ? "Dub isn't available on the backup player"
+                    : t === "hsub" ? "Hard-sub isn't available on the backup player"
+                    : "";
+          } else {
+            p.disabled = false;
+            p.classList.remove("is-disabled");
+            p.title = "";
+          }
+        });
+        if (!onBackup) applyTrackPill(currentTrack);
+      }
+      if (settingToggles) {
+        settingToggles.querySelectorAll("input[data-setting]").forEach((cb) => {
+          cb.disabled = onBackup;
+          const label = cb.closest(".zoko-toggle");
+          if (label) {
+            label.classList.toggle("is-disabled", onBackup);
+            label.title = onBackup ? "Not available on the backup player" : "";
+          }
+        });
+      }
+      const coverBadge = document.getElementById("player-cover-badge");
+      if (coverBadge) {
+        coverBadge.innerHTML = onBackup
+          ? '<span style="color: var(--zoro-lime);">⚡</span> Stream with animeTVplus (Sub · press Play)'
+          : '<span style="color: var(--zoro-lime);">⚡</span> Stream with ZokoAnime (Auto-Skip)';
+      }
+      updateTrackLabel();
+    }
+
+    if (serverSwitcher) {
+      serverSwitcher.querySelectorAll(".server-pill").forEach((pill) => {
+        pill.addEventListener("click", () => switchServer(pill.dataset.server));
+      });
+    }
+
     function readProgressMap() {
       try {
         return JSON.parse(localStorage.getItem(LS_PROGRESS_KEY) || "{}");
@@ -1538,8 +1791,11 @@
       return typeof pos === "number" && pos >= 5 && pos < d - 20 && pos / d <= 0.95;
     }
 
-    // Helper: Send postMessage commands to ZokoAnime embed player
+    // Helper: Send postMessage commands to ZokoAnime embed player.
+    // Zoko-only: the backup embed accepts just goto/info — site play/pause/
+    // seek/settings commands would be fake controls there.
     function sendPlayerCommand(cmd) {
+      if (activeServer !== "zoko") return;
       if (cmd && cmd.type === "seek") seekCommandThisLoad = true;
       if (iframe && iframe.contentWindow) {
         iframe.contentWindow.postMessage(
@@ -1846,10 +2102,18 @@
       resumeNoteTimer = setTimeout(hideResumeNote, 6000);
     }
 
-    async function loadEpisode(epNum, prefetched, startFromBeginning = false) {
+    async function loadEpisode(epNum, prefetched, startFromBeginning = false, positionOverride = null) {
       currentEp = epNum;
       activeEpisode = epNum;
       loadInFlight = true;
+      loadToken++;
+      const token = loadToken;
+      /* New load: retire any previous failure-detection timers and (on Zoko)
+         the previous failure offer. A backup-status note stays — the viewer
+         is still on the backup player. */
+      if (zokoFailTimer) { clearTimeout(zokoFailTimer); zokoFailTimer = null; }
+      if (backupFailTimer) { clearTimeout(backupFailTimer); backupFailTimer = null; }
+      if (activeServer === "zoko") hideFallbackNote();
       /* New load: retire any previous resume notice and its timers. */
       hideResumeNote();
       resumeNoteShownForLoad = false;
@@ -1857,6 +2121,7 @@
       loadStartedAt = Date.now();
       skippedThisLoad = false;
       seekCommandThisLoad = false;
+      lastZokoErrorAt = 0;
       durationIsReal = false;
       playerReady = false;
 
@@ -1875,18 +2140,27 @@
          is never destroyed by this fallback.
          ------------------------------------------------------------------ */
       const knownAvail = dubAvailability.get(Number(epNum));
-      const optimisticTrack = preferredTrack === "dub"
-        ? (knownAvail === true ? "dub" : "sub")
-        : (preferredTrack === "hsub" ? "hsub" : "sub");
-      currentTrack = optimisticTrack;
-      applyTrackPill(optimisticTrack);
-      updateTrackLabel();
+      if (activeServer === "backup") {
+        /* The backup serves Sub only. currentTrack mirrors the loaded
+           stream; preferredTrack / av_zoko_track are deliberately untouched
+           so the viewer's Dub choice returns when they go back to Zoko. */
+        currentTrack = "sub";
+        applyTrackPill("sub");
+        updateTrackLabel();
+      } else {
+        const optimisticTrack = preferredTrack === "dub"
+          ? (knownAvail === true ? "dub" : "sub")
+          : (preferredTrack === "hsub" ? "hsub" : "sub");
+        currentTrack = optimisticTrack;
+        applyTrackPill(optimisticTrack);
+        updateTrackLabel();
+      }
 
       /* New episode: re-probe dub availability in the background (the Dub
          pill awaits this probe if it is still running when clicked). The
          fresh entry starts unknown, so the previous episode's answer can
-         never leak into this one. */
-      const probePromise = probeDubAvailability(epNum);
+         never leak into this one. Zoko-only: the backup has no dub. */
+      const probePromise = activeServer === "zoko" ? probeDubAvailability(epNum) : null;
 
       // Clear episode-search filter and input box on every episode change (Bug 5)
       const epSearchInput = document.getElementById("ep-search-input");
@@ -1955,6 +2229,10 @@
         /* Restart: forget the saved position so the next reload does not
            resume again, and tell the embed to skip its own resume store. */
         clearLocalProgress(currentSlug, epNum);
+      } else if (positionOverride != null) {
+        /* Server switch: carry the last observable position across servers
+           (Zoko time events -> backup t= param, and back). */
+        resumeTime = positionOverride >= 1 ? Math.floor(positionOverride) : 0;
       } else {
         const epDur = epData.durationSec || 1440;
         if (typeof epData.savedPositionSec === "number" && resumablePosition(epData.savedPositionSec, epDur)) {
@@ -1983,44 +2261,54 @@
         timeText.textContent = `${formatTime(resumeTime)} / ${durationIsReal && duration > 0 ? formatTime(duration) : "--:--"}`;
       }
 
-      /* Re-resolve the track for THIS episode (probe-gated).
+      /* Re-resolve the track for THIS episode (probe-gated, Zoko only).
          The preference is honoured when the episode really has that track;
          when it does not, THIS episode falls back to Sub — and only this
          episode. `preferredTrack` is deliberately left untouched, so the
          moment the viewer reaches an episode that HAS the preferred track it
          comes back automatically, with no click (verified live: the old
-         code overwrote the choice with "sub" and the dub never returned). */
-      if (preferredTrack === "dub") {
-        /* A dub needs proof: wait for this episode's probe before handing
-           the dub URL to the embed. An answer already in the cache — a warm
-           visit OR the seed from the title payload — IS that proof, so it is
-           used immediately (no cold-load Sub→Dub flicker, no needless wait). */
-        const avail = typeof knownAvail === "boolean" ? knownAvail : await probePromise;
-        if (currentEp !== epNum) return; // viewer switched again while probing
-        currentTrack = avail === true ? "dub" : "sub";
-        applyTrackPill(currentTrack);
-      } else {
-        /* Sub and hard-sub exist for every episode — no probe gate. */
-        currentTrack = preferredTrack === "hsub" ? "hsub" : "sub";
-        applyTrackPill(currentTrack);
+         code overwrote the choice with "sub" and the dub never returned).
+         On the backup the stream is always Sub — no probe, no preference
+         write; the stored Dub choice waits for the return to Zoko. */
+      if (activeServer === "zoko") {
+        if (preferredTrack === "dub") {
+          /* A dub needs proof: wait for this episode's probe before handing
+             the dub URL to the embed. An answer already in the cache — a warm
+             visit OR the seed from the title payload — IS that proof, so it is
+             used immediately (no cold-load Sub→Dub flicker, no needless wait). */
+          const avail = typeof knownAvail === "boolean" ? knownAvail : await probePromise;
+          if (currentEp !== epNum) return; // viewer switched again while probing
+          currentTrack = avail === true ? "dub" : "sub";
+          applyTrackPill(currentTrack);
+        } else {
+          /* Sub and hard-sub exist for every episode — no probe gate. */
+          currentTrack = preferredTrack === "hsub" ? "hsub" : "sub";
+          applyTrackPill(currentTrack);
+        }
+        updateTrackLabel();
       }
-      updateTrackLabel();
 
-      // Determine MAL ID (check custom override first, then title's malId)
-      const malId = getCustomMalId(currentSlug) || (titleData && titleData.malId);
-      const streamUrl = getEmbedUrl(malId, currentEp, currentTrack, {
-        autoplay: playerSettings.autoplay,
-        autoskip: playerSettings.autoskip,
-        autonext: playerSettings.autonext,
-        startTime: resumeTime,
-        /* The site's per-(slug,episode) store is the single source of truth
-           for resume. With no saved position, `resume=0` disables the embed's
-           OWN internal resume store so it can never start this episode at a
-           position the site does not know about. With a saved position the
-           explicit time= offset wins (the embed skips its internal resume
-           whenever a start point is given). */
-        noResume: startFromBeginning === true || resumeTime === 0,
-      });
+      // Build the stream URL for the ACTIVE server (Zoko primary, backup fallback)
+      let streamUrl;
+      if (activeServer === "backup") {
+        streamUrl = getBackupEmbedUrl(currentEp, resumeTime, startFromBeginning === true);
+      } else {
+        // Determine MAL ID (check custom override first, then title's malId)
+        const malId = getCustomMalId(currentSlug) || (titleData && titleData.malId);
+        streamUrl = getEmbedUrl(malId, currentEp, currentTrack, {
+          autoplay: playerSettings.autoplay,
+          autoskip: playerSettings.autoskip,
+          autonext: playerSettings.autonext,
+          startTime: resumeTime,
+          /* The site's per-(slug,episode) store is the single source of truth
+             for resume. With no saved position, `resume=0` disables the embed's
+             OWN internal resume store so it can never start this episode at a
+             position the site does not know about. With a saved position the
+             explicit time= offset wins (the embed skips its internal resume
+             whenever a start point is given). */
+          noResume: startFromBeginning === true || resumeTime === 0,
+        });
+      }
 
       if (!streamUrl) {
         loadInFlight = false;
@@ -2035,12 +2323,19 @@
 
       if (iframe) {
         iframe.src = streamUrl;
+        iframe.title = activeServer === "backup" ? "animeTVplus backup player" : "ZokoAnime player";
         /* playerEp flips when the NEW player reports `ready` — until then,
            in-flight events from the old document still belong to playerEp. */
       }
       /* The src is assigned: the load is over, so a track switch from now on
          swaps the src itself (exactly once). */
       loadInFlight = false;
+      /* Arm failure detection for the server actually loading. */
+      if (activeServer === "zoko") {
+        armZokoFailureDetection(streamUrl, token);
+      } else {
+        armBackupFailureDetection(token);
+      }
       if (spinner) {
         spinner.hidden = false;
         spinner.style.pointerEvents = "";
@@ -2143,6 +2438,11 @@
     function updateTrackLabel() {
       const label = document.getElementById("track-label");
       if (!label) return;
+      /* The backup player serves Sub only — never advertise DUB there. */
+      if (activeServer === "backup") {
+        label.textContent = "SUB";
+        return;
+      }
       const avail = dubAvailability.get(Number(currentEp));
       label.textContent = avail === true ? "SUB / DUB" : "SUB";
     }
@@ -2150,6 +2450,9 @@
     if (trackSwitcher) {
       trackSwitcher.querySelectorAll(".server-pill").forEach((pill) => {
         pill.addEventListener("click", async () => {
+          /* On the backup the Dub/Hard-sub pills are disabled; this guard
+             keeps any stray activation from touching the track state. */
+          if (activeServer !== "zoko") return;
           const requestedTrack = pill.dataset.track || "sub";
           const epAtClick = currentEp;
 
@@ -2343,10 +2646,52 @@
       });
     }
 
-    // Bi-directional postMessage listener from ZokoAnime embed
+    // Bi-directional postMessage listener: animeTVplus backup + ZokoAnime primary
     window.addEventListener("message", async (event) => {
-      // Hard origin check per spec
+      /* ---- animeTVplus backup embed ----------------------------------
+         Docs-verified events: ready {mal, anilist, episode}, error {error,
+         available}, info (reply to an info request). There are NO time /
+         play / pause / ended events — so the backup gets no auto-next and
+         its playback position is not observable (resume-back uses the last
+         stored position). Every message carries source:"animetvplus-embed". */
+      if (event.origin === BACKUP_ORIGIN) {
+        if (activeServer !== "backup") return;
+        let bdata = event.data;
+        if (typeof bdata === "string") {
+          try { bdata = JSON.parse(bdata); } catch {}
+        }
+        if (!bdata || bdata.source !== "animetvplus-embed") return;
+        if (bdata.type === "ready") {
+          /* The backup reports the episode it loaded — ignore a stale ready
+             from a previous swap (same ready-gate pattern as Zoko). */
+          if (bdata.episode != null && Number(bdata.episode) !== Number(currentEp)) return;
+          playerEp = currentEp;
+          playerReady = true;
+          if (backupFailTimer) { clearTimeout(backupFailTimer); backupFailTimer = null; }
+          /* No autoplay on the backup: reveal the player so the viewer can
+             press Play INSIDE it. Our overlays must never block that click. */
+          if (spinner) spinner.hidden = true;
+          if (coverOverlay) coverOverlay.style.display = "none";
+          showToast("Backup player ready — press Play inside the player", "▶", 4000);
+        } else if (bdata.type === "error") {
+          if (backupFailTimer) { clearTimeout(backupFailTimer); backupFailTimer = null; }
+          if (spinner) spinner.hidden = true;
+          if (coverOverlay) coverOverlay.style.display = "none";
+          /* The embed shows its own error screen inside the frame; the site
+             adds the honest way back to the primary player. */
+          const msg = bdata.error === "no_episode" ? "This episode isn't available on the backup player."
+                    : bdata.error === "unknown_title" ? "This title isn't available on the backup player."
+                    : "The backup player couldn't load this episode.";
+          showBackupNote(msg);
+        }
+        return;
+      }
+
+      // Hard origin check per spec (Zoko)
       if (event.origin !== "https://zokoanime.video") return;
+      /* While the backup is active, stale events from the old Zoko document
+         (it keeps emitting until the navigation commits) are ignored. */
+      if (activeServer !== "zoko") return;
       let data = event.data;
       if (typeof data === "string") {
         try {
@@ -2367,6 +2712,10 @@
            previous document are still attributed to the previous episode.) */
         playerEp = currentEp;
         playerReady = true;
+        /* The player is demonstrably alive: retire the no-ready backstop and
+           any failure offer (a slow load is NOT a failure). */
+        if (zokoFailTimer) { clearTimeout(zokoFailTimer); zokoFailTimer = null; }
+        if (fallbackOfferVisible) hideFallbackNote();
         /* "ready" means the player chrome is up — NOT that the stream is
            playing. Keep the loading overlay until playback actually starts
            (play / first time event) so the embed's placeholder duration is
@@ -2387,6 +2736,14 @@
            is live — retire the loading overlay AND the loading poster. */
         if (spinner) spinner.hidden = true;
         if (coverOverlay) coverOverlay.style.display = "none";
+        /* Zoko recovered (e.g. after a transient edge-failover error):
+           withdraw the failure offer AND the error overlay — but only on
+           playback evidence >2s after the error (in-flight events from the
+           dying document must not clear a real failure). */
+        if (Date.now() - lastZokoErrorAt > ZOKO_RECOVERY_GUARD_MS) {
+          if (fallbackOfferVisible) hideFallbackNote();
+          if (overlay && !overlay.hidden && lastZokoErrorAt > 0) overlay.hidden = true;
+        }
         /* Begin the resume notice's auto-hide countdown now (not at page load). */
         armResumeNoteAutoHide();
       }
@@ -2472,6 +2829,12 @@
         if (cur > 0) {
           if (spinner) spinner.hidden = true;
           if (coverOverlay) coverOverlay.style.display = "none";
+          /* Sustained playback after an error = genuine recovery (see the
+             guard note above): withdraw the offer and the error overlay. */
+          if (Date.now() - lastZokoErrorAt > ZOKO_RECOVERY_GUARD_MS) {
+            if (fallbackOfferVisible) hideFallbackNote();
+            if (overlay && !overlay.hidden && lastZokoErrorAt > 0) overlay.hidden = true;
+          }
         }
 
         // Update time text strictly driven by player events — --:-- until the
@@ -2521,6 +2884,12 @@
             }
           }
         }
+        /* A real error signal (JW/video error, e.g. "Unable to play media"):
+           OFFER the backup inline. Never auto-switch — the embed may still
+           self-heal via edge failover, and the offer hides if playback
+           demonstrably recovers (>2s of continued events). Viewer decides. */
+        lastZokoErrorAt = Date.now();
+        showFallbackOffer();
       }
 
       // Event: ended (auto-next is parent-driven)
@@ -2557,6 +2926,11 @@
     if (playerWrap) playerWrap.setAttribute("tabindex", "-1");
     if (iframe && playerWrap) {
       const containFocus = () => {
+        /* Zoko-only: the site serves Space/arrows/F via the postMessage
+           bridge, so focus must stay on the wrapper. On the backup there
+           are no site shortcuts — let focus stay INSIDE Uqload's player so
+           its own keyboard controls work. */
+        if (activeServer !== "zoko") return;
         if (document.activeElement === iframe) {
           playerWrap.focus({ preventScroll: true });
         }
@@ -2570,12 +2944,17 @@
       const tag = document.activeElement ? document.activeElement.tagName : "";
       if (tag === "INPUT" || tag === "TEXTAREA") return;
 
+      if (e.code === "KeyF") {
+        e.preventDefault();
+        toggleFullscreen();
+        return;
+      }
+      /* Space/arrows drive the ZOKO postMessage bridge only. On the backup
+         they are left to Uqload's own player (no fake site controls). */
+      if (activeServer !== "zoko") return;
       if (e.code === "Space") {
         e.preventDefault();
         sendPlayerCommand({ type: isPaused ? "play" : "pause" });
-      } else if (e.code === "KeyF") {
-        e.preventDefault();
-        toggleFullscreen();
       } else if (e.code === "ArrowLeft") {
         e.preventDefault();
         const target = Math.max(0, currentPosition - 10);
@@ -2641,6 +3020,13 @@
     (async () => {
       try {
         showPlaceholder("Loading episode…");
+        /* Reflect the session's server choice (or the ?player=backup test
+           hook) BEFORE the first load: pills, toggles and badge must be
+           honest from the first frame. */
+        applyServerUI();
+        if (activeServer === "backup") {
+          showBackupNote("Backup player active — Sub only. Press Play inside the player.");
+        }
         await startWatch();
       } catch (err) {
         console.error("Watch page init failed:", err);

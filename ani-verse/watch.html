@@ -127,7 +127,7 @@
           ></iframe>
           <div class="player-cover-overlay" id="video-cover-overlay">
             <button class="player-big-play" type="button" aria-label="Play Episode">▶</button>
-            <div style="position: absolute; bottom: 20px; font-family: var(--font-mono); font-size: 0.8rem; color: #fff; background: rgba(0,0,0,0.7); padding: 5px 14px; border-radius: 999px; border: 1px solid rgba(202, 233, 98, 0.4); display: flex; align-items: center; gap: 6px;">
+            <div id="player-cover-badge" style="position: absolute; bottom: 20px; font-family: var(--font-mono); font-size: 0.8rem; color: #fff; background: rgba(0,0,0,0.7); padding: 5px 14px; border-radius: 999px; border: 1px solid rgba(202, 233, 98, 0.4); display: flex; align-items: center; gap: 6px;">
               <span style="color: var(--zoro-lime);">⚡</span> Stream with ZokoAnime (Auto-Skip)
             </div>
           </div>
@@ -171,6 +171,21 @@
             </div>
           </div>
         </div>
+
+        <!-- Server switcher: Zoko stays the PRIMARY player; animeTVplus is a
+             fallback the viewer chooses (or is offered when Zoko fails).
+             Session-scoped choice; swaps the iframe src in place. -->
+        <div class="servers-bar-zoro zoko-server-bar" id="zoko-server-bar">
+          <span class="zoko-bar-label">SERVER:</span>
+          <div class="zoko-track-switcher" id="zoko-server-switcher" role="group" aria-label="Streaming server">
+            <button class="server-pill active" data-server="zoko" type="button" title="ZokoAnime — primary player (Sub / Hard-sub / Dub)">Zoko</button>
+            <button class="server-pill" data-server="backup" type="button" title="animeTVplus — backup player (Sub only, no autoplay)">Backup</button>
+          </div>
+        </div>
+
+        <!-- Failure offer / backup status notice: inline, the viewer chooses.
+             Never auto-switches away from Zoko. -->
+        <div class="zoko-fallback-note" id="zoko-fallback-note" hidden></div>
 
         <!-- Resume notice + toasts -->
         <div class="zoko-resume-note" id="zoko-resume-note" hidden></div>
@@ -308,6 +323,6 @@
     </div>
   </footer>
 
-  <script src="js/zoro-aizen.js?v=6"></script>
+  <script src="js/zoro-aizen.js?v=8"></script>
 </body>
 </html>
