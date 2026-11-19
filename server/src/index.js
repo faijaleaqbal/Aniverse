@@ -21,6 +21,7 @@ import {
 } from "./config.js";
 import { db } from "./db.js";
 import { buildEmbedUrl, ZOKO_SOURCES, ZOKO_TRACKS } from "./zoko.js";
+import { checkDubAvailability } from "./dub-check.js";
 import {
   ApiError,
   badRequest,
@@ -279,11 +280,14 @@ app.get("/api/titles", (req, res) => {
   let params = [];
 
   if (q) {
+    /* Search matches REAL titles only (english/romaji/native). The fictional
+       placeholder names live in old_title and must NOT match (searching
+       "Ronin" used to return One Piece). Synopsis/tagline are not titles. */
     whereClauses.push(
-      "(LOWER(name) LIKE ? OR LOWER(synopsis) LIKE ? OR LOWER(tagline) LIKE ? OR LOWER(real_title) LIKE ? OR LOWER(romaji_title) LIKE ? OR LOWER(native_title) LIKE ? OR LOWER(old_title) LIKE ?)"
+      "(LOWER(name) LIKE ? OR LOWER(real_title) LIKE ? OR LOWER(romaji_title) LIKE ? OR LOWER(native_title) LIKE ?)"
     );
     const pattern = `%${q}%`;
-    params.push(pattern, pattern, pattern, pattern, pattern, pattern, pattern);
+    params.push(pattern, pattern, pattern, pattern);
   }
 
   if (genre && genre !== "all") {
@@ -460,6 +464,30 @@ app.get("/api/stream/:slug/:ep", (req, res) => {
       zokoDub: trackUrl("dub"),
     },
   });
+});
+
+/* ==========================================================================
+   DUB AVAILABILITY (ZokoAnime probe)
+   ========================================================================== */
+
+/* The embed serves a /dub URL for every title, but for some episodes the dub
+   stream is byte-identical to sub (no real English dub exists). The watch page
+   consults this before switching tracks so it can say so instead of silently
+   playing Japanese. */
+app.get("/api/dub-availability/:slug/:ep", async (req, res, next) => {
+  try {
+    const { slug } = req.params;
+    const epNum = toInt(req.params.ep, 1);
+    const title = db.prepare("SELECT mal_id FROM titles WHERE slug = ?").get(slug);
+    if (!title) throw notFound("Title not found.");
+    if (!title.mal_id) {
+      return res.json({ ok: true, slug, ep: epNum, available: false, reason: "no-mal-id" });
+    }
+    const result = await checkDubAvailability(title.mal_id, epNum);
+    res.json({ ok: true, slug, ep: epNum, ...result });
+  } catch (err) {
+    next(err);
+  }
 });
 
 /* ==========================================================================

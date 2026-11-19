@@ -1,0 +1,22 @@
+{
+  "_comment": "Verified episode titles for shows whose titles are unavailable from Kitsu (null titles) and Jikan (api.jikan.moe unreachable from the build network). Applied LAST by fetch-episode-titles.mjs. Sources noted per entry; titles describe exactly what the Zoko embed streams (by mal_id).",
+  "zero-gravity-club": {
+    "_source": "Wikipedia: List of Fruits Basket (2019 TV series) episodes — The Final season table (MAL 42938 = Fruits Basket The Final Season; the catalog's 'Blue Lock' comment is wrong, the stream plays Fruits Basket). Retrieved 2026-11-19.",
+    "1": "I'll Hold Another Banquet",
+    "2": "That's an Unwavering Truth",
+    "3": "I Hope It Snows Soon",
+    "4": "I'm ... Home",
+    "5": "I Mean ... You Know, Right?",
+    "6": "It Was So Foolish",
+    "7": "That's Right, It's Empty",
+    "8": "I'm Disappointed in You",
+    "9": "What's Your Name?",
+    "10": "I Just Love Her",
+    "11": "Goodbye",
+    "12": "You Fought Well"
+  },
+  "paper-cranes-at-dawn": {
+    "_source": "Film (MAL 28851 = A Silent Voice). A movie is listed as one episode titled after the film itself (same convention as MyAnimeList/Jikan).",
+    "1": "A Silent Voice"
+  }
+}

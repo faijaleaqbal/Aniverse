@@ -157,4 +157,19 @@ test("buildEmbedUrl throws when origin is not provided", () => {
   );
 });
 
+// 11. Resume emits BOTH t= and time= (the live embed only honours time=;
+//     t= alone is ignored and playback starts at 0 — verified against
+//     zokoanime.video). Track switches and Resume depend on this.
+test("buildEmbedUrl resume emits time= alongside t=", () => {
+  const url = buildEmbedUrl({
+    origin: "https://zokoanime.video",
+    id: 52299,
+    episode: 1,
+    track: "dub",
+    startTime: 185,
+  });
+  assert.ok(url.includes("&t=185"), `Expected &t=185, got: ${url}`);
+  assert.ok(url.includes("&time=185"), `Expected &time=185, got: ${url}`);
+});
+
 console.log(`\nAll ${passed} smoke / unit tests passed successfully!\n`);

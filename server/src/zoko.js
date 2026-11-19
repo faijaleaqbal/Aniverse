@@ -8,6 +8,10 @@
  *   ?color=<hex without #>  ?autoplay=0|1  ?autoskip=0|1  ?autonext=0|1  ?t=<seconds>
  *
  * There is NO "server" parameter - sub/dub is the {track} path segment.
+ *
+ * Resume: the live embed reads the start offset from `time=<seconds>` (verified
+ * against zokoanime.video — `t=` alone is ignored and the stream starts at 0).
+ * Both are emitted: `time` for the player, `t` for spec compatibility.
  */
 
 export const ZOKO_SOURCES = ["mal", "anilist"];
@@ -67,7 +71,10 @@ export function buildEmbedUrl(opts = {}) {
   params.set("autonext", autonext ? "1" : "0");
 
   const t = Number(startTime);
-  if (Number.isFinite(t) && t > 0) params.set("t", Math.floor(t));
+  if (Number.isFinite(t) && t > 0) {
+    params.set("t", Math.floor(t));
+    params.set("time", Math.floor(t));
+  }
 
   return `${base}?${params.toString()}`;
 }
