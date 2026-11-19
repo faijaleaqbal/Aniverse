@@ -98,6 +98,16 @@ export async function seed() {
           episodeCount++;
         }
       }
+
+      /* Prune rows beyond the catalog count. Upserts alone never removed
+         episodes when a count was REDUCED (e.g. AoT 75->25), leaving dead
+         "Episode N" rows listed on the detail page. Keep DB == catalog.
+         dub_checks is pruned too so stale rows can never inflate DUB counts
+         (dubCount = COUNT(available=1) over dub_checks, no episodes join).
+         User data (watchlist / watch_progress / comments) is never touched. */
+      const maxEp = item.kind === "Film" ? 1 : (item.episodes || 12);
+      db.prepare("DELETE FROM episodes WHERE title_slug = ? AND ep_num > ?").run(item.slug, maxEp);
+      db.prepare("DELETE FROM dub_checks WHERE title_slug = ? AND ep_num > ?").run(item.slug, maxEp);
     }
 
     return { titleCount, episodeCount };
