@@ -89,7 +89,7 @@
     <section class="spotlight-hero" aria-label="Spotlight Carousel">
       <div id="spotlight-slider-container">
         <!-- Rendered dynamically via zoro-aizen.js -->
-        <div class="spotlight-slide is-active">
+        <div class="spotlight-slide is-active" id="spotlight-static-slide">
           <div class="spotlight-backdrop" style="background-image: url('img/banners/kagerou-protocol.jpg');"></div>
           <div class="spotlight-overlay"></div>
           <div class="spotlight-content">
@@ -112,6 +112,52 @@
           </div>
         </div>
       </div>
+
+      <script>
+        /* The static fallback slide (visible until the catalog API answers)
+           must show the SAME probe-backed badges as the rendered carousel —
+           never a stale hardcoded DUB claim. Patch it from the title API at
+           parse time; the app replaces the slide once it renders. */
+        (function () {
+          var path = "/api/titles/kagerou-protocol";
+          window.__zoroPrefetch = window.__zoroPrefetch || {};
+          var ctl = new AbortController();
+          var to = setTimeout(function () { ctl.abort(); }, 10000);
+          window.__zoroPrefetch[path] = fetch(path, { credentials: "same-origin", signal: ctl.signal })
+            .then(function (r) {
+              clearTimeout(to);
+              return r.json().then(function (d) {
+                var t = d && d.title;
+                /* ONLY the static fallback slide — once the app renders the
+                   carousel this element is gone and the patch is a no-op.
+                   (A generic selector raced the render and stamped JJK's
+                   badges onto the first rendered slide.) */
+                var staticSlide = document.getElementById("spotlight-static-slide");
+                var badges = staticSlide ? staticSlide.querySelector(".spotlight-badges") : null;
+                if (t && badges) {
+                  var sub = badges.querySelector(".badge-sub");
+                  if (sub) sub.textContent = "SUB " + (t.episodes || 1);
+                  var dub = badges.querySelector(".badge-dub");
+                  if (t.dubCount > 0) {
+                    if (!dub) {
+                      dub = document.createElement("span");
+                      dub.className = "badge badge-dub";
+                      if (sub) sub.insertAdjacentElement("afterend", dub); else badges.appendChild(dub);
+                    }
+                    dub.textContent = "DUB " + t.dubCount;
+                  } else if (dub) {
+                    dub.remove();
+                  }
+                }
+                return { ok: r.ok, status: r.status, data: d, error: null };
+              });
+            })
+            .catch(function (e) {
+              clearTimeout(to);
+              return { ok: false, status: 0, data: null, error: String((e && e.message) || e) };
+            });
+        })();
+      </script>
 
       <div class="spotlight-nav">
         <button class="spotlight-arrow" id="spotlight-prev" type="button" aria-label="Previous Slide">‹</button>
