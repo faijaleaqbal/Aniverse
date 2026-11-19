@@ -262,13 +262,16 @@ export const CATALOG = [
   {
     slug: "encore-one-more",
     name: "Encore, One More",
-    kind: "Film",
-    year: 2026,
-    episodes: 1,
-    runtimeMin: 101,
+    /* Streams Kaguya-sama: Love is War -Ultra Romantic- (MAL 43608): a TV
+       series of 13 episodes, ~24 min each — NOT a 101-minute film. Metadata
+       must describe what the mapped mal_id actually plays. */
+    kind: "Series",
+    year: 2022,
+    episodes: 13,
+    runtimeMin: 24,
     genres: ["romance", "comedy"],
     tone: 2,
-    studio: "A-1 Pictures / Petal Radio",
+    studio: "A-1 Pictures",
     malId: 43608, // Kaguya-sama Ultra Romantic
     anilistId: 125367,
     tagline: "A touring band plays one last show in a hall scheduled for demolition.",

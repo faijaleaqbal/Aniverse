@@ -864,21 +864,40 @@
 
       const trendingPrev = document.getElementById("trending-prev");
       const trendingNext = document.getElementById("trending-next");
+      /* Jump by WHOLE cards, landing exactly on a card boundary. Instant
+         (not smooth) so no card is ever sliced mid-scroll; manual wheel/touch
+         scrolling still settles whole via scroll-snap. The landing is
+         computed from live FRACTIONAL rects (card edge -> rail edge), never
+         from rounded scrollWidth/clientWidth integers — integer math let
+         Chrome's device-pixel rounding shave a sub-pixel sliver off the edge
+         card. At the end, the LAST card's right edge aligns flush instead. */
+      const scrollTrendingBy = (dirCards) => {
+        const items = Array.from(trendingRail.querySelectorAll(".trending-item"));
+        if (!items.length) return;
+        const railRect = trendingRail.getBoundingClientRect();
+        const gap = parseFloat(getComputedStyle(trendingRail).columnGap) || 20;
+        const step = items[0].getBoundingClientRect().width + gap;
+        const visibleCount = Math.max(1, Math.round(railRect.width / step));
+        const lastStartIdx = Math.max(0, items.length - visibleCount);
+        const idx = Math.round(trendingRail.scrollLeft / step);
+        const targetIdx = Math.min(lastStartIdx, Math.max(0, idx + dirCards));
+        let target;
+        if (targetIdx >= lastStartIdx && items.length > visibleCount) {
+          const lastRect = items[items.length - 1].getBoundingClientRect();
+          target = trendingRail.scrollLeft + (lastRect.right - railRect.right);
+        } else {
+          const cardRect = items[targetIdx].getBoundingClientRect();
+          target = trendingRail.scrollLeft + (cardRect.left - railRect.left);
+        }
+        trendingRail.scrollTo({ left: Math.max(0, target), behavior: "instant" });
+      };
       if (trendingPrev && trendingPrev.dataset.bound !== "true") {
         trendingPrev.dataset.bound = "true";
-        trendingPrev.addEventListener("click", () => {
-          const item = trendingRail.querySelector(".trending-item");
-          const step = item ? item.offsetWidth + 20 : 200;
-          trendingRail.scrollBy({ left: -step * 2, behavior: "smooth" });
-        });
+        trendingPrev.addEventListener("click", () => scrollTrendingBy(-2));
       }
       if (trendingNext && trendingNext.dataset.bound !== "true") {
         trendingNext.dataset.bound = "true";
-        trendingNext.addEventListener("click", () => {
-          const item = trendingRail.querySelector(".trending-item");
-          const step = item ? item.offsetWidth + 20 : 200;
-          trendingRail.scrollBy({ left: step * 2, behavior: "smooth" });
-        });
+        trendingNext.addEventListener("click", () => scrollTrendingBy(2));
       }
     }
 
@@ -1259,8 +1278,18 @@
     let currentPosition = 0;
     let duration = 1440;
     let isPaused = true;
-    let isMuted = false;
     let lastProgressSync = 0;
+    let lastLocalSave = 0;
+    /* Resume-notice lifecycle: the note must stay up until dismissed or a few
+       seconds AFTER playback actually starts — never a flat timer from page
+       load (the player has not even begun then, so nobody ever saw it). */
+    let resumeNoteTimer = null;
+    let resumeNoteArmOnPlay = false;
+    let resumeNoteShownForLoad = false;
+    let resumeTimeForLoad = 0;
+    let loadStartedAt = 0;
+    let skippedThisLoad = false;
+    let seekCommandThisLoad = false;
 
     // LocalStorage keys
     const LS_SETTINGS_KEY = "av_zoko_settings";
@@ -1294,8 +1323,53 @@
       } catch {}
     }
 
+    /* Signed-out resume: the server only stores progress for signed-in users,
+       so for everyone else the site keeps its own per-episode position in
+       localStorage. Without this, resume still happened (the EMBED keeps an
+       internal osp:pos store) but the site never knew about it — no "Resumed
+       from…" notice, no Restart button. Mirrors the embed's own rules:
+       ignore <5s, ignore the last 20s / >95% (counts as finished). */
+    const LS_PROGRESS_KEY = "av_zoko_progress";
+    function readProgressMap() {
+      try {
+        return JSON.parse(localStorage.getItem(LS_PROGRESS_KEY) || "{}");
+      } catch {
+        return {};
+      }
+    }
+    function readLocalProgress(slug, ep) {
+      const row = readProgressMap()[`${slug}:${ep}`];
+      return row && typeof row.t === "number" ? row : null;
+    }
+    function writeLocalProgress(slug, ep, pos, dur) {
+      try {
+        const map = readProgressMap();
+        map[`${slug}:${ep}`] = { t: Math.floor(pos), d: Math.floor(dur || 0), at: Date.now() };
+        // Keep the store bounded: drop the oldest entries past 200.
+        const keys = Object.keys(map);
+        if (keys.length > 200) {
+          keys.sort((a, b) => (map[a].at || 0) - (map[b].at || 0));
+          for (const k of keys.slice(0, keys.length - 200)) delete map[k];
+        }
+        localStorage.setItem(LS_PROGRESS_KEY, JSON.stringify(map));
+      } catch {}
+    }
+    function clearLocalProgress(slug, ep) {
+      try {
+        const map = readProgressMap();
+        delete map[`${slug}:${ep}`];
+        localStorage.setItem(LS_PROGRESS_KEY, JSON.stringify(map));
+      } catch {}
+    }
+    /* Same "watched enough to resume, not finished" window the embed uses. */
+    function resumablePosition(pos, dur) {
+      const d = dur > 0 ? dur : 1440;
+      return typeof pos === "number" && pos >= 5 && pos < d - 20 && pos / d <= 0.95;
+    }
+
     // Helper: Send postMessage commands to ZokoAnime embed player
     function sendPlayerCommand(cmd) {
+      if (cmd && cmd.type === "seek") seekCommandThisLoad = true;
       if (iframe && iframe.contentWindow) {
         iframe.contentWindow.postMessage(
           Object.assign({ channel: "zokoanime" }, cmd),
@@ -1328,6 +1402,14 @@
            alone is ignored and playback starts at 0). Emit both. */
         const startSec = Math.floor(opts.startTime);
         url += `&t=${startSec}&time=${startSec}`;
+      }
+      if (opts.noResume) {
+        /* The embed keeps its OWN per-video resume store (localStorage
+           osp:pos:<id>) and applies it whenever no explicit start point is
+           given — so time=0 alone does NOT restart an episode. `resume=0`
+           is the provider's documented switch that disables that internal
+           resume (verified against the embed payload: resume:false). */
+        url += "&resume=0";
       }
       return url;
     }
@@ -1536,9 +1618,66 @@
       return api(`/api/titles/${encodeURIComponent(currentSlug)}/episodes/${epNum}`);
     }
 
+    /* Resume notice — shown on BOTH resume paths (signed-in server position
+       AND signed-out localStorage position), plus a fallback for the embed's
+       own internal resume that the site cannot know about up front. Stays
+       visible until dismissed, or 6s after playback actually starts. */
+    function showResumeNote(seconds) {
+      if (!resumeNote) return;
+      if (resumeNoteTimer) {
+        clearTimeout(resumeNoteTimer);
+        resumeNoteTimer = null;
+      }
+      resumeNoteShownForLoad = true;
+      resumeNoteArmOnPlay = true;
+      resumeNote.innerHTML = `
+        Resumed from ${formatTime(seconds)}
+        <button class="btn-zoro-primary" id="resume-restart-btn" type="button" style="margin-left: 0.5rem; font-size: 0.75rem;">Restart</button>
+        <button id="resume-dismiss-btn" type="button" aria-label="Dismiss resume notice" style="margin-left: 0.35rem; background: none; border: none; color: var(--zoro-lime); font-size: 0.9rem; cursor: pointer; line-height: 1;">✕</button>
+      `;
+      resumeNote.hidden = false;
+      const restartBtn = resumeNote.querySelector("#resume-restart-btn");
+      if (restartBtn) {
+        restartBtn.addEventListener("click", () => {
+          hideResumeNote();
+          /* loadEpisode's third argument is a BOOLEAN. Passing an object
+             here only ever worked by accident (truthy). */
+          loadEpisode(currentEp, null, true);
+        });
+      }
+      const dismissBtn = resumeNote.querySelector("#resume-dismiss-btn");
+      if (dismissBtn) dismissBtn.addEventListener("click", hideResumeNote);
+    }
+    function hideResumeNote() {
+      if (resumeNoteTimer) {
+        clearTimeout(resumeNoteTimer);
+        resumeNoteTimer = null;
+      }
+      resumeNoteArmOnPlay = false;
+      if (resumeNote) {
+        resumeNote.hidden = true;
+        resumeNote.innerHTML = "";
+      }
+    }
+    /* Called from the player's play / first time event: only NOW does the
+       auto-hide countdown start (a few seconds after playback begins). */
+    function armResumeNoteAutoHide() {
+      if (!resumeNoteArmOnPlay) return;
+      resumeNoteArmOnPlay = false;
+      if (resumeNoteTimer) clearTimeout(resumeNoteTimer);
+      resumeNoteTimer = setTimeout(hideResumeNote, 6000);
+    }
+
     async function loadEpisode(epNum, prefetched, startFromBeginning = false) {
       currentEp = epNum;
       activeEpisode = epNum;
+      /* New load: retire any previous resume notice and its timers. */
+      hideResumeNote();
+      resumeNoteShownForLoad = false;
+      resumeTimeForLoad = 0;
+      loadStartedAt = Date.now();
+      skippedThisLoad = false;
+      seekCommandThisLoad = false;
 
       /* New episode: re-probe dub availability in the background (the Dub
          pill awaits this probe if it is still running when clicked). The
@@ -1605,31 +1744,27 @@
       hideDataError();
 
       let resumeTime = 0;
-      if (typeof epData.savedPositionSec === "number" && !startFromBeginning) {
+      if (startFromBeginning) {
+        /* Restart: forget the saved position so the next reload does not
+           resume again, and tell the embed to skip its own resume store. */
+        clearLocalProgress(currentSlug, epNum);
+      } else {
         const epDur = epData.durationSec || 1440;
-        if (epData.savedPositionSec > 0 && epData.savedPositionSec < epDur - 10) {
-          resumeTime = epData.savedPositionSec;
-          if (resumeNote) {
-            resumeNote.innerHTML = `
-              Resumed from ${formatTime(resumeTime)}
-              <button class="btn-zoro-primary" id="resume-restart-btn" type="button" style="margin-left: 0.5rem; font-size: 0.75rem;">Restart</button>
-            `;
-            resumeNote.hidden = false;
-            const restartBtn = resumeNote.querySelector("#resume-restart-btn");
-            if (restartBtn) {
-              restartBtn.addEventListener("click", () => {
-                loadEpisode(currentEp, null, { startFromBeginning: true });
-              });
-            }
-            setTimeout(() => {
-              if (resumeNote) {
-                resumeNote.hidden = true;
-                resumeNote.innerHTML = "";
-              }
-            }, 5000);
+        if (typeof epData.savedPositionSec === "number" && resumablePosition(epData.savedPositionSec, epDur)) {
+          /* Signed-in path: position saved on the server. */
+          resumeTime = Math.floor(epData.savedPositionSec);
+        } else if (!currentUser) {
+          /* Signed-out path: position saved by this page in localStorage.
+             (The embed also resumes internally; the watching-log fallback
+             below catches any resume the site did not initiate.) */
+          const lp = readLocalProgress(currentSlug, epNum);
+          if (lp && resumablePosition(lp.t, lp.d || epDur)) {
+            resumeTime = Math.floor(lp.t);
           }
         }
       }
+      resumeTimeForLoad = resumeTime;
+      if (resumeTime > 0) showResumeNote(resumeTime);
 
       // Reflect the resumed position in the UI before the player reports back
       currentPosition = resumeTime;
@@ -1648,6 +1783,7 @@
         autoskip: playerSettings.autoskip,
         autonext: playerSettings.autonext,
         startTime: resumeTime,
+        noResume: startFromBeginning === true,
       });
 
       if (!streamUrl) {
@@ -1827,33 +1963,43 @@
       });
     }
 
-    // Fullscreen button
-        const fsBtn = document.getElementById("btn-fullscreen");
-        if (fsBtn && playerWrap) {
-          fsBtn.addEventListener("click", () => {
-            if (!document.fullscreenElement) {
-              playerWrap.requestFullscreen().catch(() => {});
-            } else {
-              document.exitFullscreen().catch(() => {});
-            }
-          });
+    /* Fullscreen: ONE shared path for the button, the F key and the embed's
+       own fullscreen request. A user-facing action must never fail silently:
+       rejections are logged AND shown (the old `.catch(() => {})` swallowed
+       every refusal — e.g. a click without user activation or a background
+       tab — leaving zero trace of why fullscreen "did nothing"). */
+    function reportFullscreenError(action, err) {
+      const reason = (err && (err.message || err.name)) || "unknown error";
+      console.error(`Fullscreen ${action} rejected:`, err);
+      let hint = "";
+      if (document.visibilityState !== "visible") {
+        hint = " — bring this tab to the front and try again";
+      } else if (/gesture|activation|user/i.test(String(reason))) {
+        hint = " — the browser needs a direct click/keypress";
+      }
+      showToast(`Fullscreen ${action} failed: ${reason}${hint}`, "!", 5000);
+    }
+    function toggleFullscreen() {
+      if (!playerWrap) {
+        reportFullscreenError("enter", new Error("player wrapper not found"));
+        return;
+      }
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch((err) => reportFullscreenError("exit", err));
+      } else {
+        if (document.fullscreenEnabled === false) {
+          reportFullscreenError("enter", new Error("fullscreen is disabled in this browser/context"));
+          return;
         }
+        playerWrap.requestFullscreen().catch((err) => reportFullscreenError("enter", err));
+      }
+    }
 
-        // Mute button
-        const muteBtn = document.getElementById("btn-mute");
-        const muteIcon = document.getElementById("mute-icon");
-        if (muteBtn) {
-          muteBtn.addEventListener("click", () => {
-            if (isMuted) {
-              sendPlayerCommand({ type: "mute", on: false });
-              isMuted = false;
-            } else {
-              sendPlayerCommand({ type: "mute", on: true });
-              isMuted = true;
-            }
-            if (muteIcon) muteIcon.textContent = isMuted ? "🔇" : "🔊";
-          });
-        }
+    // Fullscreen button
+    const fsBtn = document.getElementById("btn-fullscreen");
+    if (fsBtn) {
+      fsBtn.addEventListener("click", toggleFullscreen);
+    }
 
     // Skip buttons: Absolute seek clamped to [0, duration] sent to official origin
     const skipBack = document.getElementById("btn-skip-back");
@@ -1937,6 +2083,9 @@
       if (data.type === "play") {
         isPaused = false;
         if (playPauseBtn) playPauseBtn.textContent = "❚❚";
+        /* Playback has actually started: begin the resume notice's
+           auto-hide countdown now (not at page load). */
+        armResumeNoteAutoHide();
       }
 
       // Event: pause
@@ -1957,11 +2106,10 @@
           isPaused = data.paused;
           if (playPauseBtn) playPauseBtn.textContent = isPaused ? "▶" : "❚❚";
         }
-        if (typeof data.muted === "boolean") {
-          isMuted = data.muted;
-          const icon = document.getElementById("mute-icon");
-          if (icon) icon.textContent = isMuted ? "🔇" : "🔊";
-        }
+        /* Note: the embed reports `muted` here, but exposes NO postMessage
+           command to change it (its dispatcher only accepts seek/play/pause/
+           autoplay/autoskip/autonext/state). The site therefore ships no mute
+           control — the embed's own volume control is the real one. */
       }
 
       // Event: time or watching-log
@@ -1975,9 +2123,6 @@
         duration = dur;
 
         // Update time text strictly driven by player events (Bug 10)
-        if (timeText) {
-          timeText.textContent = `${formatTime(cur)} / ${formatTime(dur)}`;
-        }
         if (timeText) {
           timeText.textContent = `${formatTime(cur)} / ${formatTime(dur)}`;
         }
@@ -1996,10 +2141,35 @@
             },
           });
         }
+
+        /* Signed-out progress: keep the site's own localStorage copy so the
+           next visit can show "Resumed from…" + Restart (the embed's internal
+           resume is invisible to the site otherwise). Throttled to 5s. */
+        if (!currentUser && cur > 0 && now - lastLocalSave > 5000) {
+          lastLocalSave = now;
+          writeLocalProgress(currentSlug, currentEp, cur, dur);
+        }
+
+        /* Fallback: the embed resumed from ITS internal store (no site-side
+           position was known at load). Surface that resume honestly instead
+           of silently continuing. Only early in the load, and never after an
+           auto-skip jump or a viewer seek (those are not resumes). */
+        if (
+          !resumeNoteShownForLoad &&
+          resumeTimeForLoad === 0 &&
+          !skippedThisLoad &&
+          !seekCommandThisLoad &&
+          cur > 30 &&
+          now - loadStartedAt < 15000
+        ) {
+          showResumeNote(cur);
+        }
+        if (cur > 0) armResumeNoteAutoHide();
       }
 
       // Event: skipped (intro or outro)
       if (data.type === "skipped") {
+        skippedThisLoad = true;
         const segment = data.name === "outro" ? "outro" : "intro";
         showToast(`Skipped ${segment}`);
       }
@@ -2031,12 +2201,12 @@
         }
       }
 
-      // Event: fullscreen request from embed
-      if (data.type === "fullscreen" && playerWrap) {
+      // Event: fullscreen request from embed (same shared path + error path)
+      if (data.type === "fullscreen") {
         if (data.request === "enter" && !document.fullscreenElement) {
-          playerWrap.requestFullscreen().catch(() => {});
+          toggleFullscreen();
         } else if (data.request === "exit" && document.fullscreenElement) {
-          document.exitFullscreen().catch(() => {});
+          toggleFullscreen();
         }
       }
     });
@@ -2071,11 +2241,7 @@
         sendPlayerCommand({ type: isPaused ? "play" : "pause" });
       } else if (e.code === "KeyF") {
         e.preventDefault();
-        if (!document.fullscreenElement && playerWrap) {
-          playerWrap.requestFullscreen().catch(() => {});
-        } else if (document.fullscreenElement) {
-          document.exitFullscreen().catch(() => {});
-        }
+        toggleFullscreen();
       } else if (e.code === "ArrowLeft") {
         e.preventDefault();
         const target = Math.max(0, currentPosition - 10);
@@ -2084,18 +2250,11 @@
         e.preventDefault();
         const target = Math.min(duration, currentPosition + 10);
         sendPlayerCommand({ type: "seek", time: target });
-      } else if (e.code === "KeyM") {
-        e.preventDefault();
-        if (isMuted) {
-          sendPlayerCommand({ type: "mute", on: false });
-          isMuted = false;
-        } else {
-          sendPlayerCommand({ type: "mute", on: true });
-          isMuted = true;
-        }
-        const icon = document.getElementById("mute-icon");
-        if (icon) icon.textContent = isMuted ? "🔇" : "🔊";
       }
+      /* No M shortcut: the Zoko embed exposes no mute/volume postMessage
+         command (verified against its live command dispatcher), so a site
+         mute control would be fake. The embed's own volume control is the
+         real mute path. */
     });
 
     // Fullscreenchange event: report state back to player
