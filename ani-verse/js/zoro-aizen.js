@@ -244,6 +244,16 @@
     if (!toggleBtns.length) return;
 
     let backdrop = document.querySelector(".mobile-nav-backdrop");
+    /* Single open/close path: the body class lifts the site header (and its
+       hamburger toggle) ABOVE the backdrop while the drawer is open, so the
+       toggle itself stays clickable and closes the drawer. Without it the
+       280px drawer slides over the hamburger and its brand link hijacks the
+       click (navigating to index.html instead of closing). */
+    const setDrawer = (open) => {
+      if (!backdrop) return;
+      backdrop.classList.toggle("is-open", open);
+      document.body.classList.toggle("drawer-open", open);
+    };
     if (!backdrop) {
       backdrop = document.createElement("div");
       backdrop.className = "mobile-nav-backdrop";
@@ -270,14 +280,14 @@
       document.body.appendChild(backdrop);
 
       const closeBtn = backdrop.querySelector(".mobile-drawer-close");
-      if (closeBtn) closeBtn.addEventListener("click", () => backdrop.classList.remove("is-open"));
+      if (closeBtn) closeBtn.addEventListener("click", () => setDrawer(false));
       backdrop.addEventListener("click", (e) => {
-        if (e.target === backdrop) backdrop.classList.remove("is-open");
+        if (e.target === backdrop) setDrawer(false);
       });
       /* Escape closes the drawer (it used to do nothing). */
       document.addEventListener("keydown", (e) => {
         if (e.key === "Escape" && backdrop.classList.contains("is-open")) {
-          backdrop.classList.remove("is-open");
+          setDrawer(false);
         }
       });
     }
@@ -285,7 +295,7 @@
     toggleBtns.forEach((btn) => {
       btn.addEventListener("click", () => {
         /* Toggle: clicking the hamburger again closes the drawer. */
-        backdrop.classList.toggle("is-open");
+        setDrawer(!backdrop.classList.contains("is-open"));
       });
     });
   }
@@ -1530,8 +1540,9 @@
       activeEpisode = epNum;
 
       /* New episode: re-probe dub availability in the background (the Dub
-         pill awaits this probe if it is still running when clicked). */
-      dubAvailable = null;
+         pill awaits this probe if it is still running when clicked). The
+         fresh entry starts unknown, so the previous episode's answer can
+         never leak into this one. */
       probeDubAvailability(epNum);
 
       // Clear episode-search filter and input box on every episode change (Bug 5)
@@ -1669,15 +1680,21 @@
 
     /* Dub availability for the current episode, probed by the server (Zoko
        serves the sub file under /dub for some titles — switching blindly used
-       to play Japanese while claiming Dub). null = unknown / not probed yet. */
-    let dubAvailable = null;
-    let dubProbePromise = null;
+       to play Japanese while claiming Dub). The result is SCOPED TO THE
+       EPISODE it was fetched for: a single shared variable let a slow probe
+       for a previous episode resolve after the current episode's probe and
+       overwrite its answer — unlocking Dub on an episode whose "dub" is
+       really the sub file (reproduced: ep5's late true clobbered ep1's
+       false). null = unknown / not probed yet. */
+    let dubProbe = { ep: null, available: null, promise: null };
     function probeDubAvailability(epNum) {
-      dubProbePromise = api(`/api/dub-availability/${encodeURIComponent(currentSlug)}/${epNum}`).then((res) => {
-        dubAvailable = res.ok && res.data && typeof res.data.available === "boolean" ? res.data.available : null;
-        return dubAvailable;
+      const entry = { ep: epNum, available: null, promise: null };
+      entry.promise = api(`/api/dub-availability/${encodeURIComponent(currentSlug)}/${epNum}`).then((res) => {
+        entry.available = res.ok && res.data && typeof res.data.available === "boolean" ? res.data.available : null;
+        return entry.available;
       });
-      return dubProbePromise;
+      dubProbe = entry;
+      return entry.promise;
     }
 
     if (trackSwitcher) {
@@ -1687,11 +1704,16 @@
           if (requestedTrack === currentTrack) return;
 
           if (requestedTrack === "dub") {
-            let avail = dubAvailable;
+            const epAtClick = currentEp;
+            const entry = dubProbe.ep === epAtClick ? dubProbe : null;
+            let avail = entry ? entry.available : null;
             if (avail === null) {
               showToast("Checking dub availability…", "⏳", 2500);
-              avail = await (dubProbePromise || probeDubAvailability(currentEp));
+              avail = await (entry ? entry.promise : probeDubAvailability(epAtClick));
             }
+            /* The viewer may have switched episodes while the probe ran —
+               never apply a stale answer to a different episode. */
+            if (currentEp !== epAtClick) return;
             if (avail !== true) {
               showToast(
                 avail === false
@@ -1987,7 +2009,7 @@
         }
       };
       iframe.addEventListener("focus", containFocus);
-      setInterval(containFocus, 250);
+      setInterval(containFocus, 100);
     }
 
     // Keyboard Shortcuts (only when activeElement is not an input/textarea)

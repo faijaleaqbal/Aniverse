@@ -36,8 +36,12 @@ Aniverse/
     │   ├── utils.js            # Password hashing, tokens, view transformers
     │   └── zoko.js             # Server-side ZokoAnime embed URL builder
     └── test/
-        ├── smoke.js            # Unit tests for buildEmbedUrl
-        └── e2e.js              # Integration tests for /api/player/config & /api/stream
+        ├── smoke.js            # Unit tests for buildEmbedUrl (11 checks)
+        ├── e2e.js              # Integration tests: config, stream, search, dub gate, episode titles (10 tests)
+        ├── setup-db.js         # Self-seeding TEMP database + offline enrichment (fresh-clone safe)
+        ├── make-fixture.mjs    # Regenerates the metadata fixture from the live DB
+        └── fixtures/
+            └── enriched-metadata.json  # Offline snapshot of real titles + episode names
 ```
 
 ---
@@ -119,7 +123,11 @@ npm run seed
 ```bash
 npm test
 ```
-Runs both `test/smoke.js` (10 unit checks) and `test/e2e.js` (6 integration tests).
+Runs `test/smoke.js` (11 unit checks) and `test/e2e.js` (10 integration tests) — **21 tests, all passing on a fresh clone with no manual steps**.
+
+The E2E suite is fully self-contained: `test/setup-db.js` creates a **temporary database** (never touches `data/aniverse.db`), seeds the catalog, and enriches it offline from `test/fixtures/enriched-metadata.json` (a snapshot of the real titles + real per-title episode names). No network access, no `npm run seed`, and no metadata fetches are needed before `npm test`. The temporary database is deleted on exit.
+
+> Regenerate the fixture after catalog/metadata changes: `node test/make-fixture.mjs` (reads the enriched live database).
 
 ### 4. Start the Application
 ```bash
@@ -132,6 +140,15 @@ npm run dev
 
 Visit the application in your browser:
 👉 **[http://localhost:4000](http://localhost:4000)**
+
+### 5. Live database with real metadata (optional, needs network)
+A fresh `npm run seed` populates **fictional placeholder names** and generic `Episode N` titles. To enrich the live database with real anime titles and real per-title episode names:
+```bash
+npm run seed                          # catalog + episodes + demo user
+node scripts/fetch-metadata.mjs       # real titles/synopses/posters (AniList)
+node scripts/fetch-episode-titles.mjs # real episode titles per title (Kitsu)
+```
+This enrichment is only for the running app — the test suite does not depend on it.
 
 ---
 
