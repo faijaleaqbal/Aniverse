@@ -132,8 +132,14 @@
     <!-- Zoro Trending Top 10 Rail -->
     <section class="section-trending container-main">
       <div class="section-header-zoro">
-        <h2 class="section-title">Trending <span class="accent">Anime</span></h2>
-        <span style="font-size: 0.85rem; color: var(--text-muted); font-family: var(--font-mono);">TOP 10 TODAY</span>
+        <div>
+          <h2 class="section-title">Trending <span class="accent">Anime</span></h2>
+          <span style="font-size: 0.85rem; color: var(--text-muted); font-family: var(--font-mono);">TOP 10 TODAY</span>
+        </div>
+        <div class="trending-nav">
+          <button class="trending-arrow" id="trending-prev" type="button" aria-label="Previous Trending Anime">‹</button>
+          <button class="trending-arrow" id="trending-next" type="button" aria-label="Next Trending Anime">›</button>
+        </div>
       </div>
       <div class="trending-rail" id="trending-rail-container">
         <!-- Rendered dynamically -->

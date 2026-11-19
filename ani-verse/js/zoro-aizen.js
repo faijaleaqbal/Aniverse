@@ -129,8 +129,13 @@
   }
 
   function initAizenIntro(force = false) {
-    if (!force && sessionStorage.getItem("aizen_intro_seen")) {
-      return;
+    try {
+      if (!force && sessionStorage.getItem("aizen_intro_seen")) {
+        return;
+      }
+      sessionStorage.setItem("aizen_intro_seen", "true");
+    } catch (e) {
+      // ignore storage access errors
     }
 
     const overlay = document.createElement("div");
@@ -839,6 +844,25 @@
           </div>
         </a>
       `).join("");
+
+      const trendingPrev = document.getElementById("trending-prev");
+      const trendingNext = document.getElementById("trending-next");
+      if (trendingPrev && trendingPrev.dataset.bound !== "true") {
+        trendingPrev.dataset.bound = "true";
+        trendingPrev.addEventListener("click", () => {
+          const item = trendingRail.querySelector(".trending-item");
+          const step = item ? item.offsetWidth + 20 : 200;
+          trendingRail.scrollBy({ left: -step * 2, behavior: "smooth" });
+        });
+      }
+      if (trendingNext && trendingNext.dataset.bound !== "true") {
+        trendingNext.dataset.bound = "true";
+        trendingNext.addEventListener("click", () => {
+          const item = trendingRail.querySelector(".trending-item");
+          const step = item ? item.offsetWidth + 20 : 200;
+          trendingRail.scrollBy({ left: step * 2, behavior: "smooth" });
+        });
+      }
     }
 
     // 2. 4 Columns
@@ -908,7 +932,19 @@
     function renderCards(list) {
       hideHoverTooltip();
       if (!list.length) {
-        grid.innerHTML = `<div style="grid-column: 1 / -1; padding: 3rem 1rem; text-align: center; color: var(--text-muted); font-size: 0.95rem;">No anime found matching your selection.</div>`;
+        grid.innerHTML = `
+          <div class="zoro-empty-state" id="zoro-empty-state">
+            <div class="zoro-empty-state-icon">
+              <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+              </svg>
+            </div>
+            <h3 class="zoro-empty-state-title">No Anime Found</h3>
+            <p class="zoro-empty-state-msg">We couldn't find any results${currentSearch ? ` for "<span class="accent-query">${escapeHtml(currentSearch)}</span>"` : ""}. Try another title or genre, or return to the full catalog.</p>
+            <a href="browse.html" class="empty-state-browse-link">Back to Browse</a>
+          </div>
+        `;
         markContentReady();
         return;
       }
@@ -1483,6 +1519,19 @@
     async function loadEpisode(epNum, prefetched) {
       currentEp = epNum;
       activeEpisode = epNum;
+
+      // Clear episode-search filter and input box on every episode change (Bug 5)
+      const epSearchInput = document.getElementById("ep-search-input");
+      if (epSearchInput && epSearchInput.value) {
+        epSearchInput.value = "";
+      }
+      if (epGrid) {
+        epGrid.querySelectorAll(".ep-btn").forEach((btn) => {
+          btn.style.display = "flex";
+        });
+        const noMatchEl = epGrid.querySelector(".ep-no-search-match");
+        if (noMatchEl) noMatchEl.remove();
+      }
 
       // Optimistically update the episode heading from the already-cached
       // episode list so it tracks the URL instantly instead of lagging ~1-2s
