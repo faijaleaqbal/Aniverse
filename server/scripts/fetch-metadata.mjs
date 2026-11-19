@@ -173,9 +173,14 @@ async function main() {
       const synopsis = stripHtml(media.description);
       const studioNodes = (media.studios && media.studios.nodes) || [];
       const animationStudios = studioNodes.filter((s) => s.isAnimationStudio && s.name);
-      const studioNames = (animationStudios.length ? animationStudios : studioNodes)
-        .map((s) => s.name)
-        .filter(Boolean);
+      /* Dedupe: AniList can return the same studio twice for one title (e.g.
+         Demon Slayer listed "ufotable, ufotable"). The displayed studio list
+         must name each studio once. */
+      const studioNames = [...new Set(
+        (animationStudios.length ? animationStudios : studioNodes)
+          .map((s) => s.name)
+          .filter(Boolean)
+      )];
       const primaryStudio = studioNames[0] || item.studio;
       const genres = Array.isArray(media.genres) ? media.genres : [];
       const year = media.seasonYear || item.year;

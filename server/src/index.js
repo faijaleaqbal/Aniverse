@@ -269,6 +269,34 @@ app.get("/api/auth/me", (req, res) => {
    CATALOG & TITLES ROUTES
    ========================================================================== */
 
+/* Per-title DUB counts come from the persisted per-episode probe results
+   (dub_checks) — the same probe the watch page uses. Only CONFIRMED dubs
+   (available = 1) are counted; failed/unknown probes never inflate it. This
+   is what every badge/list/detail page displays, so they all agree. */
+const dubCountStmt = db.prepare(
+  "SELECT COUNT(*) AS c FROM dub_checks WHERE title_slug = ? AND available = 1"
+);
+const dubCountsAllStmt = db.prepare(
+  "SELECT title_slug, COUNT(*) AS c FROM dub_checks WHERE available = 1 GROUP BY title_slug"
+);
+function withDubCount(view) {
+  if (!view) return view;
+  view.dubCount = dubCountStmt.get(view.slug).c;
+  return view;
+}
+const upsertDubCheck = db.prepare(`
+  INSERT INTO dub_checks (title_slug, ep_num, available, reason, checked_at)
+  VALUES (?, ?, ?, ?, ?)
+  ON CONFLICT(title_slug, ep_num) DO UPDATE SET
+    available = excluded.available,
+    reason = excluded.reason,
+    checked_at = excluded.checked_at
+`);
+function persistDubCheck(slug, epNum, result) {
+  const available = result.available === true ? 1 : result.available === false ? 0 : null;
+  upsertDubCheck.run(slug, epNum, available, result.reason || null, nowIso());
+}
+
 app.get("/api/titles", (req, res) => {
   const q = typeof req.query.q === "string" ? req.query.q.trim().toLowerCase() : "";
   const genre = typeof req.query.genre === "string" ? req.query.genre.trim().toLowerCase() : "";
@@ -309,12 +337,19 @@ app.get("/api/titles", (req, res) => {
     .prepare(`SELECT * FROM titles ${whereSql} ${orderSql} LIMIT ? OFFSET ?`)
     .all(...params, limit, offset);
 
+  const dubCounts = {};
+  for (const r of dubCountsAllStmt.all()) dubCounts[r.title_slug] = r.c;
+
   res.json({
     ok: true,
     total: totalCount,
     limit,
     offset,
-    titles: rows.map(titleView),
+    titles: rows.map((r) => {
+      const view = titleView(r);
+      view.dubCount = dubCounts[r.slug] || 0;
+      return view;
+    }),
   });
 });
 
@@ -367,7 +402,7 @@ app.get("/api/titles/:slug", (req, res) => {
 
   res.json({
     ok: true,
-    title: titleView(row),
+    title: withDubCount(titleView(row)),
     episodes,
     userState,
   });
@@ -481,9 +516,13 @@ app.get("/api/dub-availability/:slug/:ep", async (req, res, next) => {
     const title = db.prepare("SELECT mal_id FROM titles WHERE slug = ?").get(slug);
     if (!title) throw notFound("Title not found.");
     if (!title.mal_id) {
+      persistDubCheck(slug, epNum, { available: false, reason: "no-mal-id" });
       return res.json({ ok: true, slug, ep: epNum, available: false, reason: "no-mal-id" });
     }
     const result = await checkDubAvailability(title.mal_id, epNum);
+    /* Persist every probe so the per-title DUB count (dub_checks) stays in
+       sync with what the watch page verifies episode by episode. */
+    persistDubCheck(slug, epNum, result);
     res.json({ ok: true, slug, ep: epNum, ...result });
   } catch (err) {
     next(err);
@@ -528,7 +567,7 @@ app.get("/api/watchlist", requireAuth, (req, res) => {
 
   res.json({
     ok: true,
-    items: rows.map((r) => ({
+    items: rows.map((r) => withDubCount({
       ...titleView(r),
       addedAt: r.added_at,
     })),

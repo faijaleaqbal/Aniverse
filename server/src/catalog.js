@@ -60,7 +60,7 @@ export const CATALOG = [
     runtimeMin: 24,
     genres: ["fantasy", "drama"],
     tone: 5,
-    studio: "ufotable / Verse Works Film",
+    studio: "ufotable",
     malId: 38000, // Demon Slayer
     anilistId: 101922,
     tagline: "A fox spirit keeps a ledger of every drop that falls on one village.",

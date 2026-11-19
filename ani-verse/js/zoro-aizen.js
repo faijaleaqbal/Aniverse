@@ -574,10 +574,10 @@
       const q = input.value.trim();
       clearTimeout(debounceTimer);
 
-      // Live filter Browse grid if currently on browse page (Bug 11)
-      if (typeof window.__onSearchLiveFilter === "function") {
-        window.__onSearchLiveFilter(q);
-      }
+      /* The header search ONLY drives the suggestion dropdown. It must never
+         live-filter a page content grid (typing "Naruto" on Home used to shrink
+         the Latest Episodes grid to one card). Filtering happens on submit:
+         Enter navigates to browse.html?q=… (or applies the query there). */
 
       if (!q) {
         dropdown.classList.remove("is-open");
@@ -673,7 +673,7 @@
             <h1 class="spotlight-title"><a href="${detailHref(t.slug)}" style="color:inherit;text-decoration:none;">${escapeHtml(t.name)}</a></h1>
             <div class="spotlight-badges">
               <span class="badge badge-sub">SUB ${t.episodes || 1}</span>
-              <span class="badge badge-dub">DUB ${t.episodes || 1}</span>
+              ${t.dubCount > 0 ? `<span class="badge badge-dub">DUB ${t.dubCount}</span>` : ""}
               <span class="badge badge-type">${t.kind}</span>
               <span class="badge badge-hd">HD</span>
               <span style="font-size: 0.8rem; color: var(--text-sub); margin-left: 6px;">${t.year} • ${t.runtimeMin}m</span>
@@ -716,16 +716,27 @@
 
     const prevBtn = document.getElementById("spotlight-prev");
     const nextBtn = document.getElementById("spotlight-next");
-    if (prevBtn) prevBtn.addEventListener("click", () => goToSlide(currentSlide - 1));
-    if (nextBtn) nextBtn.addEventListener("click", () => goToSlide(currentSlide + 1));
-
-    // Auto rotate every 6s
-    let autoInterval = setInterval(() => goToSlide(currentSlide + 1), 6000);
-    sliderContainer.addEventListener("mouseenter", () => clearInterval(autoInterval));
-    sliderContainer.addEventListener("mouseleave", () => {
-      clearInterval(autoInterval);
+    /* Auto rotate every 6s. ANY manual navigation must clear AND restart the
+       timer — a click landing just before a scheduled tick used to advance
+       two slides at once (only mouseleave reset the interval before). */
+    let autoInterval = null;
+    function startAutoRotate() {
+      if (autoInterval) clearInterval(autoInterval);
       autoInterval = setInterval(() => goToSlide(currentSlide + 1), 6000);
+    }
+    function manualGoTo(n) {
+      goToSlide(n);
+      startAutoRotate();
+    }
+    if (prevBtn) prevBtn.addEventListener("click", () => manualGoTo(currentSlide - 1));
+    if (nextBtn) nextBtn.addEventListener("click", () => manualGoTo(currentSlide + 1));
+
+    startAutoRotate();
+    sliderContainer.addEventListener("mouseenter", () => {
+      if (autoInterval) clearInterval(autoInterval);
+      autoInterval = null;
     });
+    sliderContainer.addEventListener("mouseleave", startAutoRotate);
   }
 
   /* ==========================================================================
@@ -841,6 +852,29 @@
     const favoriteList = document.getElementById("col-favorite-list");
     const completedList = document.getElementById("col-completed-list");
 
+    /* First paint: skeleton placeholders hold the rail/column layout while
+       the catalog API answers — never empty dark boxes (Bug 9). */
+    if (trendingRail && !trendingRail.querySelector(".trending-item")) {
+      trendingRail.innerHTML = Array.from({ length: 7 }, () => `
+        <div class="trending-item trending-item-skeleton" aria-hidden="true">
+          <div class="trending-poster-wrap skeleton-shimmer"></div>
+        </div>
+      `).join("");
+    }
+    for (const list of [airingList, popularList, favoriteList, completedList]) {
+      if (list && !list.querySelector(".col-item")) {
+        list.innerHTML = Array.from({ length: 5 }, () => `
+          <div class="col-item col-item-skeleton" aria-hidden="true">
+            <div class="col-thumb skeleton-shimmer"></div>
+            <div class="col-item-details">
+              <div class="skeleton-line skeleton-shimmer" style="width: 90%;"></div>
+              <div class="skeleton-line skeleton-shimmer" style="width: 55%;"></div>
+            </div>
+          </div>
+        `).join("");
+      }
+    }
+
     const res = await fetchTitles(18);
     if (!res.ok || !res.data || !res.data.titles) return;
     const allTitles = res.data.titles;
@@ -908,10 +942,10 @@
         <a class="col-item" href="${detailHref(t.slug)}">
           <img class="col-thumb" src="${coverOf(t)}" alt="${escapeHtml(t.name)}" loading="lazy" decoding="async" fetchpriority="low">
           <div class="col-item-details">
-            <div class="col-item-title">${escapeHtml(t.name)}</div>
+            <div class="col-item-title" title="${escapeHtml(t.name)}">${escapeHtml(t.name)}</div>
             <div class="col-item-meta">
               <span class="badge-mini-sub">SUB</span>
-              <span class="badge-mini-dub">DUB</span>
+              ${t.dubCount > 0 ? `<span class="badge-mini-dub">DUB ${t.dubCount}</span>` : ""}
               <span>Ep ${t.episodes || 1}</span>
             </div>
           </div>
@@ -960,6 +994,44 @@
     const grid = document.getElementById("zoro-main-grid");
     if (!grid) return;
 
+    /* First paint must never be a blank dark grid: skeleton cards hold the
+       layout until the catalog API answers (~1s), then real posters replace
+       them. Above-the-fold posters load eagerly (see renderCards). */
+    if (!grid.querySelector(".zoro-card")) {
+      grid.innerHTML = Array.from({ length: 12 }, () => `
+        <div class="zoro-card zoro-card-skeleton" aria-hidden="true">
+          <div class="zoro-card-poster skeleton-shimmer"></div>
+          <div class="zoro-card-info">
+            <div class="skeleton-line skeleton-shimmer" style="width: 85%;"></div>
+            <div class="skeleton-line skeleton-shimmer" style="width: 55%;"></div>
+          </div>
+        </div>
+      `).join("");
+    }
+
+    /* Genre chips are rendered from GET /api/genres so EVERY genre that has
+       titles gets a working chip. The old hardcoded seven missed Supernatural,
+       Comedy, Music, Mystery, Slice of Life and Adventure (and invented Sports,
+       which has no titles). */
+    const chipsWrapEarly = document.getElementById("genre-chips-container");
+    if (chipsWrapEarly) {
+      const gRes = await api("/api/genres");
+      if (gRes.ok && gRes.data && gRes.data.counts) {
+        const counts = gRes.data.counts;
+        const keys = Object.keys(counts).sort(
+          (a, b) => counts[b] - counts[a] || a.localeCompare(b)
+        );
+        chipsWrapEarly.innerHTML =
+          `<button class="genre-chip-zoro active" data-genre="all" type="button">All</button>` +
+          keys
+            .map((k) => {
+              const label = (GENRE_META[k] && GENRE_META[k].label) || k.charAt(0).toUpperCase() + k.slice(1);
+              return `<button class="genre-chip-zoro" data-genre="${encodeURIComponent(k)}" type="button">${escapeHtml(label)}</button>`;
+            })
+            .join("");
+      }
+    }
+
     const res = await fetchTitles(18);
     if (!res.ok || !res.data || !res.data.titles) return;
 
@@ -967,6 +1039,7 @@
 
     function renderCards(list) {
       hideHoverTooltip();
+      const mainEl = grid.closest("main");
       if (!list.length) {
         grid.innerHTML = `
           <div class="zoro-empty-state" id="zoro-empty-state">
@@ -981,21 +1054,25 @@
             <a href="browse.html" class="empty-state-browse-link">Back to Browse</a>
           </div>
         `;
+        /* Tight layout: the empty state sits naturally above the footer
+           instead of leaving the full-grid bottom padding as a dead gap. */
+        if (mainEl) mainEl.classList.add("grid-is-empty");
         markContentReady();
         return;
       }
 
-      grid.innerHTML = list.map((t) => `
+      if (mainEl) mainEl.classList.remove("grid-is-empty");
+      grid.innerHTML = list.map((t, i) => `
         <div class="zoro-card" data-slug="${t.slug}" data-genres="${t.genres ? t.genres.join(" ") : ""}" data-title="${escapeHtml(t.name)}">
           <a class="zoro-card-poster" href="${detailHref(t.slug)}">
-            <img src="${coverOf(t)}" alt="${escapeHtml(t.name)}" loading="lazy" decoding="async" fetchpriority="low">
+            <img src="${coverOf(t)}" alt="${escapeHtml(t.name)}" loading="${i < 6 ? "eager" : "lazy"}" decoding="async" fetchpriority="${i < 6 ? "high" : "low"}">
             <div class="zoro-play-overlay">
               <div class="zoro-play-circle">▶</div>
             </div>
             <div class="zoro-poster-badges">
               <div class="badges-left">
                 <span class="badge-mini-sub">SUB</span>
-                <span class="badge-mini-dub">DUB</span>
+                ${t.dubCount > 0 ? `<span class="badge-mini-dub">DUB ${t.dubCount}</span>` : ""}
               </div>
               <span class="badge-mini-ep">Ep ${t.episodes || 1}</span>
             </div>
@@ -1102,11 +1179,14 @@
       });
     }
 
-    // Hook up live search on Browse (Bug 11)
-    window.__onSearchLiveFilter = (q) => {
-      currentSearch = (q || "").trim();
-      applyFilterAndSort();
-    };
+    // Hook up live search on Browse ONLY. On Home the same grid exists, but
+    // the header search must never filter it (it only suggests + navigates).
+    if (window.location.pathname.endsWith("browse.html")) {
+      window.__onSearchLiveFilter = (q) => {
+        currentSearch = (q || "").trim();
+        applyFilterAndSort();
+      };
+    }
   }
 
   function attachTooltipListeners() {
@@ -1277,6 +1357,19 @@
     let episodesList = [];
     let currentPosition = 0;
     let duration = 1440;
+    /* The seeded runtime (24m) is only a resume-math fallback — it is NOT the
+       stream's real duration. The time readout must show --:-- until the player
+       itself reports a duration, never a placeholder that later "corrects". */
+    let durationIsReal = false;
+    /* The episode whose events the player is currently emitting. It flips
+       only when the NEW player's `ready` event arrives — NOT at the src swap:
+       the old document keeps playing (and emitting time events) until the
+       navigation commits, and those in-flight events belong to the OLD
+       episode. Attributing them to the new episode leaked ep 1's position
+       into ep 2's saved progress and armed the resume notice's auto-hide
+       before the new episode even started. */
+    let playerEp = null;
+    let playerReady = false;
     let isPaused = true;
     let lastProgressSync = 0;
     let lastLocalSave = 0;
@@ -1678,6 +1771,8 @@
       loadStartedAt = Date.now();
       skippedThisLoad = false;
       seekCommandThisLoad = false;
+      durationIsReal = false;
+      playerReady = false;
 
       /* New episode: re-probe dub availability in the background (the Dub
          pill awaits this probe if it is still running when clicked). The
@@ -1773,7 +1868,7 @@
         progressFill.style.width = `${Math.min((resumeTime / duration) * 100, 100)}%`;
       }
       if (timeText) {
-        timeText.textContent = `${formatTime(resumeTime)} / ${formatTime(duration)}`;
+        timeText.textContent = `${formatTime(resumeTime)} / ${durationIsReal && duration > 0 ? formatTime(duration) : "--:--"}`;
       }
 
       // Determine MAL ID (check custom override first, then title's malId)
@@ -1783,7 +1878,13 @@
         autoskip: playerSettings.autoskip,
         autonext: playerSettings.autonext,
         startTime: resumeTime,
-        noResume: startFromBeginning === true,
+        /* The site's per-(slug,episode) store is the single source of truth
+           for resume. With no saved position, `resume=0` disables the embed's
+           OWN internal resume store so it can never start this episode at a
+           position the site does not know about. With a saved position the
+           explicit time= offset wins (the embed skips its internal resume
+           whenever a start point is given). */
+        noResume: startFromBeginning === true || resumeTime === 0,
       });
 
       if (!streamUrl) {
@@ -1798,9 +1899,22 @@
 
       if (iframe) {
         iframe.src = streamUrl;
+        /* playerEp flips when the NEW player reports `ready` — until then,
+           in-flight events from the old document still belong to playerEp. */
+      }
+      if (spinner) {
+        spinner.hidden = false;
+        spinner.style.pointerEvents = "";
       }
       if (coverOverlay) {
-        coverOverlay.style.display = "none";
+        /* The title's OWN poster stays up as the loading backdrop (under the
+           spinner) until playback actually starts — never a stock photo and
+           never a black hole while the stream buffers. Click-through so the
+           embed's own play button stays reachable if autoplay is blocked. */
+        coverOverlay.style.display = "";
+        coverOverlay.style.pointerEvents = "none";
+        const bigPlay = coverOverlay.querySelector(".player-big-play");
+        if (bigPlay) bigPlay.style.display = "none";
       }
 
       // Reload comments for this episode
@@ -2054,9 +2168,24 @@
       }
       if (!data || data.channel !== "zokoanime") return;
 
+      /* Ignore player events until the first episode is actually loaded, and
+         ignore events from the PREVIOUS episode while a new one is loading
+         (the old iframe keeps emitting until its src is replaced). */
+      const eventIsForCurrentLoad = playerEp != null && playerEp === currentEp;
+
       // Event: ready
       if (data.type === "ready") {
-        if (spinner) spinner.hidden = true;
+        /* The NEW player initialised: from this moment its events belong to
+           the episode being loaded. (Before this, in-flight events from the
+           previous document are still attributed to the previous episode.) */
+        playerEp = currentEp;
+        playerReady = true;
+        /* "ready" means the player chrome is up — NOT that the stream is
+           playing. Keep the loading overlay until playback actually starts
+           (play / first time event) so the embed's placeholder duration is
+           never visible. Make the overlay click-through so the viewer can
+           still reach the embed's own play button if autoplay is blocked. */
+        if (spinner) spinner.style.pointerEvents = "none";
         if (overlay) overlay.hidden = true;
         // Report current fullscreen state to player
         sendPlayerCommand({ type: "fullscreen", active: !!document.fullscreenElement });
@@ -2064,27 +2193,36 @@
 
       // Event: play
       if (data.type === "play") {
+        if (!eventIsForCurrentLoad) return;
         isPaused = false;
         if (playPauseBtn) playPauseBtn.textContent = "❚❚";
-        /* Playback has actually started: begin the resume notice's
-           auto-hide countdown now (not at page load). */
+        /* Playback has actually started: the stream (and its real duration)
+           is live — retire the loading overlay AND the loading poster. */
+        if (spinner) spinner.hidden = true;
+        if (coverOverlay) coverOverlay.style.display = "none";
+        /* Begin the resume notice's auto-hide countdown now (not at page load). */
         armResumeNoteAutoHide();
       }
 
       // Event: pause
       if (data.type === "pause") {
+        if (!eventIsForCurrentLoad) return;
         isPaused = true;
         if (playPauseBtn) playPauseBtn.textContent = "▶";
       }
 
       // Event: state
       if (data.type === "state") {
+        if (!eventIsForCurrentLoad) return;
         const pos = typeof data.position === "number" ? data.position
                   : typeof data.currentTime === "number" ? data.currentTime
                   : typeof data.time === "number" ? data.time
                   : null;
         if (pos != null) currentPosition = pos;
-        if (typeof data.duration === "number" && data.duration > 0) duration = data.duration;
+        if (typeof data.duration === "number" && data.duration > 0) {
+          duration = data.duration;
+          durationIsReal = true;
+        }
         if (typeof data.paused === "boolean") {
           isPaused = data.paused;
           if (playPauseBtn) playPauseBtn.textContent = isPaused ? "▶" : "❚❚";
@@ -2097,40 +2235,62 @@
 
       // Event: time or watching-log
       if (data.type === "watching-log" || data.type === "time") {
+        if (playerEp == null) return;
         const cur = typeof data.currentTime === "number" ? data.currentTime
                   : (typeof data.position === "number" ? data.position
                   : (typeof data.time === "number" ? data.time
                   : (typeof data.seconds === "number" ? data.seconds : 0)));
-        const dur = typeof data.duration === "number" && data.duration > 0 ? data.duration : duration;
-        currentPosition = cur;
-        duration = dur;
-
-        // Update time text strictly driven by player events (Bug 10)
-        if (timeText) {
-          timeText.textContent = `${formatTime(cur)} / ${formatTime(dur)}`;
-        }
-
-        // Save progress to server (throttled every 5 seconds)
+        const hasRealDuration = typeof data.duration === "number" && data.duration > 0;
+        const dur = hasRealDuration ? data.duration : duration;
         const now = Date.now();
+
+        /* Progress is ALWAYS attributed to the episode actually playing in
+           the iframe (playerEp). During an episode switch the old player
+           keeps reporting its position until the src swap lands — that
+           position belongs to the OLD episode and must be saved under it,
+           never under the episode being loaded (that leak made ep 2 "resume"
+           from ep 1's position). Applies to BOTH the signed-in server path
+           and the signed-out localStorage path. */
         if (currentUser && cur > 0 && now - lastProgressSync > 5000) {
           lastProgressSync = now;
           api("/api/progress", {
             method: "POST",
             body: {
               slug: currentSlug,
-              episode: currentEp,
+              episode: playerEp,
               positionSec: Math.floor(cur),
               durationSec: Math.floor(dur),
             },
           });
         }
-
-        /* Signed-out progress: keep the site's own localStorage copy so the
-           next visit can show "Resumed from…" + Restart (the embed's internal
-           resume is invisible to the site otherwise). Throttled to 5s. */
         if (!currentUser && cur > 0 && now - lastLocalSave > 5000) {
           lastLocalSave = now;
-          writeLocalProgress(currentSlug, currentEp, cur, dur);
+          writeLocalProgress(currentSlug, playerEp, cur, dur);
+        }
+
+        /* Everything below is UI for the episode the page is showing — stale
+           events from the previous episode must not touch it. */
+        if (playerEp !== currentEp) return;
+        currentPosition = cur;
+        /* Only the PLAYER's own duration is real. The seeded runtime is a
+           resume-math fallback, never a displayed value — showing it first
+           and "correcting" it later was the duration flicker. */
+        if (hasRealDuration) {
+          duration = data.duration;
+          durationIsReal = true;
+        }
+
+        /* Playback is demonstrably running (real position from the player):
+           the loading overlay AND the loading poster are done. */
+        if (cur > 0) {
+          if (spinner) spinner.hidden = true;
+          if (coverOverlay) coverOverlay.style.display = "none";
+        }
+
+        // Update time text strictly driven by player events — --:-- until the
+        // real duration arrives (never a placeholder that later corrects).
+        if (timeText) {
+          timeText.textContent = `${formatTime(cur)} / ${durationIsReal && duration > 0 ? formatTime(duration) : "--:--"}`;
         }
 
         /* Fallback: the embed resumed from ITS internal store (no site-side
@@ -2152,6 +2312,7 @@
 
       // Event: skipped (intro or outro)
       if (data.type === "skipped") {
+        if (!eventIsForCurrentLoad) return;
         skippedThisLoad = true;
         const segment = data.name === "outro" ? "outro" : "intro";
         showToast(`Skipped ${segment}`);
@@ -2159,6 +2320,8 @@
 
       // Event: error
       if (data.type === "error") {
+        /* Errors are always surfaced — including failures while the new
+           player is still initialising (before `ready` flips playerEp). */
         if (spinner) spinner.hidden = true;
         if (overlay) {
           overlay.hidden = false;
@@ -2175,6 +2338,7 @@
 
       // Event: ended (auto-next is parent-driven)
       if (data.type === "ended") {
+        if (!eventIsForCurrentLoad) return;
         const totalEps = (titleData && titleData.episodes) || episodesList.length || 12;
         if (playerSettings.autonext && currentEp < totalEps) {
           showToast(`Episode finished! Auto-playing Episode ${currentEp + 1}...`);
@@ -2379,20 +2543,6 @@
     loadComments();
   }
 
-  /* Dub-aware title badge helper: probes a single episode on the server and
-     returns true only when a real dub stream exists for that episode. */
-  async function probeDubForTitle(slug, ep) {
-    try {
-      const res = await api(`/api/dub-availability/${encodeURIComponent(slug)}/${ep}`);
-      if (res.ok && res.data && typeof res.data.available === "boolean") {
-        return res.data.available;
-      }
-      return null;
-    } catch {
-      return null;
-    }
-  }
-
   /* ==========================================================================
      DETAIL PAGE (Phase 1): real metadata hero, episode list, recommendations
      ========================================================================== */
@@ -2404,7 +2554,7 @@
     const params = new URLSearchParams(window.location.search);
     // ?slug= is the canonical key; ?id= is accepted as an alias for stable
     // deep-linking (watchlist/progress/history keys all live under slugs).
-    const slug = params.get("slug") || params.get("id");
+    const rawId = (params.get("slug") || params.get("id") || "").trim();
     const loadingEl = document.getElementById("detail-loading");
     const errorEl = document.getElementById("detail-error");
     const contentEl = document.getElementById("detail-content");
@@ -2419,32 +2569,44 @@
       }
     }
 
-    if (!slug) {
+    if (!rawId) {
       showError("No title specified. Browse the catalog to pick an anime.");
       return;
     }
 
-    // Match by slug first; if the value looks like a real title, try to resolve
-    // it to a slug (e.g. 'solo-leveling' -> 'second-wind').
-    let targetSlug = slug;
-    if (!slug.startsWith("slug") && slug.includes("-")) {
+    /* ?id= may carry a slug OR a real title ("solo-leveling", "Solo Leveling",
+       "naruto"). Resolve deterministically: a direct slug hit wins; otherwise
+       match the value against the slugified name / real_title / romaji of
+       every catalog title (punctuation- and case-insensitive, so spaces and
+       hyphens are interchangeable). No fuzzy substring matching — that could
+       land on the wrong show. */
+    const compactKey = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+    let targetSlug = rawId;
+    let res = await api(`/api/titles/${encodeURIComponent(rawId)}`);
+    if (!res.ok && res.status === 404) {
       const aliasRes = await api(`/api/titles?limit=100`);
       if (aliasRes.ok && aliasRes.data && Array.isArray(aliasRes.data.titles)) {
-        const needle = slug.toLowerCase().replace(/[-\s]+/g, "-");
-        const matched = aliasRes.data.titles.find((t) => {
-          const s = (t.slug || "").toLowerCase().replace(/[-\s]+/g, "-");
-          const n = (((t.name || "") + " " + (t.realTitle || "")).toLowerCase().replace(/[-\s]+/g, "-"));
-          return s === needle || n === needle || n.includes(needle) || s.includes(needle) || n.includes(needle.replace(/-/g, " "));
-        });
-        if (matched) targetSlug = matched.slug;
+        const needle = compactKey(rawId);
+        const matched = aliasRes.data.titles.find((t) =>
+          [t.slug, t.name, t.realTitle, t.romajiTitle].some((v) => compactKey(v) === needle)
+        );
+        if (matched) {
+          targetSlug = matched.slug;
+          res = await api(`/api/titles/${encodeURIComponent(targetSlug)}`);
+        }
       }
     }
-
-    const res = await api(`/api/titles/${encodeURIComponent(targetSlug)}`);
     if (!res.ok || !res.data || !res.data.title) {
-      showError("This title could not be loaded from the server.");
+      showError(
+        res.status === 404
+          ? `We couldn't find a title for "${rawId}". Browse the catalog to pick an anime.`
+          : "This title could not be loaded from the server."
+      );
       return;
     }
+    // Everything below keys off the RESOLVED slug (Watch Now links, episode
+    // links, watchlist calls) — never the raw ?id= value.
+    const slug = targetSlug;
     const t = res.data.title;
     const episodes = Array.isArray(res.data.episodes) ? res.data.episodes : [];
     const userState = res.data.userState;
@@ -2468,18 +2630,21 @@
       altEl.textContent = parts.join("  •  ");
       altEl.hidden = parts.length === 0;
     }
-    // Detail page badges: DUB badge only when a real dub exists.
+    // Detail page badges: the DUB count comes from the server's per-episode
+    // dub probes (dub_checks), never a copy of the SUB count. No confirmed
+    // dub -> no DUB badge at all.
     const badges = document.getElementById("detail-badges");
     if (badges) {
-      const hasDub = await probeDubForTitle(t.slug, 1);
       badges.innerHTML = `
         <span class="badge badge-sub">SUB ${epCount || 1}</span>
-        ${hasDub === true ? `<span class="badge badge-dub">DUB ${epCount || 1}</span>` : ""}
+        ${t.dubCount > 0 ? `<span class="badge badge-dub">DUB ${t.dubCount}</span>` : ""}
         <span class="badge badge-type">${t.kind}</span>
         <span class="badge badge-hd">HD</span>
         ${scoreLabel(t) ? `<span class="badge badge-score">★ ${scoreLabel(t)}</span>` : ""}
       `;
     }
+    const detailTrackLabel = document.getElementById("detail-track-label");
+    if (detailTrackLabel) detailTrackLabel.textContent = t.dubCount > 0 ? "SUB / DUB" : "SUB";
     const meta = document.getElementById("detail-meta");
     if (meta) {
       meta.innerHTML = `
@@ -2578,7 +2743,7 @@
                     <img src="${coverOf(o)}" alt="${escapeHtml(o.name)}" loading="lazy" decoding="async">
                     <div class="zoro-play-overlay"><div class="zoro-play-circle">▶</div></div>
                     <div class="zoro-poster-badges">
-                      <div class="badges-left"><span class="badge-mini-sub">SUB</span><span class="badge-mini-dub">DUB</span></div>
+                      <div class="badges-left"><span class="badge-mini-sub">SUB</span>${o.dubCount > 0 ? `<span class="badge-mini-dub">DUB ${o.dubCount}</span>` : ""}</div>
                       <span class="badge-mini-ep">Ep ${o.episodes || 1}</span>
                     </div>
                   </a>
@@ -2700,7 +2865,7 @@
               <a class="schedule-title-link" href="${dHref}">${escapeHtml(name)}</a>
               <div class="schedule-meta-badges">
                 <span class="badge-mini-sub">SUB</span>
-                <span class="badge-mini-dub">DUB</span>
+                ${real.dubCount > 0 ? `<span class="badge-mini-dub">DUB ${real.dubCount}</span>` : ""}
                 <span class="badge-mini-ep">Ep ${item.ep}</span>
                 <span style="color: var(--text-muted); font-size: 0.75rem;">• ${escapeHtml(studio)}</span>
               </div>
