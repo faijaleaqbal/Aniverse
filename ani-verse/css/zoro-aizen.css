@@ -945,6 +945,7 @@ img {
   gap: 1.25rem;
   overflow-x: auto;
   padding-bottom: 1rem;
+  padding-right: 1.5rem;
   scroll-padding: 0 1.5rem;
   scroll-snap-type: x mandatory;
   -webkit-overflow-scrolling: touch;

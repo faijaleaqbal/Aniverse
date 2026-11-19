@@ -1546,7 +1546,6 @@
         const noMatchEl = epGrid.querySelector(".ep-no-search-match");
         if (noMatchEl) noMatchEl.remove();
       }
-
       // Optimistically update the episode heading from the already-cached
       // episode list so it tracks the URL instantly instead of lagging ~1-2s
       // behind while the episode fetch runs. The fetch below confirms it.
@@ -1715,7 +1714,7 @@
           showToast(`Switched audio track to ${currentTrack.toUpperCase()}`);
           if (iframe && iframe.src && iframe.src !== "about:blank") {
             const malId = getCustomMalId(currentSlug) || (titleData && titleData.malId);
-            // Read current playback position BEFORE swapping the iframe src.
+            // Read current playback position BEFORE swapping the iframe src (Bug 5).
             // The embed honours time= (t= alone is ignored), so every track
             // switch resumes where the viewer was — dub included.
             const resumePos = Math.floor(currentPosition || 0);
