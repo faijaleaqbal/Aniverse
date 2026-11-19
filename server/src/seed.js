@@ -130,15 +130,25 @@ export async function seed() {
       VALUES (?, ?, ?, ?, ?, ?)
     `).run(userId, "kagerou-protocol", 7, 521, 1440, now);
 
-    db.prepare(`
-      INSERT INTO comments (user_id, title_slug, episode_num, content, created_at)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(userId, "kagerou-protocol", 7, "The ZokoAnime streaming stream loads instantly with 1080p!", now);
+    db.prepare(
+      `INSERT INTO comments (user_id, title_slug, episode_num, content, created_at)
+      VALUES (?, ?, ?, ?, ?)`
+    ).run(userId, "kagerou-protocol", 7, "The ZokoAnime stream loads instantly — great player!", now);
 
     console.log("Seeded demo user watchlist, progress, and comments.");
   } else {
     console.log("Demo user already exists.");
   }
+
+  /* Idempotent cleanup: the original demo comment claimed "1080p", a
+     resolution the site cannot verify. Correct any existing copy so no
+     watch page displays an unverifiable quality claim. */
+  db.prepare(
+    `UPDATE comments SET content = ? WHERE content = ?`
+  ).run(
+    "The ZokoAnime stream loads instantly — great player!",
+    "The ZokoAnime streaming stream loads instantly with 1080p!"
+  );
 
   console.log("Database seed completed successfully.");
 }

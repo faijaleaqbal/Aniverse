@@ -102,14 +102,16 @@
       <button class="btn-zoro-primary" id="watch-data-error-retry" type="button">Retry</button>
     </div>
 
+    <!-- Title + subtitle span the FULL width above both columns so the
+         player and the episode sidebar start at the same y. -->
+    <div style="margin-top: 1rem;">
+      <h1 id="watch-anime-title-h1" style="font-size: 1.75rem; font-weight: 800; color: #fff;">Loading…</h1>
+      <p id="watch-ep-subtitle" style="font-size: 0.95rem; color: var(--text-sub); margin-top: 4px;">Loading episode…</p>
+    </div>
+
     <div class="watch-layout">
       <!-- Player Main Column -->
       <div class="watch-player-column">
-        <div>
-          <h1 id="watch-anime-title-h1" style="font-size: 1.75rem; font-weight: 800; color: #fff;">Loading…</h1>
-          <p id="watch-ep-subtitle" style="font-size: 0.95rem; color: var(--text-sub); margin-top: 4px;">Loading episode…</p>
-        </div>
-
         <!-- Video Player Stage (ZokoAnime Embed) -->
         <div class="player-theater-wrapper" id="player-wrap">
           <iframe
@@ -143,14 +145,9 @@
         <div class="zoko-resume-note" id="zoko-resume-note" hidden></div>
         <div class="zoko-toasts" id="zoko-toasts" aria-live="polite"></div>
 
-        <!-- Player Control Bar -->
-        <div class="zoro-player-bar" style="display: flex; justify-content: space-between; align-items: center;">
-          <div style="display: flex; gap: 0.5rem; align-items: center;">
-            <button class="icon-action-btn" id="btn-skip-back" type="button" title="Skip -10s" style="width: 44px; height: 32px; font-size: 0.8rem; font-weight: 700; border-radius: 6px;">-10s</button>
-            <button class="icon-action-btn" id="btn-skip-forward" type="button" title="Skip +10s" style="width: 44px; height: 32px; font-size: 0.8rem; font-weight: 700; border-radius: 6px;">+10s</button>
-            <button class="icon-action-btn" id="btn-fullscreen" type="button" title="Fullscreen (F)" aria-label="Toggle fullscreen" style="width: 44px; height: 32px; font-size: 1rem; border-radius: 6px;">⛶</button>
-          </div>
-        </div>
+        <!-- The site control bar (-10s / +10s / fullscreen) was REMOVED: every
+             control duplicated the embed's own bar (seek, fullscreen, volume).
+             Keyboard shortcuts (F, Space, arrows) still work page-wide. -->
 
         <!-- Action Bar: Add to Watchlist & Next/Prev -->
         <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
@@ -250,7 +247,6 @@
             <div><strong style="color: #fff;">Score:</strong> <span id="watch-detail-score">—</span></div>
             <div><strong style="color: #fff;">Episodes:</strong> <span id="watch-detail-episodes">—</span></div>
             <div><strong style="color: #fff;">Duration:</strong> <span id="watch-detail-duration">—</span></div>
-            <div><strong style="color: #fff;">Quality:</strong> Ultra HD 1080p</div>
           </div>
           <a id="watch-detail-link" href="browse.html" style="display:inline-block;margin-top:0.9rem;font-size:0.8rem;color:var(--zoro-lime);font-weight:600;">View Full Details →</a>
         </div>
@@ -281,6 +277,6 @@
     </div>
   </footer>
 
-  <script src="js/zoro-aizen.js?v=5"></script>
+  <script src="js/zoro-aizen.js?v=6"></script>
 </body>
 </html>
