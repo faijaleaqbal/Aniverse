@@ -940,40 +940,38 @@ img {
   box-shadow: 0 0 16px var(--zoro-lime-glow);
 }
 
+/* Cards must sit WHOLE at every resting scroll position. The old rule had
+   scroll-padding: 0 1.5rem — snap then aligned each card 24px INSIDE the left
+   edge, leaving a sliced sliver of the previous card at the left after every
+   Next click — plus padding-right that added a trailing sliver zone. Snap
+   flush to the edge (scroll-padding 0), no extra horizontal padding, and the
+   scrollbar is hidden (the arrows + snap are the navigation). */
 .trending-rail {
   display: flex;
   gap: 1.25rem;
   overflow-x: auto;
-  padding-bottom: 1rem;
-  padding-right: 1.5rem;
-  scroll-padding: 0 1.5rem;
+  padding-bottom: 0.25rem;
+  scroll-padding: 0;
   scroll-snap-type: x mandatory;
   -webkit-overflow-scrolling: touch;
-  scrollbar-width: thin;
-  scrollbar-color: var(--zoro-lime) rgba(255, 255, 255, 0.08);
+  scrollbar-width: none;
 }
 
 .trending-rail::-webkit-scrollbar {
-  height: 6px;
+  display: none;
 }
 
-.trending-rail::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.06);
-  border-radius: 4px;
-}
-
-.trending-rail::-webkit-scrollbar-thumb {
-  background: var(--zoro-lime);
-  border-radius: 4px;
-}
-
-.trending-rail::-webkit-scrollbar-thumb:hover {
-  background: #b5db2e;
-}
-
+/* flex-basis divides the visible width into EXACTLY N whole cards + gaps, so
+   at load (and at every snap position) the window ends on a card boundary —
+   no sliver of the next card at the right edge. min-width must not override
+   that basis (it used to force overflow between 1281–1330px viewports). */
 .trending-item {
   flex: 0 0 calc((100% - 6 * 1.25rem) / 7);
-  min-width: 170px;
+  /* Whole-pixel card width: Chrome rounds scroll offsets to device pixels,
+     so fractional snap positions shave a sub-pixel sliver off the edge card.
+     round() (Chrome 125+) makes every snap position an exact integer. */
+  flex-basis: round(down, calc((100% - 6 * 1.25rem) / 7), 1px);
+  min-width: 0;
   scroll-snap-align: start;
   scroll-snap-stop: always;
   display: flex;
@@ -988,24 +986,28 @@ img {
 @media (max-width: 1280px) and (min-width: 1024px) {
   .trending-item {
     flex: 0 0 calc((100% - 4 * 1.25rem) / 5);
+    flex-basis: round(down, calc((100% - 4 * 1.25rem) / 5), 1px);
   }
 }
 
 @media (max-width: 1023px) and (min-width: 768px) {
   .trending-item {
     flex: 0 0 calc((100% - 3 * 1.25rem) / 4);
+    flex-basis: round(down, calc((100% - 3 * 1.25rem) / 4), 1px);
   }
 }
 
 @media (max-width: 767px) and (min-width: 480px) {
   .trending-item {
-    flex: 0 0 calc((100% - 2 * 1rem) / 3);
+    flex: 0 0 calc((100% - 2 * 1.25rem) / 3);
+    flex-basis: round(down, calc((100% - 2 * 1.25rem) / 3), 1px);
   }
 }
 
 @media (max-width: 479px) {
   .trending-item {
-    flex: 0 0 calc((100% - 0.75rem) / 2);
+    flex: 0 0 calc((100% - 1.25rem) / 2);
+    flex-basis: round(down, calc((100% - 1.25rem) / 2), 1px);
   }
 }
 
@@ -1617,12 +1619,31 @@ img {
   transition: all 0.2s ease;
 }
 
-.server-pill:hover,
-.server-pill.active {
+/* Hover must NOT look like the active track: the old rule gave :hover the
+   same lime fill as .active, so after clicking an unavailable Dub pill the
+   mouse resting on it kept it lime-green next to the actually-playing Sub
+   pill ("both tracks highlighted"). Only .active gets the lime fill. */
+.server-pill:hover {
+  background: var(--bg-card-hover);
+  border-color: rgba(202, 233, 98, 0.45);
+  color: #fff;
+}
+
+.server-pill.active,
+.server-pill.active:hover {
   background: var(--zoro-lime);
   color: #0c0d12;
   border-color: var(--zoro-lime);
   box-shadow: 0 0 12px var(--zoro-lime-glow);
+}
+
+.server-pill:focus {
+  outline: none;
+}
+
+.server-pill:focus-visible {
+  outline: 2px solid var(--zoro-lime);
+  outline-offset: 2px;
 }
 
 /* Watch Page Sidebar & Episode Selector */
