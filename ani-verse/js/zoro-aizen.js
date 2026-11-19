@@ -658,10 +658,87 @@
     const sliderContainer = document.getElementById("spotlight-slider-container");
     if (!sliderContainer) return;
 
-    const res = await fetchTitles(18);
-    if (!res.ok || !res.data || !res.data.titles || res.data.titles.length === 0) return;
+    let currentSlide = 0;
+    let rendered = false;
+    const pendingDirs = [];
+    let autoInterval = null;
+    let drainTimer = null;
 
-    const titles = res.data.titles.slice(0, 5);
+    /* Backdrops are multi-hundred-KB images: only pull the one on screen.
+       The rest are fetched when their slide becomes active. */
+    function applyBackdrop(slide) {
+      if (!slide || slide.dataset.backdropLoaded === "true") return;
+      const poster = slide.dataset.poster;
+      if (!poster) return;
+      slide.dataset.backdropLoaded = "true";
+      const backdrop = slide.querySelector(".spotlight-backdrop");
+      if (backdrop) backdrop.style.backgroundImage = `url('${poster}')`;
+    }
+
+    function goToSlide(n) {
+      const slides = sliderContainer.querySelectorAll(".spotlight-slide");
+      if (!slides.length) return;
+      if (slides[currentSlide]) slides[currentSlide].classList.remove("is-active");
+      currentSlide = ((n % slides.length) + slides.length) % slides.length;
+      slides[currentSlide].classList.add("is-active");
+      applyBackdrop(slides[currentSlide]);
+    }
+
+    /* Auto rotate every 6s. ANY manual navigation must clear AND restart the
+       timer — a click landing just before a scheduled tick used to advance
+       two slides at once (only mouseleave reset the interval before). */
+    function startAutoRotate() {
+      if (autoInterval) clearInterval(autoInterval);
+      autoInterval = setInterval(() => goToSlide(currentSlide + 1), 6000);
+    }
+    function manualGoTo(n) {
+      goToSlide(n);
+      startAutoRotate();
+    }
+
+    /* Arrow handlers bind IMMEDIATELY — before the catalog fetch. Clicks that
+       arrive before the dynamic slides render (a window of seconds on slow
+       connections) are queued and replayed one step at a time, so rapid input
+       is never swallowed. There is NO transition lock: every click advances
+       exactly one slide, whenever it lands. */
+    function drainPending() {
+      drainTimer = null;
+      if (!pendingDirs.length) return;
+      manualGoTo(currentSlide + pendingDirs.shift());
+      if (pendingDirs.length) drainTimer = setTimeout(drainPending, 150);
+    }
+    function onArrow(dir) {
+      if (!rendered) {
+        pendingDirs.push(dir);
+        return;
+      }
+      manualGoTo(currentSlide + dir);
+    }
+    const prevBtn = document.getElementById("spotlight-prev");
+    const nextBtn = document.getElementById("spotlight-next");
+    if (prevBtn) prevBtn.addEventListener("click", () => onArrow(-1));
+    if (nextBtn) nextBtn.addEventListener("click", () => onArrow(1));
+    sliderContainer.addEventListener("mouseenter", () => {
+      if (autoInterval) clearInterval(autoInterval);
+      autoInterval = null;
+    });
+    sliderContainer.addEventListener("mouseleave", startAutoRotate);
+
+    const res = await fetchTitles(18);
+    if (!res.ok || !res.data || !res.data.titles || res.data.titles.length === 0) {
+      /* Keep the static fallback slide; the arrows work on whatever exists. */
+      rendered = true;
+      applyBackdrop(sliderContainer.querySelector(".spotlight-slide"));
+      startAutoRotate();
+      if (pendingDirs.length) drainTimer = setTimeout(drainPending, 150);
+      return;
+    }
+
+    /* Every catalog title gets a spotlight slide with the SAME probe-backed
+       SUB/DUB badges as the detail page and cards (DUB hidden at 0). The
+       static JJK fallback is patched probe-backed by index.html's inline
+       prefetch for the pre-render window. */
+    const titles = res.data.titles;
 
     sliderContainer.innerHTML = titles
       .map((t, idx) => `
@@ -691,52 +768,12 @@
       `)
       .join("");
 
-    let currentSlide = 0;
-    const slides = sliderContainer.querySelectorAll(".spotlight-slide");
-
-    /* Backdrops are multi-hundred-KB images: only pull the one on screen.
-       The rest are fetched when their slide becomes active. */
-    function applyBackdrop(slide) {
-      if (!slide || slide.dataset.backdropLoaded === "true") return;
-      const poster = slide.dataset.poster;
-      if (!poster) return;
-      slide.dataset.backdropLoaded = "true";
-      const backdrop = slide.querySelector(".spotlight-backdrop");
-      if (backdrop) backdrop.style.backgroundImage = `url('${poster}')`;
-    }
-
-    function goToSlide(n) {
-      slides[currentSlide].classList.remove("is-active");
-      currentSlide = (n + slides.length) % slides.length;
-      slides[currentSlide].classList.add("is-active");
-      applyBackdrop(slides[currentSlide]);
-    }
-
-    applyBackdrop(slides[0]);
-
-    const prevBtn = document.getElementById("spotlight-prev");
-    const nextBtn = document.getElementById("spotlight-next");
-    /* Auto rotate every 6s. ANY manual navigation must clear AND restart the
-       timer — a click landing just before a scheduled tick used to advance
-       two slides at once (only mouseleave reset the interval before). */
-    let autoInterval = null;
-    function startAutoRotate() {
-      if (autoInterval) clearInterval(autoInterval);
-      autoInterval = setInterval(() => goToSlide(currentSlide + 1), 6000);
-    }
-    function manualGoTo(n) {
-      goToSlide(n);
-      startAutoRotate();
-    }
-    if (prevBtn) prevBtn.addEventListener("click", () => manualGoTo(currentSlide - 1));
-    if (nextBtn) nextBtn.addEventListener("click", () => manualGoTo(currentSlide + 1));
-
+    currentSlide = 0;
+    rendered = true;
+    applyBackdrop(sliderContainer.querySelector(".spotlight-slide"));
     startAutoRotate();
-    sliderContainer.addEventListener("mouseenter", () => {
-      if (autoInterval) clearInterval(autoInterval);
-      autoInterval = null;
-    });
-    sliderContainer.addEventListener("mouseleave", startAutoRotate);
+    /* Replay any clicks that landed before the slides existed — one step each. */
+    if (pendingDirs.length) drainTimer = setTimeout(drainPending, 150);
   }
 
   /* ==========================================================================
@@ -1869,6 +1906,29 @@
       }
       if (timeText) {
         timeText.textContent = `${formatTime(resumeTime)} / ${durationIsReal && duration > 0 ? formatTime(duration) : "--:--"}`;
+      }
+
+      /* Re-resolve the preferred track for THIS episode (probe-gated): a Dub
+         selection must never carry over to an episode without a real dub.
+         When the new episode has no dub, fall back to Sub and highlight Sub
+         immediately — no click and no toast required. When the new episode
+         HAS a dub, keeping the selection is correct. Unknown probe results
+         keep the current track (same rule as the Dub pill). */
+      if (currentTrack === "dub") {
+        const entry = dubProbe.ep === epNum ? dubProbe : null;
+        const avail = entry
+          ? (entry.available !== null ? entry.available : await entry.promise)
+          : await probeDubAvailability(epNum);
+        if (currentEp !== epNum) return; // viewer switched again while probing
+        if (avail === false) {
+          currentTrack = "sub";
+          if (trackSwitcher) {
+            trackSwitcher.querySelectorAll(".server-pill").forEach((p) => {
+              p.classList.toggle("active", (p.dataset.track || "sub") === "sub");
+            });
+          }
+          updateTrackLabel();
+        }
       }
 
       // Determine MAL ID (check custom override first, then title's malId)
