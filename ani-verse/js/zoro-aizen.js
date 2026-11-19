@@ -274,11 +274,18 @@
       backdrop.addEventListener("click", (e) => {
         if (e.target === backdrop) backdrop.classList.remove("is-open");
       });
+      /* Escape closes the drawer (it used to do nothing). */
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && backdrop.classList.contains("is-open")) {
+          backdrop.classList.remove("is-open");
+        }
+      });
     }
 
     toggleBtns.forEach((btn) => {
       btn.addEventListener("click", () => {
-        backdrop.classList.add("is-open");
+        /* Toggle: clicking the hamburger again closes the drawer. */
+        backdrop.classList.toggle("is-open");
       });
     });
   }
@@ -1012,17 +1019,16 @@
       hideHoverTooltip();
       let list = titles.slice();
 
-      // 1. Filter by search query
+      // 1. Filter by search query — REAL titles only (english/romaji/native).
+      // The fictional placeholder name (oldTitle) must not match: searching
+      // "Ronin" used to surface One Piece. Synopsis/genres are not titles.
       if (currentSearch) {
         const qLower = currentSearch.toLowerCase();
         list = list.filter(
           (t) =>
             t.name.toLowerCase().includes(qLower) ||
             (t.romajiTitle && t.romajiTitle.toLowerCase().includes(qLower)) ||
-            (t.nativeTitle && t.nativeTitle.toLowerCase().includes(qLower)) ||
-            (t.oldTitle && t.oldTitle.toLowerCase().includes(qLower)) ||
-            (t.synopsis && t.synopsis.toLowerCase().includes(qLower)) ||
-            (t.genres && t.genres.some((g) => g.toLowerCase().includes(qLower)))
+            (t.nativeTitle && t.nativeTitle.toLowerCase().includes(qLower))
         );
       }
 
@@ -1307,7 +1313,10 @@
       const an = opts.autonext ? 1 : 0;
       let url = `https://zokoanime.video/stream/mal/${malId}/${epNum}/${track}?color=${color}&autoplay=${ap}&autoskip=${as}&autonext=${an}`;
       if (opts.startTime && opts.startTime > 0) {
-        url += `&t=${Math.floor(opts.startTime)}`;
+        /* The live embed reads the start offset from `time=` (verified: `t=`
+           alone is ignored and playback starts at 0). Emit both. */
+        const startSec = Math.floor(opts.startTime);
+        url += `&t=${startSec}&time=${startSec}`;
       }
       return url;
     }
@@ -1520,6 +1529,11 @@
       currentEp = epNum;
       activeEpisode = epNum;
 
+      /* New episode: re-probe dub availability in the background (the Dub
+         pill awaits this probe if it is still running when clicked). */
+      dubAvailable = null;
+      probeDubAvailability(epNum);
+
       // Clear episode-search filter and input box on every episode change (Bug 5)
       const epSearchInput = document.getElementById("ep-search-input");
       if (epSearchInput && epSearchInput.value) {
@@ -1618,7 +1632,7 @@
         if (overlay) {
           overlay.hidden = false;
           if (overlayTitle) overlayTitle.textContent = "Stream unavailable";
-          if (overlayText) overlayText.textContent = "No MAL ID mapped for this title. Use the 'Switch Anime MAL ID' button to set one.";
+          if (overlayText) overlayText.textContent = "No MAL ID mapped for this title, so the stream cannot be loaded.";
         }
         return;
       }
@@ -1653,16 +1667,57 @@
 
     // Track switcher buttons (sub, hsub, dub)
     const trackSwitcher = document.getElementById("zoko-track-switcher");
+
+    /* Dub availability for the current episode, probed by the server (Zoko
+       serves the sub file under /dub for some titles — switching blindly used
+       to play Japanese while claiming Dub). null = unknown / not probed yet. */
+    let dubAvailable = null;
+    let dubProbePromise = null;
+    function probeDubAvailability(epNum) {
+      dubProbePromise = api(`/api/dub-availability/${encodeURIComponent(currentSlug)}/${epNum}`).then((res) => {
+        dubAvailable = res.ok && res.data && typeof res.data.available === "boolean" ? res.data.available : null;
+        return dubAvailable;
+      });
+      return dubProbePromise;
+    }
+
     if (trackSwitcher) {
       trackSwitcher.querySelectorAll(".server-pill").forEach((pill) => {
-        pill.addEventListener("click", () => {
+        pill.addEventListener("click", async () => {
+          const requestedTrack = pill.dataset.track || "sub";
+          if (requestedTrack === currentTrack) return;
+
+          if (requestedTrack === "dub") {
+            let avail = dubAvailable;
+            if (avail === null) {
+              showToast("Checking dub availability…", "⏳", 2500);
+              avail = await (dubProbePromise || probeDubAvailability(currentEp));
+            }
+            if (avail !== true) {
+              showToast(
+                avail === false
+                  ? "English dub not available for this episode"
+                  : "Could not verify dub availability — staying on the current track",
+                "!",
+                3500
+              );
+              /* Keep the pill UI honest: the current track stays active. */
+              trackSwitcher.querySelectorAll(".server-pill").forEach((p) => {
+                p.classList.toggle("active", (p.dataset.track || "sub") === currentTrack);
+              });
+              return;
+            }
+          }
+
           trackSwitcher.querySelectorAll(".server-pill").forEach((p) => p.classList.remove("active"));
           pill.classList.add("active");
-          currentTrack = pill.dataset.track || "sub";
+          currentTrack = requestedTrack;
           showToast(`Switched audio track to ${currentTrack.toUpperCase()}`);
           if (iframe && iframe.src && iframe.src !== "about:blank") {
             const malId = getCustomMalId(currentSlug) || (titleData && titleData.malId);
-            // Read current playback position BEFORE swapping the iframe src (Bug 5)
+            // Read current playback position BEFORE swapping the iframe src.
+            // The embed honours time= (t= alone is ignored), so every track
+            // switch resumes where the viewer was — dub included.
             const resumePos = Math.floor(currentPosition || 0);
             const newUrl = getEmbedUrl(malId, currentEp, currentTrack, {
               autoplay: true,
@@ -1751,8 +1806,23 @@
       });
     }
 
-    // Custom MAL ID button
-    const customMalBtn = document.getElementById("btn-custom-mal-id");
+    /* "Switch Anime MAL ID" is a debug tool, not a user feature: the button
+       was removed from watch.html. It is only recreated when a local debug
+       flag is set (?debug=1 or localStorage av_debug="1") — off by default. */
+    let debugEnabled = new URLSearchParams(window.location.search).get("debug") === "1";
+    try {
+      debugEnabled = debugEnabled || localStorage.getItem("av_debug") === "1";
+    } catch {}
+    let customMalBtn = document.getElementById("btn-custom-mal-id");
+    if (!customMalBtn && debugEnabled && trackSwitcher && trackSwitcher.parentElement) {
+      customMalBtn = document.createElement("button");
+      customMalBtn.className = "genre-chip-zoro";
+      customMalBtn.id = "btn-custom-mal-id";
+      customMalBtn.type = "button";
+      customMalBtn.style.cssText = "margin-left: auto; font-size: 0.75rem; padding: 2px 8px;";
+      customMalBtn.textContent = "Switch Anime MAL ID";
+      trackSwitcher.parentElement.appendChild(customMalBtn);
+    }
     if (customMalBtn) {
       customMalBtn.addEventListener("click", () => {
         const currentMalId = getCustomMalId(currentSlug) || (titleData && titleData.malId) || "";
@@ -1900,6 +1970,26 @@
         }
       }
     });
+
+    /* Keyboard focus containment: shortcuts (F / Space / arrows) are handled
+       by THIS page, but clicking inside the cross-origin embed moves focus
+       into it and the parent never sees the keys (the embed's player does not
+       handle F at all — that is why F "did nothing" while Space/arrows worked
+       inside the player). With out-of-process iframes the parent gets NO
+       focus/blur event when that happens, so poll activeElement and keep
+       keyboard focus on the player wrapper. Mouse clicks inside the embed
+       still work normally; Space/arrows/F are served by this page's handler
+       via the embed's postMessage control bridge. */
+    if (playerWrap) playerWrap.setAttribute("tabindex", "-1");
+    if (iframe && playerWrap) {
+      const containFocus = () => {
+        if (document.activeElement === iframe) {
+          playerWrap.focus({ preventScroll: true });
+        }
+      };
+      iframe.addEventListener("focus", containFocus);
+      setInterval(containFocus, 250);
+    }
 
     // Keyboard Shortcuts (only when activeElement is not an input/textarea)
     window.addEventListener("keydown", (e) => {

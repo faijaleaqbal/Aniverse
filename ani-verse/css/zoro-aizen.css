@@ -1511,6 +1511,13 @@ img {
   aspect-ratio: 16 / 9;
 }
 
+/* The wrapper is programmatically focusable (tabindex=-1) so keyboard
+   shortcuts keep working when the embed would otherwise swallow the keys.
+   Suppress the focus ring — this is not a visual control. */
+.player-theater-wrapper:focus {
+  outline: none;
+}
+
 .player-stage-video {
   position: absolute;
   inset: 0;
@@ -2026,7 +2033,10 @@ img {
   inset: 0;
   background: rgba(0, 0, 0, 0.75);
   backdrop-filter: blur(8px);
-  z-index: 9998;
+  /* Above the sticky header (z-index 10000): the drawer's × Close button sits
+     in the header band and used to be covered by the header's search box, so
+     it could not be clicked. The whole drawer must layer over the header. */
+  z-index: 10001;
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.3s ease;

@@ -2,36 +2,13 @@ import { db } from "./db.js";
 import { CATALOG } from "./catalog.js";
 import { hashPassword, nowIso } from "./utils.js";
 
-export const EPISODE_NAMES_POOL = [
-  "Ryomen Sukuna / The Awakening",
-  "For Myself",
-  "Girl of Steel",
-  "Curse Womb Must Die",
-  "Curse Womb Must Die -II-",
-  "After Rain",
-  "The Long Way Down",
-  "Boredom",
-  "Small Fry and Reverse Retribution",
-  "Idle Transfiguration",
-  "Narrow-minded",
-  "To You, Someday",
-  "Tomorrow",
-  "Kyoto Sister School Goodwill Event",
-  "Black Flash",
-  "Playful Cloud",
-  "Deep Roar",
-  "Sage of the Six Paths",
-  "The Final Valley",
-  "A New Dawn",
-];
-
-/* Distinct episode title for a given episode number. Real episode names are
-   used where known (the pool above); beyond the pool we fall back to
-   "Episode N". NEVER modulo-wrap the pool — that is what made episodes
-   021-024 repeat 001-004. Every episode gets a unique title. */
+/* Episode titles are seeded as generic "Episode N" placeholders. REAL episode
+   titles are fetched per title from Jikan (MyAnimeList) by
+   scripts/fetch-episode-titles.mjs and written into the episodes table.
+   NEVER stamp one title's episode names onto another — that is what made
+   Solo Leveling show Jujutsu Kaisen episode titles. */
 export function episodeTitleFor(slug, ep) {
-  if (slug === "kagerou-protocol" && ep === 7) return "The Long Way Down";
-  return EPISODE_NAMES_POOL[ep - 1] || `Episode ${ep}`;
+  return `Episode ${ep}`;
 }
 
 export async function seed() {

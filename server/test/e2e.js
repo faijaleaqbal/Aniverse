@@ -117,6 +117,54 @@ async function runTests() {
       db.prepare("DELETE FROM titles WHERE slug = 'null-id-test'").run();
     });
 
+    // 7. Search matches REAL titles only — the fictional placeholder names
+    //    (old_title) must not match ("Ronin" used to return One Piece).
+    await test("GET /api/titles?q=ronin does not match old fictional titles", async () => {
+      const res = await fetch(`${baseUrl}/api/titles?q=ronin&limit=10`);
+      assert.equal(res.status, 200);
+      const data = await res.json();
+      assert.equal(data.ok, true);
+      assert.equal(data.titles.length, 0, `Expected no results for "ronin", got: ${data.titles.map((t) => t.name).join(", ")}`);
+    });
+
+    // 8. Search still finds real titles (english + romaji).
+    await test("GET /api/titles?q=solo finds Solo Leveling by real title", async () => {
+      const res = await fetch(`${baseUrl}/api/titles?q=solo&limit=10`);
+      assert.equal(res.status, 200);
+      const data = await res.json();
+      assert.ok(data.titles.some((t) => t.slug === "second-wind"), "Solo Leveling (second-wind) must match 'solo'");
+    });
+
+    // 9. Dub availability for a title with no MAL id is false without any
+    //    network probe (the watch page uses this to gate the Dub pill).
+    await test("GET /api/dub-availability for a no-id title returns available:false", async () => {
+      db.prepare(`
+        INSERT OR REPLACE INTO titles (slug, name, kind, year, episodes, runtime_min, mal_id, anilist_id, created_at)
+        VALUES ('dub-no-id-test', 'Dub No ID Anime', 'Series', 2026, 12, 24, NULL, NULL, datetime('now'))
+      `).run();
+      const res = await fetch(`${baseUrl}/api/dub-availability/dub-no-id-test/1`);
+      assert.equal(res.status, 200);
+      const data = await res.json();
+      assert.equal(data.ok, true);
+      assert.equal(data.available, false);
+      assert.equal(data.reason, "no-mal-id");
+      db.prepare("DELETE FROM titles WHERE slug = 'dub-no-id-test'").run();
+    });
+
+    // 10. Episode titles are per-title real data, not one shared pool: Solo
+    //     Leveling must not show Jujutsu Kaisen names, and titles are distinct.
+    await test("Solo Leveling episode titles are real and distinct (no JJK pool)", async () => {
+      const res = await fetch(`${baseUrl}/api/titles/second-wind`);
+      assert.equal(res.status, 200);
+      const data = await res.json();
+      const eps = data.episodes;
+      assert.ok(eps.length >= 12, "Solo Leveling has 12 seeded episodes");
+      assert.ok(!/sukuna/i.test(eps[0].title), `ep1 must not be a JJK title, got: ${eps[0].title}`);
+      assert.ok(!/^Episode \d+$/.test(eps[0].title), `ep1 should be a real title, got: ${eps[0].title}`);
+      const titles = eps.map((e) => e.title);
+      assert.equal(new Set(titles).size, titles.length, "episode titles must be distinct");
+    });
+
     console.log(`\nAll ${passed} E2E integration tests passed successfully!\n`);
   } finally {
     if (server) {

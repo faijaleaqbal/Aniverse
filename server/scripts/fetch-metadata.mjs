@@ -8,7 +8,8 @@
  * and writes the real title / synopsis / score / status / year / studios into
  * the SQLite `titles` table. The fictional placeholder name is preserved in
  * `old_title`. Slugs are NEVER changed (they are the stable watchlist/progress
- * key). Episode titles are normalized so none repeat (fixes the 021-024 bug).
+ * key). Episode titles are NOT touched here — scripts/fetch-episode-titles.mjs
+ * owns them (real per-title names from Jikan/MyAnimeList).
  *
  * ID resolution: the Zoko embed streams by `mal_id`, so the displayed metadata
  * MUST describe the same anime that actually plays. We therefore prefer the
@@ -25,7 +26,6 @@ import fs from "node:fs";
 import path from "node:path";
 import { db } from "../src/db.js";
 import { CATALOG } from "../src/catalog.js";
-import { episodeTitleFor } from "../src/seed.js";
 import { SITE_ROOT } from "../src/config.js";
 
 const ANILIST_API = "https://graphql.anilist.co";
@@ -146,9 +146,6 @@ const updateTitle = db.prepare(`
   WHERE slug = ?
 `);
 
-const updateEpisodeTitle = db.prepare(
-  "UPDATE episodes SET title = ? WHERE title_slug = ? AND ep_num = ?"
-);
 const getEpisodes = db.prepare(
   "SELECT ep_num FROM episodes WHERE title_slug = ? ORDER BY ep_num ASC"
 );
@@ -229,12 +226,10 @@ async function main() {
         slug
       );
 
-      // Normalize episode titles so none repeat (real names where known, else "Episode N").
+      // Episode titles are owned by scripts/fetch-episode-titles.mjs (Jikan /
+      // MyAnimeList, per mapped MAL id). Do NOT normalize them here — that
+      // used to stamp a shared pool of Jujutsu Kaisen names onto every title.
       const eps = getEpisodes.all(slug);
-      const fixEps = db.transaction(() => {
-        for (const e of eps) updateEpisodeTitle.run(episodeTitleFor(slug, e.ep_num), slug, e.ep_num);
-      });
-      fixEps();
 
       const usedId = media.id === (data.byId && data.byId.id) && media === data.byId ? `ani:${media.id}` : `mal:${item.malId}->ani:${media.id}`;
       console.log(`  ✓ ${slug} → "${realTitle}" [${usedId}] score=${media.averageScore} year=${year} eps=${eps.length}`);
