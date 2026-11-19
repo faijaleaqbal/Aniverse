@@ -1363,7 +1363,22 @@
     const params = new URLSearchParams(window.location.search);
     const currentSlug = params.get("slug") || "kagerou-protocol";
     let currentEp = parseInt(params.get("ep"), 10) || 1;
+    /* currentTrack  = the track of the stream that is actually loaded in the
+       player right now. The highlighted pill ALWAYS mirrors it.
+       preferredTrack = the viewer's audio choice. It survives episode
+       switches for the rest of the session and is NEVER destroyed by an
+       episode that happens to lack the track (that episode falls back to
+       Sub for itself only — the preference comes back on the next episode
+       that really has the preferred track). */
     let currentTrack = "sub";
+    let preferredTrack = "sub";
+    /* True while an episode load is in flight (from the load's first line
+       until the iframe src is assigned). A track switch requested during a
+       load must NOT swap the iframe src a second time — tearing the embed
+       down mid-load races its own stream fetch (the live "Unable to play
+       media. 24 seconds of 0 seconds" flash). The in-flight load simply
+       picks the new track up. */
+    let loadInFlight = false;
 
     const iframe = document.getElementById("zoko-embed-frame");
     const coverOverlay = document.getElementById("video-cover-overlay");
@@ -1731,12 +1746,15 @@
     // Episode subtitle updater
     async function updateEpisodeSubtitle(epNum, prefetched) {
       const epRes = await (prefetched || fetchEpisodeData(epNum));
+      /* A newer episode switch may have started while this fetch was in
+         flight: the stale answer must not overwrite the new episode's title. */
+      const isCurrent = Number(epNum) === Number(currentEp);
       if (epRes.ok && epRes.data && epRes.data.episode) {
         const ep = epRes.data.episode;
-        if (epSubtitle) epSubtitle.textContent = `Episode ${ep.epNum}: ${ep.title}`;
+        if (epSubtitle && isCurrent) epSubtitle.textContent = `Episode ${ep.epNum}: ${ep.title}`;
         return ep;
       } else {
-        if (epSubtitle) epSubtitle.textContent = `Episode ${epNum}`;
+        if (epSubtitle && isCurrent) epSubtitle.textContent = `Episode ${epNum}`;
         return null;
       }
     }
@@ -1801,6 +1819,7 @@
     async function loadEpisode(epNum, prefetched, startFromBeginning = false) {
       currentEp = epNum;
       activeEpisode = epNum;
+      loadInFlight = true;
       /* New load: retire any previous resume notice and its timers. */
       hideResumeNote();
       resumeNoteShownForLoad = false;
@@ -1811,11 +1830,33 @@
       durationIsReal = false;
       playerReady = false;
 
+      /* ------------------------------------------------------------------
+         TRACK RESET — IMMEDIATELY, BEFORE ANY AWAIT.
+         The old code awaited the episode fetch AND the dub probe before it
+         touched the pills, so the PREVIOUS episode's highlight survived the
+         switch for seconds (verified live: switching from a dubbed episode
+         to an episode without a dub left DUB highlighted for a few seconds
+         and only then corrected itself to SUB).
+         Rule from here on: the pill shows the track that is loaded / being
+         loaded on THIS episode, and it is correct within the first frame of
+         the switch. While the answer is still unknown we show SUB — the
+         only track that is guaranteed to exist — and correct it the moment
+         the probe lands. The viewer's PREFERENCE is a separate variable and
+         is never destroyed by this fallback.
+         ------------------------------------------------------------------ */
+      const knownAvail = dubAvailability.get(Number(epNum));
+      const optimisticTrack = preferredTrack === "dub"
+        ? (knownAvail === true ? "dub" : "sub")
+        : (preferredTrack === "hsub" ? "hsub" : "sub");
+      currentTrack = optimisticTrack;
+      applyTrackPill(optimisticTrack);
+      updateTrackLabel();
+
       /* New episode: re-probe dub availability in the background (the Dub
          pill awaits this probe if it is still running when clicked). The
          fresh entry starts unknown, so the previous episode's answer can
          never leak into this one. */
-      probeDubAvailability(epNum);
+      const probePromise = probeDubAvailability(epNum);
 
       // Clear episode-search filter and input box on every episode change (Bug 5)
       const epSearchInput = document.getElementById("ep-search-input");
@@ -1861,9 +1902,13 @@
 
       // Check saved position for resume
       const epData = await updateEpisodeSubtitle(epNum, prefetched);
+      /* A newer episode switch started while this one was fetching: this
+         load is stale and must not touch the player, the URL or the pills. */
+      if (currentEp !== epNum) return;
       if (!epData) {
         // Episode metadata could not be loaded: show a retry state instead of
         // leaving stale placeholder text on screen.
+        loadInFlight = false;
         if (spinner) spinner.hidden = true;
         if (overlay) {
           overlay.hidden = false;
@@ -1908,28 +1953,26 @@
         timeText.textContent = `${formatTime(resumeTime)} / ${durationIsReal && duration > 0 ? formatTime(duration) : "--:--"}`;
       }
 
-      /* Re-resolve the preferred track for THIS episode (probe-gated): a Dub
-         selection must never carry over to an episode without a real dub.
-         When the new episode has no dub, fall back to Sub and highlight Sub
-         immediately — no click and no toast required. When the new episode
-         HAS a dub, keeping the selection is correct. Unknown probe results
-         keep the current track (same rule as the Dub pill). */
-      if (currentTrack === "dub") {
-        const entry = dubProbe.ep === epNum ? dubProbe : null;
-        const avail = entry
-          ? (entry.available !== null ? entry.available : await entry.promise)
-          : await probeDubAvailability(epNum);
+      /* Re-resolve the track for THIS episode (probe-gated).
+         The preference is honoured when the episode really has that track;
+         when it does not, THIS episode falls back to Sub — and only this
+         episode. `preferredTrack` is deliberately left untouched, so the
+         moment the viewer reaches an episode that HAS the preferred track it
+         comes back automatically, with no click (verified live: the old
+         code overwrote the choice with "sub" and the dub never returned). */
+      if (preferredTrack === "dub") {
+        /* A dub needs proof: wait for this episode's probe before handing
+           the dub URL to the embed. */
+        const avail = await probePromise;
         if (currentEp !== epNum) return; // viewer switched again while probing
-        if (avail === false) {
-          currentTrack = "sub";
-          if (trackSwitcher) {
-            trackSwitcher.querySelectorAll(".server-pill").forEach((p) => {
-              p.classList.toggle("active", (p.dataset.track || "sub") === "sub");
-            });
-          }
-          updateTrackLabel();
-        }
+        currentTrack = avail === true ? "dub" : "sub";
+        applyTrackPill(currentTrack);
+      } else {
+        /* Sub and hard-sub exist for every episode — no probe gate. */
+        currentTrack = preferredTrack === "hsub" ? "hsub" : "sub";
+        applyTrackPill(currentTrack);
       }
+      updateTrackLabel();
 
       // Determine MAL ID (check custom override first, then title's malId)
       const malId = getCustomMalId(currentSlug) || (titleData && titleData.malId);
@@ -1948,6 +1991,7 @@
       });
 
       if (!streamUrl) {
+        loadInFlight = false;
         if (spinner) spinner.hidden = true;
         if (overlay) {
           overlay.hidden = false;
@@ -1962,6 +2006,9 @@
         /* playerEp flips when the NEW player reports `ready` — until then,
            in-flight events from the old document still belong to playerEp. */
       }
+      /* The src is assigned: the load is over, so a track switch from now on
+         swaps the src itself (exactly once). */
+      loadInFlight = false;
       if (spinner) {
         spinner.hidden = false;
         spinner.style.pointerEvents = "";
@@ -2003,23 +2050,37 @@
 
     /* Dub availability for the current episode, probed by the server (Zoko
        serves the sub file under /dub for some titles — switching blindly used
-       to play Japanese while claiming Dub). The result is SCOPED TO THE
-       EPISODE it was fetched for: a single shared variable let a slow probe
-       for a previous episode resolve after the current episode's probe and
-       overwrite its answer — unlocking Dub on an episode whose "dub" is
-       really the sub file (reproduced: ep5's late true clobbered ep1's
-       false). null = unknown / not probed yet. */
-    let dubProbe = { ep: null, available: null, promise: null };
+       to play Japanese while claiming Dub). Results are cached PER EPISODE
+       for the whole session: revisiting an episode resolves instantly, and a
+       slow probe for episode A can never clobber episode B's answer (the old
+       single shared `dubProbe` variable let ep5's late "true" overwrite
+       ep1's "false"). null = unknown / probe failed. */
+    const dubAvailability = new Map(); // ep -> true | false | null
+    const dubProbes = new Map();        // ep -> Promise<true | false | null>
+
     function probeDubAvailability(epNum) {
-      const entry = { ep: epNum, available: null, promise: null };
-      entry.promise = api(`/api/dub-availability/${encodeURIComponent(currentSlug)}/${epNum}`).then((res) => {
-        entry.available = res.ok && res.data && typeof res.data.available === "boolean" ? res.data.available : null;
-        dubProbe = entry;
-        updateTrackLabel();
-        return entry.available;
+      const key = Number(epNum);
+      if (dubProbes.has(key)) return dubProbes.get(key);
+      const p = api(`/api/dub-availability/${encodeURIComponent(currentSlug)}/${key}`).then((res) => {
+        const avail =
+          res.ok && res.data && typeof res.data.available === "boolean" ? res.data.available : null;
+        dubAvailability.set(key, avail);
+        if (key === Number(currentEp)) updateTrackLabel();
+        return avail;
       });
-      dubProbe = entry;
-      return entry.promise;
+      dubProbes.set(key, p);
+      return p;
+    }
+
+    /* The ONE place that owns the pill UI. The highlighted pill is always the
+       track of the stream that is loaded (or being loaded) — never a leftover
+       from the previous episode. */
+    function applyTrackPill(track) {
+      if (!trackSwitcher) return;
+      const active = track || "sub";
+      trackSwitcher.querySelectorAll(".server-pill").forEach((p) => {
+        p.classList.toggle("active", (p.dataset.track || "sub") === active);
+      });
     }
 
     /* Update the track label in the episode list header to reflect the true
@@ -2027,26 +2088,21 @@
     function updateTrackLabel() {
       const label = document.getElementById("track-label");
       if (!label) return;
-      if (dubProbe.ep === currentEp && dubProbe.available !== null) {
-        label.textContent = dubProbe.available === true ? "SUB / DUB" : "SUB";
-      } else {
-        label.textContent = "SUB";
-      }
+      const avail = dubAvailability.get(Number(currentEp));
+      label.textContent = avail === true ? "SUB / DUB" : "SUB";
     }
 
     if (trackSwitcher) {
       trackSwitcher.querySelectorAll(".server-pill").forEach((pill) => {
         pill.addEventListener("click", async () => {
           const requestedTrack = pill.dataset.track || "sub";
-          if (requestedTrack === currentTrack) return;
+          const epAtClick = currentEp;
 
           if (requestedTrack === "dub") {
-            const epAtClick = currentEp;
-            const entry = dubProbe.ep === epAtClick ? dubProbe : null;
-            let avail = entry ? entry.available : null;
-            if (avail === null) {
+            let avail = dubAvailability.get(Number(epAtClick));
+            if (avail === undefined || avail === null) {
               showToast("Checking dub availability…", "⏳", 2500);
-              avail = await (entry ? entry.promise : probeDubAvailability(epAtClick));
+              avail = await probeDubAvailability(epAtClick);
             }
             updateTrackLabel();
             /* The viewer may have switched episodes while the probe ran —
@@ -2060,18 +2116,30 @@
                 "!",
                 3500
               );
-              /* Keep the pill UI honest: the current track stays active. */
-              trackSwitcher.querySelectorAll(".server-pill").forEach((p) => {
-                p.classList.toggle("active", (p.dataset.track || "sub") === currentTrack);
-              });
+              /* Keep the pill UI honest: the current track stays active, and
+                 the viewer's Dub PREFERENCE is left alone — this episode
+                 simply has no dub; the choice must survive it. */
+              applyTrackPill(currentTrack);
               return;
             }
           }
 
-          trackSwitcher.querySelectorAll(".server-pill").forEach((p) => p.classList.remove("active"));
-          pill.classList.add("active");
+          /* An explicit click is a statement of preference: it becomes the
+             track that plays now AND the track every later episode tries to
+             play (as far as that episode actually has it). */
+          preferredTrack = requestedTrack;
+          const changed = requestedTrack !== currentTrack;
           currentTrack = requestedTrack;
+          applyTrackPill(currentTrack);
+          if (!changed) return; // already playing this track: no toast, no reload
+
           showToast(`Switched audio track to ${currentTrack.toUpperCase()}`);
+          /* While an episode load is still in flight the iframe src must NOT
+             be swapped a second time — tearing the embed down mid-load races
+             its own stream fetch (the live "Unable to play media. 24 seconds
+             of 0 seconds" flash). The in-flight load picks the new track up
+             when it assigns the src. */
+          if (loadInFlight) return;
           if (iframe && iframe.src && iframe.src !== "about:blank") {
             const malId = getCustomMalId(currentSlug) || (titleData && titleData.malId);
             // Read current playback position BEFORE swapping the iframe src (Bug 5).
