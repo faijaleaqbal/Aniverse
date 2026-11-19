@@ -1259,6 +1259,7 @@
     let currentPosition = 0;
     let duration = 1440;
     let isPaused = true;
+    let isMuted = false;
     let lastProgressSync = 0;
 
     // LocalStorage keys
@@ -1535,7 +1536,7 @@
       return api(`/api/titles/${encodeURIComponent(currentSlug)}/episodes/${epNum}`);
     }
 
-    async function loadEpisode(epNum, prefetched) {
+    async function loadEpisode(epNum, prefetched, startFromBeginning = false) {
       currentEp = epNum;
       activeEpisode = epNum;
 
@@ -1604,15 +1605,27 @@
       hideDataError();
 
       let resumeTime = 0;
-      if (typeof epData.savedPositionSec === "number") {
+      if (typeof epData.savedPositionSec === "number" && !startFromBeginning) {
         const epDur = epData.durationSec || 1440;
         if (epData.savedPositionSec > 0 && epData.savedPositionSec < epDur - 10) {
           resumeTime = epData.savedPositionSec;
           if (resumeNote) {
-            resumeNote.textContent = `Resumed from ${formatTime(resumeTime)}`;
+            resumeNote.innerHTML = `
+              Resumed from ${formatTime(resumeTime)}
+              <button class="btn-zoro-primary" id="resume-restart-btn" type="button" style="margin-left: 0.5rem; font-size: 0.75rem;">Restart</button>
+            `;
             resumeNote.hidden = false;
+            const restartBtn = resumeNote.querySelector("#resume-restart-btn");
+            if (restartBtn) {
+              restartBtn.addEventListener("click", () => {
+                loadEpisode(currentEp, null, { startFromBeginning: true });
+              });
+            }
             setTimeout(() => {
-              if (resumeNote) resumeNote.hidden = true;
+              if (resumeNote) {
+                resumeNote.hidden = true;
+                resumeNote.innerHTML = "";
+              }
             }, 5000);
           }
         }
@@ -1691,10 +1704,24 @@
       const entry = { ep: epNum, available: null, promise: null };
       entry.promise = api(`/api/dub-availability/${encodeURIComponent(currentSlug)}/${epNum}`).then((res) => {
         entry.available = res.ok && res.data && typeof res.data.available === "boolean" ? res.data.available : null;
+        dubProbe = entry;
+        updateTrackLabel();
         return entry.available;
       });
       dubProbe = entry;
       return entry.promise;
+    }
+
+    /* Update the track label in the episode list header to reflect the true
+       state of dub availability for the current episode. */
+    function updateTrackLabel() {
+      const label = document.getElementById("track-label");
+      if (!label) return;
+      if (dubProbe.ep === currentEp && dubProbe.available !== null) {
+        label.textContent = dubProbe.available === true ? "SUB / DUB" : "SUB";
+      } else {
+        label.textContent = "SUB";
+      }
     }
 
     if (trackSwitcher) {
@@ -1711,6 +1738,7 @@
               showToast("Checking dub availability…", "⏳", 2500);
               avail = await (entry ? entry.promise : probeDubAvailability(epAtClick));
             }
+            updateTrackLabel();
             /* The viewer may have switched episodes while the probe ran —
                never apply a stale answer to a different episode. */
             if (currentEp !== epAtClick) return;
@@ -1800,16 +1828,32 @@
     }
 
     // Fullscreen button
-    const fsBtn = document.getElementById("btn-fullscreen");
-    if (fsBtn && playerWrap) {
-      fsBtn.addEventListener("click", () => {
-        if (!document.fullscreenElement) {
-          playerWrap.requestFullscreen().catch(() => {});
-        } else {
-          document.exitFullscreen().catch(() => {});
+        const fsBtn = document.getElementById("btn-fullscreen");
+        if (fsBtn && playerWrap) {
+          fsBtn.addEventListener("click", () => {
+            if (!document.fullscreenElement) {
+              playerWrap.requestFullscreen().catch(() => {});
+            } else {
+              document.exitFullscreen().catch(() => {});
+            }
+          });
         }
-      });
-    }
+
+        // Mute button
+        const muteBtn = document.getElementById("btn-mute");
+        const muteIcon = document.getElementById("mute-icon");
+        if (muteBtn) {
+          muteBtn.addEventListener("click", () => {
+            if (isMuted) {
+              sendPlayerCommand({ type: "mute", on: false });
+              isMuted = false;
+            } else {
+              sendPlayerCommand({ type: "mute", on: true });
+              isMuted = true;
+            }
+            if (muteIcon) muteIcon.textContent = isMuted ? "🔇" : "🔊";
+          });
+        }
 
     // Skip buttons: Absolute seek clamped to [0, duration] sent to official origin
     const skipBack = document.getElementById("btn-skip-back");
@@ -1912,6 +1956,11 @@
         if (typeof data.paused === "boolean") {
           isPaused = data.paused;
           if (playPauseBtn) playPauseBtn.textContent = isPaused ? "▶" : "❚❚";
+        }
+        if (typeof data.muted === "boolean") {
+          isMuted = data.muted;
+          const icon = document.getElementById("mute-icon");
+          if (icon) icon.textContent = isMuted ? "🔇" : "🔊";
         }
       }
 
@@ -2035,6 +2084,17 @@
         e.preventDefault();
         const target = Math.min(duration, currentPosition + 10);
         sendPlayerCommand({ type: "seek", time: target });
+      } else if (e.code === "KeyM") {
+        e.preventDefault();
+        if (isMuted) {
+          sendPlayerCommand({ type: "mute", on: false });
+          isMuted = false;
+        } else {
+          sendPlayerCommand({ type: "mute", on: true });
+          isMuted = true;
+        }
+        const icon = document.getElementById("mute-icon");
+        if (icon) icon.textContent = isMuted ? "🔇" : "🔊";
       }
     });
 
@@ -2177,6 +2237,20 @@
     loadComments();
   }
 
+  /* Dub-aware title badge helper: probes a single episode on the server and
+     returns true only when a real dub stream exists for that episode. */
+  async function probeDubForTitle(slug, ep) {
+    try {
+      const res = await api(`/api/dub-availability/${encodeURIComponent(slug)}/${ep}`);
+      if (res.ok && res.data && typeof res.data.available === "boolean") {
+        return res.data.available;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
   /* ==========================================================================
      DETAIL PAGE (Phase 1): real metadata hero, episode list, recommendations
      ========================================================================== */
@@ -2186,7 +2260,9 @@
     if (!stage) return;
 
     const params = new URLSearchParams(window.location.search);
-    const slug = params.get("slug");
+    // ?slug= is the canonical key; ?id= is accepted as an alias for stable
+    // deep-linking (watchlist/progress/history keys all live under slugs).
+    const slug = params.get("slug") || params.get("id");
     const loadingEl = document.getElementById("detail-loading");
     const errorEl = document.getElementById("detail-error");
     const contentEl = document.getElementById("detail-content");
@@ -2206,7 +2282,23 @@
       return;
     }
 
-    const res = await api(`/api/titles/${encodeURIComponent(slug)}`);
+    // Match by slug first; if the value looks like a real title, try to resolve
+    // it to a slug (e.g. 'solo-leveling' -> 'second-wind').
+    let targetSlug = slug;
+    if (!slug.startsWith("slug") && slug.includes("-")) {
+      const aliasRes = await api(`/api/titles?limit=100`);
+      if (aliasRes.ok && aliasRes.data && Array.isArray(aliasRes.data.titles)) {
+        const needle = slug.toLowerCase().replace(/[-\s]+/g, "-");
+        const matched = aliasRes.data.titles.find((t) => {
+          const s = (t.slug || "").toLowerCase().replace(/[-\s]+/g, "-");
+          const n = (((t.name || "") + " " + (t.realTitle || "")).toLowerCase().replace(/[-\s]+/g, "-"));
+          return s === needle || n === needle || n.includes(needle) || s.includes(needle) || n.includes(needle.replace(/-/g, " "));
+        });
+        if (matched) targetSlug = matched.slug;
+      }
+    }
+
+    const res = await api(`/api/titles/${encodeURIComponent(targetSlug)}`);
     if (!res.ok || !res.data || !res.data.title) {
       showError("This title could not be loaded from the server.");
       return;
@@ -2234,11 +2326,13 @@
       altEl.textContent = parts.join("  •  ");
       altEl.hidden = parts.length === 0;
     }
+    // Detail page badges: DUB badge only when a real dub exists.
     const badges = document.getElementById("detail-badges");
     if (badges) {
+      const hasDub = await probeDubForTitle(t.slug, 1);
       badges.innerHTML = `
         <span class="badge badge-sub">SUB ${epCount || 1}</span>
-        <span class="badge badge-dub">DUB ${epCount || 1}</span>
+        ${hasDub === true ? `<span class="badge badge-dub">DUB ${epCount || 1}</span>` : ""}
         <span class="badge badge-type">${t.kind}</span>
         <span class="badge badge-hd">HD</span>
         ${scoreLabel(t) ? `<span class="badge badge-score">★ ${scoreLabel(t)}</span>` : ""}
