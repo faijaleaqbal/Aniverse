@@ -1854,7 +1854,10 @@ img {
   background: rgba(5, 5, 8, 0.85);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
-  z-index: 10000;
+  /* Above the open-drawer stack (backdrop 10001, lifted header 10002): the
+     Sign In button stays clickable while the drawer is open, so the modal
+     must layer over both or it opens unreachable behind the drawer. */
+  z-index: 10003;
   display: flex;
   align-items: center;
   justify-content: center;
