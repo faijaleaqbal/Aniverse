@@ -2885,7 +2885,15 @@ body.drawer-open .zoro-header {
   letter-spacing: 0.02em;
 }
 
-/* "On Aniverse" / "More results" section headings inside the browse grid. */
+/* "On Aniverse" / "More results" section headings inside the browse grid.
+   The groups are rendered INTO #zoro-main-grid (itself a .cards-grid-zoro),
+   so each group must span every column — otherwise the outer 6-column grid
+   treats each group as one narrow 1fr cell (~30px wide) and the inner grid
+   collapses the cards into vertical strips. */
+.live-result-group {
+  grid-column: 1 / -1;
+}
+
 .live-result-group + .live-result-group { margin-top: 2.25rem; }
 
 .live-result-group-title {

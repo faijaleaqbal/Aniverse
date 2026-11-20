@@ -143,10 +143,13 @@
             (function () {
               var params = new URLSearchParams(location.search);
               var live = params.get("live");
-              var slug = params.get("slug") || "kagerou-protocol";
+              /* No default slug: an unknown/missing id must resolve to a
+                 not-found state, never prefetch (and paint) Jujutsu Kaisen. */
+              var slug = params.get("slug") || params.get("id") || "";
               var path = live ? "/api/live/" + encodeURIComponent(live)
-                              : "/api/titles/" + encodeURIComponent(slug);
+                              : slug ? "/api/titles/" + encodeURIComponent(slug) : null;
               window.__zoroPrefetch = window.__zoroPrefetch || {};
+              if (!path) return;
               var ctl = new AbortController();
               var to = setTimeout(function () { ctl.abort(); }, 10000);
               window.__zoroPrefetch[path] = fetch(path, { credentials: "same-origin", signal: ctl.signal })
