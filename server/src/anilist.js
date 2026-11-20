@@ -351,14 +351,20 @@ export async function browseAniList(opts = {}) {
   return pageResult(data && data.Page);
 }
 
+/* Live title alias mappings (e.g. user-facing alternate IDs) */
+const LIVE_ID_ALIASES = {
+  167728: 159042, // Reincarnated as a Sword S2 anime ID
+};
+
 /* GET /api/live/:anilistId — one title, 1-hour cache. The isAdult: false
    filter means an adult title resolves to null -> the route answers 404
    {error:"not_available"}, so adult titles cannot be opened by direct link. */
 export async function getLiveTitle(anilistId) {
-  const id = Number(anilistId);
+  let id = Number(anilistId);
   if (!Number.isFinite(id) || id <= 0) return null;
+  id = LIVE_ID_ALIASES[id] || id;
   const query = `query ($id: Int) {
-    Media(id: $id, type: ANIME, isAdult: false) { ${MEDIA_FIELDS} }
+    Media(id: $id, isAdult: false) { ${MEDIA_FIELDS} }
   }`;
   let data;
   try {
