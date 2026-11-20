@@ -11,7 +11,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
   <noscript><link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet"></noscript>
   <link rel="preload" href="css/zoro-aizen.css?v=10" as="style">
-  <link rel="preload" href="js/zoro-aizen.js?v=10" as="script">
+  <link rel="preload" href="js/zoro-aizen.js?v=11" as="script">
   <script>
     /* Warm the API while the app script is still downloading: this removes a
        full round trip from the critical path. The app script adopts these
@@ -36,7 +36,7 @@
   </script>  <link rel="stylesheet" href="css/zoro-aizen.css?v=10">
   <!-- Player-specific styles (spinner overlay, resume note, toasts). Without
        this sheet the spinner rendered as plain text BELOW the player. -->
-  <link rel="stylesheet" href="css/zoko-player.css?v=10">
+  <link rel="stylesheet" href="css/zoko-player.css?v=11">
 </head>
 <body>
 
@@ -172,14 +172,16 @@
           </div>
         </div>
 
-        <!-- Server switcher: Zoko stays the PRIMARY player; animeTVplus is a
-             fallback the viewer chooses (or is offered when Zoko fails).
-             Session-scoped choice; swaps the iframe src in place. -->
+        <!-- Server switcher: Zoko stays the PRIMARY player; TVplus and
+             MegaPlay are alternates the viewer chooses (or is offered when
+             a player fails). Session-scoped choice; swaps the iframe src
+             in place. -->
         <div class="servers-bar-zoro zoko-server-bar" id="zoko-server-bar">
           <span class="zoko-bar-label">SERVER:</span>
           <div class="zoko-track-switcher" id="zoko-server-switcher" role="group" aria-label="Streaming server">
             <button class="server-pill active" data-server="zoko" type="button" title="ZokoAnime — primary player (Sub / Hard-sub / Dub)">Zoko</button>
             <button class="server-pill" data-server="backup" type="button" title="TVplus — audio &amp; subs depend on the source file; the site can't switch tracks. Press Play inside the player.">TVplus</button>
+            <button class="server-pill" data-server="megaplay" type="button" title="MegaPlay — Sub &amp; Dub, auto-play. Hard-sub isn't a MegaPlay track.">MegaPlay</button>
           </div>
         </div>
 
@@ -324,6 +326,6 @@
     </div>
   </footer>
 
-  <script src="js/zoro-aizen.js?v=10"></script>
+  <script src="js/zoro-aizen.js?v=11"></script>
 </body>
 </html>

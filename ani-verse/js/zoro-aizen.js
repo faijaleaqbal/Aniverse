@@ -1648,21 +1648,39 @@
     preferredTrack = readPreferredTrack();
 
     /* ------------------------------------------------------------------
-       SERVER STATE — Zoko is PRIMARY; animeTVplus is a fallback only.
-       The choice is session-scoped (sessionStorage): a fresh tab always
-       starts on Zoko, a reload inside the same tab keeps the choice.
-       ?player=backup is a harmless test hook that starts on the backup.
+       SERVER STATE — Zoko is PRIMARY; TVplus and MegaPlay are alternates
+       the viewer chooses (never auto-switched to). The choice is
+       session-scoped (sessionStorage): a fresh tab always starts on Zoko,
+       a reload inside the same tab keeps the choice. ?player=backup /
+       ?player=megaplay are harmless test hooks (loadEpisode's replaceState
+       strips the param from the URL after load).
        ------------------------------------------------------------------ */
     const SS_SERVER_KEY = "av_player_server";
     const BACKUP_ORIGIN = "https://embed.animetvplus.site";
+    const MEGAPLAY_ORIGIN = "https://megaplay.buzz";
     let activeServer = "zoko";
     try {
-      if (sessionStorage.getItem(SS_SERVER_KEY) === "backup") activeServer = "backup";
+      const storedServer = sessionStorage.getItem(SS_SERVER_KEY);
+      if (storedServer === "backup" || storedServer === "megaplay") activeServer = storedServer;
     } catch {}
-    if (params.get("player") === "backup") {
-      activeServer = "backup";
-      try { sessionStorage.setItem(SS_SERVER_KEY, "backup"); } catch {}
+    const playerHook = params.get("player");
+    if (playerHook === "backup" || playerHook === "megaplay") {
+      activeServer = playerHook;
+      try { sessionStorage.setItem(SS_SERVER_KEY, playerHook); } catch {}
     }
+    /* MegaPlay session state:
+       megaPlayTrack — the last explicit track choice made ON MegaPlay.
+       Session-only, NEVER persisted to av_zoko_track: MegaPlay's dub
+       availability differs from Zoko's probe data, so its choices must not
+       rewrite the Zoko preference. Carries the choice across episode
+       switches while MegaPlay is active.
+       megaPlayFrameLoaded — attribution gate. MegaPlay has no reliable
+       pre-playback ready event (its PLAYER_READY can arrive AFTER the first
+       time events on a resumed load — live-verified), so the iframe load
+       commit is the boundary: until the NEW document has loaded, same-
+       episode events belong to the dying player and are ignored. */
+    let megaPlayTrack = null;
+    let megaPlayFrameLoaded = false;
 
     /* animeTVplus embed URLs. IDs come from the catalog (titleData.malId /
        titleData.anilistId) — never invented — with three LIVE-VERIFIED
@@ -1720,6 +1738,27 @@
       return url;
     }
 
+    /* MegaPlay embed URLs (third server). The catalog MAL id is used
+       DIRECTLY — all 18 catalog titles verified playing with their catalog
+       ids (2026-11-19), including the ASV/ERASED pair: MegaPlay's upstream
+       mapping is swapped the SAME way the catalog is, so the catalog ids
+       serve the correct content with NO pins (no exceptions table here).
+       The Zoko debug MAL override (av_zoko_ids) is deliberately not applied
+       — it is a Zoko tool.
+       RESUME: ?t= was live-tested (t=60 on Solo ep1 started playback at
+       0.13s; t=0 and resume=0 also failed to override the provider's own
+       internal resume) — MegaPlay ignores start-offset params, so NO t= is
+       emitted. The provider keeps its OWN internal per-video resume store
+       (verified: a reload resumed at the previous position); the site can
+       neither query nor disable it, and surfaces it honestly via the
+       fallback resume notice. Position tracking still runs on MegaPlay, so
+       a switch back to Zoko resumes from the stored position. */
+    function getMegaPlayEmbedUrl(epNum, track) {
+      if (!(titleData && titleData.malId)) return null;
+      const lang = track === "dub" ? "dub" : "sub";
+      return `${MEGAPLAY_ORIGIN}/stream/mal/${titleData.malId}/${epNum}/${lang}`;
+    }
+
     /* ------------------------------------------------------------------
        ZOKO FAILURE DETECTION (diagnosed against the live embed core JS)
        1. REAL error signal: the embed emits {channel:'zokoanime',
@@ -1743,9 +1782,11 @@
     const ZOKO_NO_READY_TIMEOUT_MS = 45000;
     const ZOKO_PROBE_ABORT_MS = 20000;
     const BACKUP_NO_READY_TIMEOUT_MS = 45000;
+    const MEGAPLAY_NO_PLAY_TIMEOUT_MS = 45000;
     let loadToken = 0;
     let zokoFailTimer = null;
     let backupFailTimer = null;
+    let megaplayFailTimer = null;
     let fallbackOfferVisible = false;
     /* When the last Zoko error event arrived. Recovery (offer/overlay hide)
        requires playback evidence MORE than 2s after the error: the old
@@ -1753,6 +1794,9 @@
        error, and a single stale event must not withdraw the offer. */
     let lastZokoErrorAt = 0;
     const ZOKO_RECOVERY_GUARD_MS = 2000;
+    /* Same recovery guard for MegaPlay's failure offer. */
+    let lastMegaPlayErrorAt = 0;
+    const MEGAPLAY_RECOVERY_GUARD_MS = 2000;
     const fallbackNote = document.getElementById("zoko-fallback-note");
     const serverSwitcher = document.getElementById("zoko-server-switcher");
 
@@ -1796,6 +1840,23 @@
       if (dismissBtn) dismissBtn.addEventListener("click", hideFallbackNote);
     }
 
+    /* MegaPlay-context failure OFFER: the same notice component as the Zoko
+       failure offer, but the way out is back to the PRIMARY player. The
+       viewer chooses; nothing switches automatically. */
+    function showMegaPlayFailureOffer(message) {
+      if (!fallbackNote || activeServer !== "megaplay") return;
+      fallbackOfferVisible = true;
+      fallbackNote.innerHTML = `
+        <span class="zoko-fallback-text">${escapeHtml(message)}</span>
+        <button class="btn-zoro-primary" id="fallback-try-btn" type="button">Try Zoko player</button>
+        <button class="fallback-dismiss" id="fallback-dismiss-btn" type="button" aria-label="Dismiss notice">✕</button>`;
+      fallbackNote.hidden = false;
+      const tryBtn = fallbackNote.querySelector("#fallback-try-btn");
+      if (tryBtn) tryBtn.addEventListener("click", () => switchServer("zoko"));
+      const dismissBtn = fallbackNote.querySelector("#fallback-dismiss-btn");
+      if (dismissBtn) dismissBtn.addEventListener("click", hideFallbackNote);
+    }
+
     function armZokoFailureDetection(streamUrl, token) {
       if (zokoFailTimer) clearTimeout(zokoFailTimer);
       zokoFailTimer = setTimeout(() => {
@@ -1826,12 +1887,28 @@
       }, BACKUP_NO_READY_TIMEOUT_MS);
     }
 
+    /* MegaPlay failure detection: an error event OR 45s without a single
+       time/watching-log event (the documented alive signal — PLAYER_READY
+       does not count). NO reachability probe here: direct access to a
+       MegaPlay stream URL returns HTTP 410 BY DESIGN (embed-only block),
+       so a no-cors probe would false-positive on healthy titles. */
+    function armMegaPlayFailureDetection(token) {
+      if (megaplayFailTimer) clearTimeout(megaplayFailTimer);
+      megaplayFailTimer = setTimeout(() => {
+        megaplayFailTimer = null;
+        if (token !== loadToken || activeServer !== "megaplay" || playerReady) return;
+        if (spinner) spinner.hidden = true;
+        if (coverOverlay) coverOverlay.style.display = "none";
+        showMegaPlayFailureOffer("MegaPlay isn't responding.");
+      }, MEGAPLAY_NO_PLAY_TIMEOUT_MS);
+    }
+
     /* Swap the iframe in place — no page reload, no lost comment draft, no
        lost resume notice. The last observable position travels with the
-       switch (Zoko reports time events; the backup exposes none, so this
-       captured position is also what a later switch BACK resumes from). */
+       switch (Zoko and MegaPlay report time events; TVplus exposes none, so
+       this captured position is also what a later switch BACK resumes from). */
     function switchServer(server) {
-      if (server !== "zoko" && server !== "backup") return;
+      if (server !== "zoko" && server !== "backup" && server !== "megaplay") return;
       if (server === activeServer) return;
       const pos = Math.floor(currentPosition || 0);
       activeServer = server;
@@ -1847,15 +1924,16 @@
 
     /* One place owns the server-dependent UI: pills, track availability,
        Zoko-only settings, cover badge. preferredTrack / av_zoko_track are
-       NEVER written here — the viewer's Dub choice survives the backup. */
+       NEVER written here — the viewer's Dub choice survives the alternates. */
     function applyServerUI() {
       const onBackup = activeServer === "backup";
+      const onMegaPlay = activeServer === "megaplay";
       if (serverSwitcher) {
         serverSwitcher.querySelectorAll(".server-pill").forEach((p) => {
           p.classList.toggle("active", p.dataset.server === activeServer);
         });
       }
-      if (iframe) iframe.title = onBackup ? "TVplus player" : "ZokoAnime player";
+      if (iframe) iframe.title = onMegaPlay ? "MegaPlay player" : onBackup ? "TVplus player" : "ZokoAnime player";
       if (trackSwitcher) {
         trackSwitcher.querySelectorAll(".server-pill").forEach((p) => {
           const t = p.dataset.track || "sub";
@@ -1871,27 +1949,48 @@
             p.title = t === "dub" ? "Track switching isn't available on TVplus — audio depends on the source file"
                     : t === "hsub" ? "Track switching isn't available on TVplus — subs depend on the source file"
                     : "";
+          } else if (onMegaPlay) {
+            /* MegaPlay serves REAL dubs and its availability differs from
+               Zoko's probe data — Sub and Dub stay enabled ALWAYS (never
+               disabled from dub_checks). A truly missing dub surfaces as a
+               player error → the failure notice handles it. Hard-sub is not
+               a MegaPlay track: disabled with an honest tooltip. */
+            p.disabled = t === "hsub";
+            p.classList.toggle("is-disabled", t === "hsub");
+            p.title = t === "hsub" ? "Hard-sub isn't a MegaPlay track — choose Sub or Dub" : "";
           } else {
             p.disabled = false;
             p.classList.remove("is-disabled");
             p.title = "";
           }
         });
-        if (!onBackup) applyTrackPill(currentTrack);
+        if (onMegaPlay) applyTrackPill(currentTrack === "dub" ? "dub" : "sub");
+        else if (!onBackup) applyTrackPill(currentTrack);
       }
       if (settingToggles) {
         settingToggles.querySelectorAll("input[data-setting]").forEach((cb) => {
-          cb.disabled = onBackup;
+          /* Zoko embed settings stay disabled on the alternates — except
+             auto-next on MegaPlay, which is SITE-driven (the complete event
+             loads the next episode), so that toggle genuinely works there.
+             MegaPlay always auto-plays and has no intro/outro skip. */
+          const key = cb.dataset.setting;
+          const disabled = onBackup || (onMegaPlay && key !== "autonext");
+          cb.disabled = disabled;
           const label = cb.closest(".zoko-toggle");
           if (label) {
-            label.classList.toggle("is-disabled", onBackup);
-            label.title = onBackup ? "Not available on the TVplus player" : "";
+            label.classList.toggle("is-disabled", disabled);
+            label.title = !disabled ? ""
+              : onBackup ? "Not available on the TVplus player"
+              : key === "autoplay" ? "MegaPlay always auto-plays"
+              : "Not available on the MegaPlay player";
           }
         });
       }
       const coverBadge = document.getElementById("player-cover-badge");
       if (coverBadge) {
-        coverBadge.innerHTML = onBackup
+        coverBadge.innerHTML = onMegaPlay
+          ? '<span style="color: var(--zoro-lime);">⚡</span> Stream with MegaPlay (Auto-Play)'
+          : onBackup
           ? '<span style="color: var(--zoro-lime);">⚡</span> Stream with TVplus (press Play)'
           : '<span style="color: var(--zoro-lime);">⚡</span> Stream with ZokoAnime (Auto-Skip)';
       }
@@ -2218,9 +2317,14 @@
       }
       resumeNoteShownForLoad = true;
       resumeNoteArmOnPlay = true;
+      /* Restart stays on Zoko/TVplus only: MegaPlay's internal resume store
+         cannot be disabled (?t=0 / resume=0 live-tested — both ignored), so
+         a Restart button there would be a fake control. */
+      const restartBtnHtml = activeServer === "megaplay" ? "" :
+        `<button class="btn-zoro-primary" id="resume-restart-btn" type="button" style="margin-left: 0.5rem; font-size: 0.75rem;">Restart</button>`;
       resumeNote.innerHTML = `
         Resumed from ${formatTime(seconds)}
-        <button class="btn-zoro-primary" id="resume-restart-btn" type="button" style="margin-left: 0.5rem; font-size: 0.75rem;">Restart</button>
+        ${restartBtnHtml}
         <button id="resume-dismiss-btn" type="button" aria-label="Dismiss resume notice" style="margin-left: 0.35rem; background: none; border: none; color: var(--zoro-lime); font-size: 0.9rem; cursor: pointer; line-height: 1;">✕</button>
       `;
       resumeNote.hidden = false;
@@ -2262,12 +2366,13 @@
       loadInFlight = true;
       loadToken++;
       const token = loadToken;
-      /* New load: retire any previous failure-detection timers and (on Zoko)
-         the previous failure offer. A backup-status note stays — the viewer
-         is still on the backup player. */
+      /* New load: retire any previous failure-detection timers and (on Zoko
+         or MegaPlay) the previous failure offer. A backup-status note stays
+         — the viewer is still on the backup player. */
       if (zokoFailTimer) { clearTimeout(zokoFailTimer); zokoFailTimer = null; }
       if (backupFailTimer) { clearTimeout(backupFailTimer); backupFailTimer = null; }
-      if (activeServer === "zoko") hideFallbackNote();
+      if (megaplayFailTimer) { clearTimeout(megaplayFailTimer); megaplayFailTimer = null; }
+      if (activeServer !== "backup") hideFallbackNote();
       /* New load: retire any previous resume notice and its timers. */
       hideResumeNote();
       resumeNoteShownForLoad = false;
@@ -2276,6 +2381,8 @@
       skippedThisLoad = false;
       seekCommandThisLoad = false;
       lastZokoErrorAt = 0;
+      lastMegaPlayErrorAt = 0;
+      megaPlayFrameLoaded = false;
       durationIsReal = false;
       playerReady = false;
 
@@ -2302,6 +2409,17 @@
            they go back to Zoko. */
         currentTrack = "sub";
         applyTrackPill("sub");
+        updateTrackLabel();
+      } else if (activeServer === "megaplay") {
+        /* MegaPlay: Sub and Dub are ALWAYS offered — its dub availability
+           differs from Zoko's probe data, so there is NO dub_checks gate
+           here (a missing dub surfaces as a player error → failure notice).
+           An explicit MegaPlay choice (megaPlayTrack) carries across
+           episodes; otherwise the stored preference maps over (hsub → sub:
+           MegaPlay has no hard-sub track). preferredTrack / av_zoko_track
+           are deliberately untouched. */
+        currentTrack = megaPlayTrack || (preferredTrack === "dub" ? "dub" : "sub");
+        applyTrackPill(currentTrack);
         updateTrackLabel();
       } else {
         const optimisticTrack = preferredTrack === "dub"
@@ -2404,6 +2522,14 @@
           }
         }
       }
+      /* MegaPlay ignores start-offset params (?t= live-tested: playback
+         started at 0 regardless; t=0 / resume=0 cannot override its internal
+         resume either). The site therefore never claims a resume it cannot
+         deliver: as far as the site is concerned the load starts from the
+         episode start, and the provider's OWN internal resume (if any) is
+         surfaced honestly by the fallback resume notice. Position tracking
+         still runs on MegaPlay, so switching back to Zoko resumes correctly. */
+      if (activeServer === "megaplay") resumeTime = 0;
       resumeTimeForLoad = resumeTime;
       /* The notice is for a MEANINGFUL resume only (>=5s — the same floor
          the resumable window uses). A server switch carrying a 1-4s
@@ -2412,7 +2538,13 @@
       if (resumeTime >= 5) showResumeNote(resumeTime);
 
       // Reflect the resumed position in the UI before the player reports back
-      currentPosition = resumeTime;
+      /* MegaPlay exception: a carried switch position stays the "last known"
+         position until MegaPlay's own time events report the real one — a
+         quick switch back to Zoko must not lose it (MegaPlay may not have
+         emitted a single event yet). */
+      currentPosition = activeServer === "megaplay" && positionOverride != null
+        ? Math.floor(positionOverride)
+        : resumeTime;
       if (epData.durationSec) duration = epData.durationSec;
       if (progressFill && duration > 0) {
         progressFill.style.width = `${Math.min((resumeTime / duration) * 100, 100)}%`;
@@ -2448,10 +2580,12 @@
         updateTrackLabel();
       }
 
-      // Build the stream URL for the ACTIVE server (Zoko primary, backup fallback)
+      // Build the stream URL for the ACTIVE server (Zoko primary, TVplus / MegaPlay alternates)
       let streamUrl;
       if (activeServer === "backup") {
         streamUrl = getBackupEmbedUrl(currentEp, resumeTime, startFromBeginning === true);
+      } else if (activeServer === "megaplay") {
+        streamUrl = getMegaPlayEmbedUrl(currentEp, currentTrack);
       } else {
         // Determine MAL ID (check custom override first, then title's malId)
         const malId = getCustomMalId(currentSlug) || (titleData && titleData.malId);
@@ -2483,7 +2617,7 @@
 
       if (iframe) {
         iframe.src = streamUrl;
-        iframe.title = activeServer === "backup" ? "TVplus player" : "ZokoAnime player";
+        iframe.title = activeServer === "megaplay" ? "MegaPlay player" : activeServer === "backup" ? "TVplus player" : "ZokoAnime player";
         /* playerEp flips when the NEW player reports `ready` — until then,
            in-flight events from the old document still belong to playerEp. */
       }
@@ -2493,6 +2627,8 @@
       /* Arm failure detection for the server actually loading. */
       if (activeServer === "zoko") {
         armZokoFailureDetection(streamUrl, token);
+      } else if (activeServer === "megaplay") {
+        armMegaPlayFailureDetection(token);
       } else {
         armBackupFailureDetection(token);
       }
@@ -2598,9 +2734,12 @@
     function updateTrackLabel() {
       const label = document.getElementById("track-label");
       if (!label) return;
-      /* On the backup the site cannot know the file's audio track — never
-         advertise a specific track (SUB or DUB) there. */
-      if (activeServer === "backup") {
+      /* On the alternates the site cannot know the file's audio track —
+         never advertise a specific track (SUB or DUB) there. TVplus: the
+         source file decides. MegaPlay: both tracks are always offered, but
+         per-episode availability differs from Zoko's probes and is unknown
+         to the site (a miss surfaces via the failure notice). */
+      if (activeServer === "backup" || activeServer === "megaplay") {
         label.textContent = "—";
         return;
       }
@@ -2613,9 +2752,39 @@
         pill.addEventListener("click", async () => {
           /* On the backup the Dub/Hard-sub pills are disabled; this guard
              keeps any stray activation from touching the track state. */
-          if (activeServer !== "zoko") return;
+          if (activeServer === "backup") return;
           const requestedTrack = pill.dataset.track || "sub";
           const epAtClick = currentEp;
+
+          if (activeServer === "megaplay") {
+            /* MegaPlay track switch = rebuild the iframe URL with the other
+               language (same shape as Zoko's track switch). NO dub probe:
+               MegaPlay's dub availability differs from Zoko's probe data —
+               a truly missing dub surfaces as a player error → the failure
+               notice handles it. NO preference write: av_zoko_track stays
+               the Zoko choice; megaPlayTrack carries the MegaPlay choice
+               across episodes for this session only. */
+            if (requestedTrack === "hsub") return; // disabled-pill guard
+            if (requestedTrack === currentTrack) return;
+            megaPlayTrack = requestedTrack;
+            currentTrack = requestedTrack;
+            applyTrackPill(currentTrack);
+            updateTrackLabel();
+            showToast(`Switched audio track to ${currentTrack.toUpperCase()}`);
+            /* While a load is in flight the src must not be swapped a second
+               time — the in-flight load picks the new track up. */
+            if (loadInFlight) return;
+            if (iframe && iframe.src && iframe.src !== "about:blank") {
+              const newUrl = getMegaPlayEmbedUrl(epAtClick, currentTrack);
+              if (newUrl) {
+                /* Same-episode swap: gate events until the NEW document
+                   loads (the dying one keeps emitting for ~0.5s). */
+                megaPlayFrameLoaded = false;
+                iframe.src = newUrl;
+              }
+            }
+            return;
+          }
 
           if (requestedTrack === "dub") {
             let avail = dubAvailability.get(Number(epAtClick));
@@ -2807,8 +2976,138 @@
       });
     }
 
-    // Bi-directional postMessage listener: animeTVplus backup + ZokoAnime primary
+    // Bi-directional postMessage listener: MegaPlay + animeTVplus + ZokoAnime
     window.addEventListener("message", async (event) => {
+      /* ---- MegaPlay (third server) -------------------------------------
+         Documented events (megaplay.buzz/api), live-verified 2026-11-20:
+         {channel:"megacloud", event:"time", time, duration, percent},
+         {event:"complete"}, {event:"error"}, and {type:"watching-log",
+         currentTime, duration} (no channel field). The player also emits
+         PLAYER_READY / PIP_STATE / getFullscreenState — PLAYER_READY can
+         arrive AFTER the first time events on a resumed load, so it is NOT
+         the ready gate; the iframe load commit is (see the load listener
+         below). Origin is checked before anything is trusted. */
+      if (event.origin === MEGAPLAY_ORIGIN) {
+        if (activeServer !== "megaplay") return;
+        let mdata = event.data;
+        if (typeof mdata === "string") {
+          try { mdata = JSON.parse(mdata); } catch { return; }
+        }
+        if (!mdata || typeof mdata !== "object") return;
+        const isWatchingLog = mdata.type === "watching-log";
+        if (!isWatchingLog && mdata.channel !== "megacloud") return;
+        const mev = mdata.event || mdata.type;
+
+        /* Same-episode swap gate (Restart / track switch / switch-back):
+           the OLD document keeps emitting time events until the navigation
+           commits. Until the NEW document has loaded, same-episode events
+           belong to the dying player — ignore them (they would re-save a
+           just-cleared position / re-arm a stale resume notice). Cross-
+           episode events still flow: progress saves under playerEp. Errors
+           stay ungated so pre-load failures surface. */
+        if (mev !== "error" && !megaPlayFrameLoaded && playerEp === currentEp) return;
+
+        // Events: time / watching-log → position tracking (same store as Zoko)
+        if (mev === "time" || isWatchingLog) {
+          if (playerEp == null) return;
+          const cur = typeof mdata.time === "number" ? mdata.time
+                    : typeof mdata.currentTime === "number" ? mdata.currentTime : 0;
+          const hasRealDuration = typeof mdata.duration === "number" && mdata.duration > 0;
+          const dur = hasRealDuration ? mdata.duration : duration;
+          const now = Date.now();
+          /* Progress is ALWAYS attributed to playerEp — the episode actually
+             playing in the iframe — under the SAME store as Zoko
+             (av_zoko_progress signed-out, /api/progress signed-in), so a
+             switch back to Zoko resumes where MegaPlay left off. */
+          if (currentUser && cur > 0 && now - lastProgressSync > 5000) {
+            lastProgressSync = now;
+            api("/api/progress", {
+              method: "POST",
+              body: {
+                slug: currentSlug,
+                episode: playerEp,
+                positionSec: Math.floor(cur),
+                durationSec: Math.floor(dur),
+              },
+            });
+          }
+          if (!currentUser && cur > 0 && now - lastLocalSave > 5000) {
+            lastLocalSave = now;
+            writeLocalProgress(currentSlug, playerEp, cur, dur);
+          }
+          /* UI below is for the episode the page shows — stale events from
+             the previous episode must not touch it. */
+          if (playerEp !== currentEp) return;
+          /* First live time event = playback observed: retire the 45s
+             no-play backstop (a time event — not PLAYER_READY — is the
+             documented alive signal). */
+          if (!playerReady) {
+            playerReady = true;
+            if (megaplayFailTimer) { clearTimeout(megaplayFailTimer); megaplayFailTimer = null; }
+          }
+          currentPosition = cur;
+          if (hasRealDuration) {
+            duration = mdata.duration;
+            durationIsReal = true;
+          }
+          if (cur > 0) {
+            if (spinner) spinner.hidden = true;
+            if (coverOverlay) coverOverlay.style.display = "none";
+            /* Sustained playback >2s after an error = genuine recovery (the
+               same guard as Zoko): withdraw the failure offer. In-flight
+               events from the dying document must not clear a real failure. */
+            if (Date.now() - lastMegaPlayErrorAt > MEGAPLAY_RECOVERY_GUARD_MS) {
+              if (fallbackOfferVisible) hideFallbackNote();
+            }
+          }
+          if (timeText) {
+            timeText.textContent = `${formatTime(cur)} / ${durationIsReal && duration > 0 ? formatTime(duration) : "--:--"}`;
+          }
+          /* Fallback resume notice: MegaPlay keeps its OWN internal per-video
+             resume store (live-verified) that the site can neither query nor
+             disable. When it resumes a load the site started at 0, surface
+             that honestly — same window and guards as Zoko's fallback. */
+          if (
+            !resumeNoteShownForLoad &&
+            resumeTimeForLoad === 0 &&
+            !skippedThisLoad &&
+            !seekCommandThisLoad &&
+            cur > 30 &&
+            now - loadStartedAt < 15000
+          ) {
+            showResumeNote(cur);
+          }
+          if (cur > 0) armResumeNoteAutoHide();
+          return;
+        }
+
+        // Event: complete → auto-next (parent-driven, same as Zoko's ended)
+        if (mev === "complete") {
+          if (playerEp == null || playerEp !== currentEp) return;
+          const totalEps = (titleData && titleData.episodes) || episodesList.length || 12;
+          if (playerSettings.autonext && currentEp < totalEps) {
+            showToast(`Episode finished! Auto-playing Episode ${currentEp + 1}...`);
+            setTimeout(() => loadEpisode(currentEp + 1), 1500);
+          } else if (currentEp >= totalEps) {
+            showToast("You finished this anime!");
+          }
+          return;
+        }
+
+        // Event: error → failure notice offering the way back to Zoko
+        if (mev === "error") {
+          lastMegaPlayErrorAt = Date.now();
+          if (megaplayFailTimer) { clearTimeout(megaplayFailTimer); megaplayFailTimer = null; }
+          /* The embed shows its own error UI inside the frame — retire the
+             site overlays rather than stacking on top. Never auto-switch. */
+          if (spinner) spinner.hidden = true;
+          if (coverOverlay) coverOverlay.style.display = "none";
+          showMegaPlayFailureOffer("MegaPlay couldn't play this episode.");
+          return;
+        }
+        return;
+      }
+
       /* ---- animeTVplus backup embed ----------------------------------
          Docs-verified events: ready {mal, anilist, episode}, error {error,
          available}, info (reply to an info request). There are NO time /
@@ -3093,6 +3392,19 @@
       }
     });
 
+    /* MegaPlay attribution boundary: the iframe load commit means the OLD
+       document is gone — from here, player events belong to the episode
+       being shown. MegaPlay's PLAYER_READY is NOT used for this: on a
+       resumed load it arrives AFTER the first time events (live-verified).
+       Zoko/TVplus keep their own ready-event attribution. */
+    if (iframe) {
+      iframe.addEventListener("load", () => {
+        if (activeServer !== "megaplay") return;
+        megaPlayFrameLoaded = true;
+        playerEp = currentEp;
+      });
+    }
+
     /* Keyboard focus containment: shortcuts (F / Space / arrows) are handled
        by THIS page, but clicking inside the cross-origin embed moves focus
        into it and the parent never sees the keys (the embed's player does not
@@ -3199,9 +3511,9 @@
     (async () => {
       try {
         showPlaceholder("Loading episode…");
-        /* Reflect the session's server choice (or the ?player=backup test
-           hook) BEFORE the first load: pills, toggles and badge must be
-           honest from the first frame. */
+        /* Reflect the session's server choice (or the ?player=backup /
+           ?player=megaplay test hook) BEFORE the first load: pills, toggles
+           and badge must be honest from the first frame. */
         applyServerUI();
         if (activeServer === "backup") {
           showBackupNote("TVplus player active — audio depends on the source file. Press Play inside the player.");
