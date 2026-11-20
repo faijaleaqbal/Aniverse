@@ -10,8 +10,8 @@
   <!-- Loaded async: a slow Google Fonts response must never block the app script or render. -->
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
   <noscript><link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet"></noscript>
-  <link rel="preload" href="css/zoro-aizen.css?v=10" as="style">
-  <link rel="preload" href="js/zoro-aizen.js?v=10" as="script">
+  <link rel="preload" href="css/zoro-aizen.css?v=11" as="style">
+  <link rel="preload" href="js/zoro-aizen.js?v=12" as="script">
   <script>
     /* Warm the API while the app script is still downloading: this removes a
        full round trip from the critical path. The app script adopts these
@@ -33,7 +33,7 @@
           });
       });
     })();
-  </script>  <link rel="stylesheet" href="css/zoro-aizen.css?v=10">
+  </script>  <link rel="stylesheet" href="css/zoro-aizen.css?v=11">
 </head>
 <body>
 
@@ -57,7 +57,7 @@
         <a class="nav-link active" href="genres.html">Genres</a>
         <a class="nav-link" href="schedule.html">Schedule</a>
         <a class="nav-link" href="browse.html?kind=film">Movies</a>
-        <a class="nav-link" href="browse.html?view=top-airing&sort=newest">Top Airing</a>
+        <a class="nav-link" href="browse.html?view=top-airing">Top Airing</a>
       </nav>
 
       <div class="search-wrapper">
@@ -146,7 +146,7 @@
     </div>
   </footer>
 
-  <script src="js/zoro-aizen.js?v=10"></script>
+  <script src="js/zoro-aizen.js?v=12"></script>
   <script>
     document.addEventListener("DOMContentLoaded", () => {
       const randBtn = document.getElementById("btn-genres-random");

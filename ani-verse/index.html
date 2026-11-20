@@ -10,8 +10,8 @@
   <!-- Loaded async: a slow Google Fonts response must never block the app script or render. -->
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
   <noscript><link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet"></noscript>
-  <link rel="preload" href="css/zoro-aizen.css?v=10" as="style">
-  <link rel="preload" href="js/zoro-aizen.js?v=10" as="script">
+  <link rel="preload" href="css/zoro-aizen.css?v=11" as="style">
+  <link rel="preload" href="js/zoro-aizen.js?v=12" as="script">
   <script>
     /* Warm the API while the app script is still downloading: this removes a
        full round trip from the critical path. The app script adopts these
@@ -33,7 +33,7 @@
           });
       });
     })();
-  </script>  <link rel="stylesheet" href="css/zoro-aizen.css?v=10">
+  </script>  <link rel="stylesheet" href="css/zoro-aizen.css?v=11">
 </head>
 <body>
 
@@ -57,7 +57,7 @@
         <a class="nav-link" href="genres.html">Genres</a>
         <a class="nav-link" href="schedule.html">Schedule</a>
         <a class="nav-link" href="browse.html?kind=film">Movies</a>
-        <a class="nav-link" href="browse.html?view=top-airing&sort=newest">Top Airing</a>
+        <a class="nav-link" href="browse.html?view=top-airing">Top Airing</a>
       </nav>
 
       <div class="search-wrapper">
@@ -198,13 +198,11 @@
       </div>
     </section>
 
-    <!-- Zoro 4-Column Section (Top Airing, Most Popular, Most Favorite, Latest Completed) -->
+    <!-- Zoro 4-Column Section (Most Popular, Most Favorite, Latest Completed).
+         "Top Airing" is no longer a column: it is its own live section below
+         (currently-airing anime by popularity). -->
     <section class="container-main">
-      <div class="four-col-grid">
-        <div class="col-block">
-          <div class="col-title">Top Airing</div>
-          <div class="col-list" id="col-airing-list"></div>
-        </div>
+      <div class="four-col-grid cols-3">
         <div class="col-block">
           <div class="col-title">Most Popular</div>
           <div class="col-list" id="col-popular-list"></div>
@@ -220,10 +218,11 @@
       </div>
     </section>
 
-    <!-- Zoro Main Catalog Grid with Genre Filter Chips & Hover Tooltips -->
-    <section class="container-main" style="margin-bottom: 4rem;">
+    <!-- Zoro Main Catalog Grid with Genre Filter Chips & Hover Tooltips.
+         The CURATED shelf (the 18 titles with full data) stays untouched. -->
+    <section class="container-main" style="margin-bottom: 3rem;">
       <div class="section-header-zoro">
-        <h2 class="section-title">Latest <span class="accent">Episodes</span></h2>
+        <h2 class="section-title">From <span class="accent">Your Library</span></h2>
         <a href="browse.html" style="font-size: 0.85rem; color: var(--zoro-lime); font-weight: 600;">View All →</a>
       </div>
 
@@ -238,6 +237,54 @@
       <div class="cards-grid-zoro" id="zoro-main-grid">
         <!-- Rendered dynamically with hover card tooltips -->
       </div>
+    </section>
+
+    <!-- ==================================================================
+         LIVE CATALOG RAILS (AniList) — the full world catalog.
+         Trending Now / Top Rated / Latest Episodes, plus Top Airing as its
+         own section (currently-airing anime by popularity).
+         ================================================================== -->
+    <section class="container-main live-rail-section" id="live-top-airing-section">
+      <div class="section-header-zoro">
+        <div>
+          <h2 class="section-title">Top <span class="accent">Airing</span></h2>
+          <span style="font-size: 0.85rem; color: var(--text-muted); font-family: var(--font-mono);">CURRENTLY AIRING</span>
+        </div>
+        <a href="browse.html?view=top-airing" style="font-size: 0.85rem; color: var(--zoro-lime); font-weight: 600;">View All →</a>
+      </div>
+      <div class="cards-grid-zoro" id="live-top-airing-grid"></div>
+    </section>
+
+    <section class="container-main live-rail-section" id="live-trending-section">
+      <div class="section-header-zoro">
+        <div>
+          <h2 class="section-title">Trending <span class="accent">Now</span></h2>
+          <span style="font-size: 0.85rem; color: var(--text-muted); font-family: var(--font-mono);">LIVE FROM ANILIST</span>
+        </div>
+        <a href="browse.html?sort=trending" style="font-size: 0.85rem; color: var(--zoro-lime); font-weight: 600;">View All →</a>
+      </div>
+      <div class="cards-grid-zoro" id="live-trending-grid"></div>
+    </section>
+
+    <section class="container-main live-rail-section" id="live-top-rated-section">
+      <div class="section-header-zoro">
+        <div>
+          <h2 class="section-title">Top <span class="accent">Rated</span></h2>
+          <span style="font-size: 0.85rem; color: var(--text-muted); font-family: var(--font-mono);">HIGHEST SCORED</span>
+        </div>
+        <a href="browse.html?sort=top" style="font-size: 0.85rem; color: var(--zoro-lime); font-weight: 600;">View All →</a>
+      </div>
+      <div class="cards-grid-zoro" id="live-top-rated-grid"></div>
+    </section>
+
+    <section class="container-main live-rail-section" id="live-latest-episodes-section" style="margin-bottom: 4rem;">
+      <div class="section-header-zoro">
+        <div>
+          <h2 class="section-title">Latest <span class="accent">Episodes</span></h2>
+          <span style="font-size: 0.85rem; color: var(--text-muted); font-family: var(--font-mono);">AIRED IN THE LAST 7 DAYS</span>
+        </div>
+      </div>
+      <div class="cards-grid-zoro" id="live-latest-episodes-grid"></div>
     </section>
   </main>
 
@@ -265,6 +312,6 @@
     </div>
   </footer>
 
-  <script src="js/zoro-aizen.js?v=10"></script>
+  <script src="js/zoro-aizen.js?v=12"></script>
 </body>
 </html>

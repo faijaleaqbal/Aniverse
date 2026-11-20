@@ -11,8 +11,8 @@ Aniverse/
 ├── .gitignore                  # Ignores node_modules, .env, *.db-shm, *.db-wal
 ├── README.md                   # Project documentation & runbook
 ├── ani-verse/                  # Static Frontend
-│   ├── index.html              # Home: Hero spotlight, Trending Top 10, 4-column blocks
-│   ├── browse.html             # Catalog: Search, genre filter chips, card grid
+│   ├── index.html              # Home: Hero spotlight, Trending Top 10, 3-column blocks, live AniList rails
+│   ├── browse.html             # Browse: LIVE AniList catalog, genre/format/status/sort/year filters
 │   ├── genres.html             # Genres: 12 interactive shelves with kanji glyphs
 │   ├── schedule.html           # Schedule: 7-day Tokyo JST broadcast timetable
 │   ├── watch.html              # Watch: ZokoAnime embed player, episodes grid, comments
@@ -28,6 +28,7 @@ Aniverse/
     ├── data/
     │   └── aniverse.db         # SQLite database
     ├── src/
+    │   ├── anilist.js            # AniList GraphQL proxy: caching, adult filter, is18plus flag
     │   ├── catalog.js          # Curated anime catalog with accurate MAL IDs
     │   ├── config.js           # Server configuration & environment variables
     │   ├── db.js               # SQLite schema, tables, and migration runner
@@ -37,12 +38,49 @@ Aniverse/
     │   └── zoko.js             # Server-side ZokoAnime embed URL builder
     └── test/
         ├── smoke.js            # Unit tests for buildEmbedUrl (11 checks)
-        ├── e2e.js              # Integration tests: config, stream, search, dub gate, episode titles (10 tests)
+        ├── e2e.js              # Integration tests: config, stream, search, dub gate, episode titles, live catalog (20 tests)
         ├── setup-db.js         # Self-seeding TEMP database + offline enrichment (fresh-clone safe)
         ├── make-fixture.mjs    # Regenerates the metadata fixture from the live DB
         └── fixtures/
             └── enriched-metadata.json  # Offline snapshot of real titles + episode names
 ```
+
+---
+
+## 🌍 Live Catalog: AniList (full world catalog)
+
+The curated 18-title catalog stays the site's core (full dub badges, real episode
+names, watch progress). Around it, the **entire AniList catalog (~20,000 titles)**
+is available through a server-side proxy — the browser never calls AniList directly.
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/search?q=&page=` | Live search. Returns `local` (curated matches) **and** `results` (live matches), deduped by MAL id |
+| `GET /api/browse?sort=&genre=&format=&status=&year=&page=` | One flexible list endpoint over the whole catalog (12 per page) |
+| `GET /api/live/:anilistId` | One title (1 h cache). Adult/unknown ids answer `404 {error:"not_available"}` |
+| `GET /api/airing?page=` | Episodes aired in the last 7 days, newest first (24 per page, 10 min cache) |
+
+**Content rules (enforced server-side on every endpoint):**
+- `isAdult: false` is added to every AniList query, and adult media are filtered
+  again on the way out — **hentai never reaches the site** (search, browse, airing,
+  direct links). Titles whose own name/description names the content are screened
+  too, because AniList does not flag every hentai entry.
+- `is18plus` is a **separate** rule: a title whose genres include `Ecchi` stays
+  visible and is tagged **18+** on cards, detail and watch pages. The UI only
+  renders the badge from this server-computed flag.
+- When AniList is down, rate-limited or slow, the endpoints answer
+  `502 {error:"search_busy"}` and the UI shows *"Service is busy — try again in a
+  moment."* — the local catalog keeps rendering (Browse falls back to the
+  18-title library with a *"Showing your library"* notice).
+
+**Live pages:** `detail.html?live=<anilistId>` and `watch.html?live=<anilistId>&ep=<n>`
+reuse the existing layouts. Live titles are never written to the database: no
+catalog import, no dub rows, no watchlist entries. Their episode list comes from
+the **aired** episode count (an airing title stops at `nextAiringEpisode - 1`),
+their dub availability is **unknown** (Sub and Dub both stay enabled), and their
+resume progress lives under the `live-<anilistId>` localStorage namespace so it
+never collides with the catalog slugs.
+
 
 ---
 
@@ -96,6 +134,7 @@ The server works out of the box with sensible defaults, or can be configured via
 | `ZOKO_DEFAULT_SOURCE` | `mal` | Default anime metadata source (`mal` or `anilist`) |
 | `ZOKO_DEFAULT_TRACK` | `sub` | Default audio track (`sub`, `hsub`, `dub`) |
 | `ZOKO_DEFAULT_COLOR` | `cae962` | Player controls highlight color |
+| `ANILIST_URL` | `https://graphql.anilist.co` | AniList GraphQL endpoint (override for tests/offline) |
 | `DATA_DIR` | `<SERVER_ROOT>/data` | Directory containing SQLite database |
 | `DB_PATH` | `<DATA_DIR>/aniverse.db` | Path to SQLite database file |
 

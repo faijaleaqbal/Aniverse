@@ -23,6 +23,13 @@ import { db } from "./db.js";
 import { buildEmbedUrl, ZOKO_SOURCES, ZOKO_TRACKS } from "./zoko.js";
 import { checkDubAvailability } from "./dub-check.js";
 import {
+  AniListBusyError,
+  searchAniList,
+  browseAniList,
+  getLiveTitle,
+  getAiringSchedule,
+} from "./anilist.js";
+import {
   ApiError,
   badRequest,
   unauthorized,
@@ -462,6 +469,192 @@ app.get("/api/titles/:slug/episodes/:ep", (req, res) => {
       savedPositionSec: progress ? progress.position_sec : 0,
     },
   });
+});
+
+/* ==========================================================================
+   LIVE CATALOG (AniList) ROUTES
+   The browser never talks to AniList directly — everything goes through these
+   server-side endpoints. Every AniList query excludes adult titles, and every
+   title object carries the server-computed `is18plus` flag (Ecchi genre).
+   ========================================================================== */
+
+/* The 18 curated catalog titles, indexed by MAL id and AniList id. This is
+   the dedupe key that keeps a live AniList result and its catalog twin from
+   showing up twice. Rebuilt per request — 18 rows, cheaper than a cache. */
+function catalogIndex() {
+  const rows = db.prepare("SELECT * FROM titles").all();
+  const byMal = new Map();
+  const byAnilist = new Map();
+  for (const row of rows) {
+    if (row.mal_id != null) byMal.set(Number(row.mal_id), row);
+    if (row.anilist_id != null) byAnilist.set(Number(row.anilist_id), row);
+  }
+  return { rows, byMal, byAnilist };
+}
+
+/* Find the catalog row that owns this live title (MAL id first, AniList id
+   as the fallback — the two catalogs disagree on some ids). */
+function catalogRowFor(live, index) {
+  if (!live) return null;
+  if (live.malId != null && index.byMal.has(live.malId)) return index.byMal.get(live.malId);
+  if (live.anilistId != null && index.byAnilist.has(live.anilistId)) return index.byAnilist.get(live.anilistId);
+  return null;
+}
+
+/* Attach the catalog slug (when this live title IS a catalog title) so the UI
+   can link to the richer catalog detail page instead of the live one. */
+function withCatalogSlug(live, index) {
+  if (!live) return live;
+  const row = catalogRowFor(live, index);
+  if (row) live.catalogSlug = row.slug;
+  return live;
+}
+
+/* Local catalog matches for a search query — the SAME matching rules as
+   GET /api/titles?q= (real titles only, never the old placeholder names). */
+function localSearchRows(q) {
+  const pattern = `%${String(q).toLowerCase()}%`;
+  return db
+    .prepare(`
+      SELECT * FROM titles
+      WHERE LOWER(name) LIKE ? OR LOWER(real_title) LIKE ?
+         OR LOWER(romaji_title) LIKE ? OR LOWER(native_title) LIKE ?
+      ORDER BY year DESC, slug ASC
+    `)
+    .all(pattern, pattern, pattern, pattern);
+}
+
+/* AniList is down / rate-limited / slow: HTTP 502 {error:"search_busy"}.
+   The UI shows "Service is busy — try again in a moment." and the local
+   catalog keeps rendering. Never a stack trace, never a crash. */
+function busyResponse(res) {
+  return res.status(502).json({ ok: false, error: "search_busy" });
+}
+
+/* GET /api/search?q=<query>&page=<n>
+   LOCAL catalog matches first ("On Aniverse"), AniList results below
+   ("More results"). An AniList result that IS a catalog title (same MAL id)
+   is shown ONLY as the catalog entry — never twice. */
+app.get("/api/search", async (req, res, next) => {
+  try {
+    const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
+    const page = Math.max(toInt(req.query.page, 1), 1);
+    const index = catalogIndex();
+
+    if (!q) {
+      return res.json({
+        ok: true,
+        query: "",
+        local: [],
+        results: [],
+        pageInfo: { total: 0, currentPage: 1, lastPage: 1, hasNextPage: false },
+      });
+    }
+
+    const live = await searchAniList(q, page);
+
+    /* Catalog entries for this query: the text matches, PLUS any catalog
+       title that the live results revealed (same MAL id) — that title is
+       shown once, under "On Aniverse", and dropped from the live list. */
+    const localRows = localSearchRows(q);
+    const localBySlug = new Map();
+    for (const row of localRows) localBySlug.set(row.slug, row);
+
+    const results = [];
+    for (const item of live.results) {
+      const row = catalogRowFor(item, index);
+      if (row) {
+        if (!localBySlug.has(row.slug)) {
+          localBySlug.set(row.slug, row);
+          localRows.push(row);
+        }
+        continue; // dedupe: the catalog entry represents this title
+      }
+      results.push(item);
+    }
+
+    const local = localRows.slice(0, 12).map((row) => withDubCount(titleView(row)));
+
+    res.json({
+      ok: true,
+      query: q,
+      page,
+      local,
+      results,
+      pageInfo: live.pageInfo,
+    });
+  } catch (err) {
+    if (err instanceof AniListBusyError) return busyResponse(res);
+    next(err);
+  }
+});
+
+/* GET /api/browse?sort=&genre=&format=&status=&year=&page=
+   One flexible list endpoint over the whole AniList catalog. */
+app.get("/api/browse", async (req, res, next) => {
+  try {
+    const index = catalogIndex();
+    const live = await browseAniList({
+      sort: req.query.sort,
+      genre: req.query.genre,
+      format: req.query.format,
+      status: req.query.status,
+      year: req.query.year,
+      page: req.query.page,
+    });
+    res.json({
+      ok: true,
+      page: Math.max(toInt(req.query.page, 1), 1),
+      results: live.results.map((item) => withCatalogSlug(item, index)),
+      pageInfo: live.pageInfo,
+    });
+  } catch (err) {
+    if (err instanceof AniListBusyError) return busyResponse(res);
+    next(err);
+  }
+});
+
+/* GET /api/live/:anilistId — one live title (1h cache). An adult title
+   resolves to null here and answers 404 {error:"not_available"}, so it
+   cannot be opened even by direct link. */
+app.get("/api/live/:anilistId", async (req, res, next) => {
+  try {
+    const id = toInt(req.params.anilistId, null);
+    if (id == null || id <= 0) {
+      return res.status(404).json({ ok: false, error: "not_available" });
+    }
+    const title = await getLiveTitle(id);
+    if (!title) {
+      return res.status(404).json({ ok: false, error: "not_available" });
+    }
+    const index = catalogIndex();
+    res.json({ ok: true, title: withCatalogSlug(title, index) });
+  } catch (err) {
+    if (err instanceof AniListBusyError) return busyResponse(res);
+    next(err);
+  }
+});
+
+/* GET /api/airing?page=<n> — episodes aired in the last 7 days, newest
+   first (10-minute cache). Adult media are skipped server-side. */
+app.get("/api/airing", async (req, res, next) => {
+  try {
+    const index = catalogIndex();
+    const live = await getAiringSchedule(toInt(req.query.page, 1));
+    res.json({
+      ok: true,
+      page: Math.max(toInt(req.query.page, 1), 1),
+      results: live.results.map((row) => ({
+        airingAt: row.airingAt,
+        episode: row.episode,
+        media: withCatalogSlug(row.media, index),
+      })),
+      pageInfo: live.pageInfo,
+    });
+  } catch (err) {
+    if (err instanceof AniListBusyError) return busyResponse(res);
+    next(err);
+  }
 });
 
 app.get("/api/stream/:slug/:ep", (req, res) => {

@@ -10,8 +10,8 @@
   <!-- Loaded async: a slow Google Fonts response must never block the app script or render. -->
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
   <noscript><link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet"></noscript>
-  <link rel="preload" href="css/zoro-aizen.css?v=10" as="style">
-  <link rel="preload" href="js/zoro-aizen.js?v=11" as="script">
+  <link rel="preload" href="css/zoro-aizen.css?v=11" as="style">
+  <link rel="preload" href="js/zoro-aizen.js?v=12" as="script">
   <script>
     /* Warm the API while the app script is still downloading: this removes a
        full round trip from the critical path. The app script adopts these
@@ -33,7 +33,7 @@
           });
       });
     })();
-  </script>  <link rel="stylesheet" href="css/zoro-aizen.css?v=10">
+  </script>  <link rel="stylesheet" href="css/zoro-aizen.css?v=11">
   <!-- Player-specific styles (spinner overlay, resume note, toasts). Without
        this sheet the spinner rendered as plain text BELOW the player. -->
   <link rel="stylesheet" href="css/zoko-player.css?v=11">
@@ -60,7 +60,7 @@
         <a class="nav-link" href="genres.html">Genres</a>
         <a class="nav-link" href="schedule.html">Schedule</a>
         <a class="nav-link" href="browse.html?kind=film">Movies</a>
-        <a class="nav-link" href="browse.html?view=top-airing&sort=newest">Top Airing</a>
+        <a class="nav-link" href="browse.html?view=top-airing">Top Airing</a>
       </nav>
 
       <div class="search-wrapper">
@@ -108,9 +108,10 @@
     <!-- Title + subtitle span the FULL width above both columns so the
          player and the episode sidebar start at the same y. -->
     <div style="margin-top: 1rem;">
+      <div class="detail-badges" id="watch-anime-badges" hidden style="margin-bottom: 0.5rem;"></div>
       <h1 id="watch-anime-title-h1" style="font-size: 1.75rem; font-weight: 800; color: #fff;">Loading…</h1>
       <p id="watch-ep-subtitle" style="font-size: 0.95rem; color: var(--text-sub); margin-top: 4px;">Loading episode…</p>
-    </div>
+    </div>    </div>
 
     <div class="watch-layout">
       <!-- Player Main Column -->
@@ -135,10 +136,16 @@
             /* The loading poster must be THIS title's own art — never a
                hardcoded stock photo. Start the title fetch at parse time and
                paint the cover/banner the moment it lands (before the app
-               script even runs). The app adopts this in-flight request. */
+               script even runs). The app adopts this in-flight request.
+
+               LIVE titles (?live=<anilistId>) come from /api/live/:id — the
+               local catalog has no row for them. */
             (function () {
-              var slug = new URLSearchParams(location.search).get("slug") || "kagerou-protocol";
-              var path = "/api/titles/" + encodeURIComponent(slug);
+              var params = new URLSearchParams(location.search);
+              var live = params.get("live");
+              var slug = params.get("slug") || "kagerou-protocol";
+              var path = live ? "/api/live/" + encodeURIComponent(live)
+                              : "/api/titles/" + encodeURIComponent(slug);
               window.__zoroPrefetch = window.__zoroPrefetch || {};
               var ctl = new AbortController();
               var to = setTimeout(function () { ctl.abort(); }, 10000);
@@ -146,7 +153,7 @@
                 .then(function (r) {
                   clearTimeout(to);
                   return r.json().then(function (d) {
-                    var t = d && d.title;
+                    var t = (d && d.title) || null;
                     var art = t && (t.banner || t.bannerLocal || t.cover || t.coverLocal);
                     var el = document.getElementById("video-cover-overlay");
                     if (el && art) el.style.backgroundImage = "url('" + art + "')";
@@ -242,7 +249,7 @@
         </div>
 
         <!-- Zoro Community & Comments Box (Synced to SQLite) -->
-        <div class="discussion-box">
+        <div class="discussion-box" id="watch-discussion">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem;">
             <h3 style="font-size: 1.2rem; font-weight: 800; color: #fff;">Community Discussion</h3>
             <span id="comments-count-text" style="font-size: 0.8rem; color: var(--text-muted); font-family: var(--font-mono);">Loading comments...</span>
@@ -295,6 +302,7 @@
             <div><strong style="color: #fff;">Score:</strong> <span id="watch-detail-score">—</span></div>
             <div><strong style="color: #fff;">Episodes:</strong> <span id="watch-detail-episodes">—</span></div>
             <div><strong style="color: #fff;">Duration:</strong> <span id="watch-detail-duration">—</span></div>
+            <div id="watch-detail-next-row" hidden><strong style="color: #fff;">Next episode:</strong> <span id="watch-detail-next">—</span></div>
           </div>
           <a id="watch-detail-link" href="browse.html" style="display:inline-block;margin-top:0.9rem;font-size:0.8rem;color:var(--zoro-lime);font-weight:600;">View Full Details →</a>
         </div>
@@ -326,6 +334,6 @@
     </div>
   </footer>
 
-  <script src="js/zoro-aizen.js?v=11"></script>
+  <script src="js/zoro-aizen.js?v=12"></script>
 </body>
 </html>
