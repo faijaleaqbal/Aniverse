@@ -48,6 +48,21 @@
   function bannerOf(t) {
     return (t && (t.banner || t.bannerLocal || t.cover || t.coverLocal)) || COVER_FALLBACK;
   }
+
+  /* ONE badge format on every card: "SUB N" (the title's episode count) and
+     "DUB N" (the probe-backed dub count, only when one really exists).
+     Pure live titles have no dub probe data, so they NEVER get a DUB badge;
+     a live title that IS a catalog twin carries its catalog dubCount from
+     the server, so its card agrees with the spotlight/detail cards. */
+  function subBadge(t) {
+    if (!t) return "";
+    const n = Number(t.episodes);
+    const count = Number.isFinite(n) && n > 0 ? ` ${n}` : "";
+    return `<span class="badge-mini-sub">SUB${count}</span>`;
+  }
+  function dubBadge(t) {
+    return t && t.dubCount > 0 ? `<span class="badge-mini-dub">DUB ${t.dubCount}</span>` : "";
+  }
   function detailHref(slug) {
     return `detail.html?slug=${encodeURIComponent(slug)}`;
   }
@@ -198,12 +213,6 @@
     return t && t.is18plus ? `<span class="badge-mini-18">18+</span>` : "";
   }
 
-  function liveEpisodesLabel(t) {
-    if (!t) return "";
-    if (t.episodes == null) return "Ongoing";
-    return `Ep ${t.episodes}`;
-  }
-
   function liveFormatLabel(t) {
     if (!t || !t.format) return "TV";
     const map = { TV: "TV", MOVIE: "Movie", OVA: "OVA", ONA: "ONA", SPECIAL: "Special" };
@@ -251,7 +260,6 @@
     const cover = coverOf(t);
     const score = scoreLabel(t);
     const year = t.year || "—";
-    const epLabel = opts.epLabel || liveEpisodesLabel(t);
     return `
       <div class="zoro-card" data-anilist-id="${escapeHtml(t.anilistId)}" data-title="${escapeHtml(t.name)}">
         <a class="zoro-card-poster" href="${href}">
@@ -261,10 +269,10 @@
           </div>
           <div class="zoro-poster-badges">
             <div class="badges-left">
-              <span class="badge-mini-sub">SUB</span>
+              ${subBadge(t)}
+              ${dubBadge(t)}
               ${eighteenBadge(t)}
             </div>
-            <span class="badge-mini-ep">${escapeHtml(epLabel)}</span>
           </div>
         </a>
         <div class="zoro-card-info">
@@ -868,11 +876,16 @@
       }
     }
 
-    // Submit on Enter
+    // Submit on Enter, close on Escape (the dropdown used to survive Escape
+    // and only closed on navigation).
     input.addEventListener("keydown", (e) => {
       if (e.key === "Enter") {
         e.preventDefault();
         submitSearch();
+      } else if (e.key === "Escape") {
+        dropdown.classList.remove("is-open");
+        dropdown.innerHTML = "";
+        input.blur();
       }
     });
 
@@ -1080,7 +1093,6 @@
                   <div class="badges-left">
                     <span class="badge-mini-sub">SUB</span>
                   </div>
-                  <span class="badge-mini-ep">Ep ${epNum}</span>
                 </div>
               </a>
               <div class="zoro-card-info">
@@ -1217,8 +1229,8 @@
           <div class="col-item-details">
             <div class="col-item-title" title="${escapeHtml(t.name)}">${escapeHtml(t.name)}</div>
             <div class="col-item-meta">
-              <span class="badge-mini-sub">SUB ${t.episodes || 1}</span>
-              ${t.dubCount > 0 ? `<span class="badge-mini-dub">DUB ${t.dubCount}</span>` : ""}
+              ${subBadge(t)}
+              ${dubBadge(t)}
             </div>
           </div>
         </a>
@@ -1520,8 +1532,8 @@
             </div>
             <div class="zoro-poster-badges">
               <div class="badges-left">
-                <span class="badge-mini-sub">SUB ${t.episodes || 1}</span>
-                ${t.dubCount > 0 ? `<span class="badge-mini-dub">DUB ${t.dubCount}</span>` : ""}
+                ${subBadge(t)}
+                ${dubBadge(t)}
               </div>
             </div>
           </a>
@@ -1696,7 +1708,11 @@
     function updateHeading(count, pageInfo) {
       if (!headingEl) return;
       const hasFilter = !!(state.genre || state.format || state.status || state.year);
-      const total = (!hasFilter && pageInfo && Number.isFinite(pageInfo.total)) ? pageInfo.total : null;
+      /* SEARCH mode never shows AniList's browse-style total: that number
+         counts raw matches (including titles this site filters out and the
+         5,000 cap), so it does not equal the results actually rendered. The
+         heading always reports the real delivered count instead. */
+      const total = (!hasFilter && !isSearch() && pageInfo && Number.isFinite(pageInfo.total)) ? pageInfo.total : null;
       /* AniList caps the reported total at 5,000 — show it as "5,000+" rather
          than pretending that is the exact number. Filtered views do not show
          the 5,000+ capped total. */
@@ -1750,7 +1766,11 @@
       const current = (pageInfo && Number(pageInfo.currentPage)) || state.page;
       const hasFilter = !!(state.genre || state.format || state.status || state.year);
       const isCapped = pageInfo && pageInfo.total >= 5000;
-      const last = (hasFilter && isCapped)
+      /* A search result set is bounded by what was actually delivered (the
+         raw total counts filtered-out/adult rows), so it pages like a capped
+         view instead of advertising AniList's 416-page browse total. */
+      const bounded = (hasFilter && isCapped) || isSearch();
+      const last = bounded
         ? (pageInfo.hasNextPage ? current + 1 : current)
         : ((pageInfo && Number(pageInfo.lastPage)) || current);
       if (!pageInfo || !pageInfo.hasNextPage && current >= last) {
@@ -1798,7 +1818,7 @@
             <img src="${coverOf(t)}" alt="${escapeHtml(t.name)}" loading="${i < 6 ? "eager" : "lazy"}" decoding="async">
             <div class="zoro-play-overlay"><div class="zoro-play-circle">▶</div></div>
             <div class="zoro-poster-badges">
-              <div class="badges-left"><span class="badge-mini-sub">SUB ${t.episodes || 1}</span>${t.dubCount > 0 ? `<span class="badge-mini-dub">DUB ${t.dubCount}</span>` : ""}</div>
+              <div class="badges-left">${subBadge(t)}${dubBadge(t)}</div>
             </div>
           </a>
           <div class="zoro-card-info">
@@ -1886,6 +1906,10 @@
           updateHeading(0, pageInfo);
           return;
         }
+        /* The group count reports the results actually on screen — AniList's
+           raw total includes titles this site filters out (adult/hentai), so
+           it can never match the rendered list. */
+        const availableTotal = local.length + filtered.length;
         grid.innerHTML =
           (local.length
             ? `<div class="live-result-group"><div class="live-result-group-title">On <span class="accent">Aniverse</span><span class="live-result-group-count">${local.length} curated</span></div><div class="cards-grid-zoro" id="live-local-grid">${local.map((t) => `
@@ -1894,7 +1918,7 @@
                   <img src="${coverOf(t)}" alt="${escapeHtml(t.name)}" loading="lazy" decoding="async">
                   <div class="zoro-play-overlay"><div class="zoro-play-circle">▶</div></div>
                   <div class="zoro-poster-badges">
-                    <div class="badges-left"><span class="badge-mini-sub">SUB ${t.episodes || 1}</span>${t.dubCount > 0 ? `<span class="badge-mini-dub">DUB ${t.dubCount}</span>` : ""}</div>
+                    <div class="badges-left">${subBadge(t)}${dubBadge(t)}</div>
                   </div>
                 </a>
                 <div class="zoro-card-info">
@@ -1904,7 +1928,7 @@
               </div>`).join("")}</div></div>`
             : "") +
           (filtered.length
-            ? `<div class="live-result-group"><div class="live-result-group-title">More <span class="accent">results</span><span class="live-result-group-count">${filtered.length} of ${pageInfo.total != null ? pageInfo.total.toLocaleString() : filtered.length}</span></div><div class="cards-grid-zoro">${filtered.map((t) => renderLiveCard(t)).join("")}</div></div>`
+            ? `<div class="live-result-group"><div class="live-result-group-title">More <span class="accent">results</span><span class="live-result-group-count">${filtered.length} of ${availableTotal}</span></div><div class="cards-grid-zoro">${filtered.map((t) => renderLiveCard(t)).join("")}</div></div>`
             : "");
         updateHeading(local.length + filtered.length, pageInfo);
         renderPagination(pageInfo);
@@ -2056,10 +2080,12 @@
         /* Latest Episodes: the card opens the watch page at THAT episode. */
         el.innerHTML = results.map((row) => {
           const media = row.media || {};
+          const aired = timeSinceLabel(row.airingAt);
           return renderLiveCard(media, {
             href: liveWatchHref(media, row.episode),
-            epLabel: `Ep ${row.episode}`,
-            submeta: timeSinceLabel(row.airingAt),
+            /* The episode number belongs with the air time, not a separate
+               "Ep N" badge span — every card uses the same SUB/DUB format. */
+            submeta: `Ep ${row.episode}${aired ? ` · ${aired}` : ""}`,
           });
         }).join("");
       } else {
@@ -2521,7 +2547,11 @@
     const ZOKO_NO_READY_TIMEOUT_MS = 45000;
     const ZOKO_PROBE_ABORT_MS = 20000;
     const BACKUP_NO_READY_TIMEOUT_MS = 45000;
-    const MEGAPLAY_NO_PLAY_TIMEOUT_MS = 45000;
+    /* MegaPlay emits no reliable pre-play signal; a dead file (the 410 page)
+       produces no events at all. A healthy embed reports its first time event
+       within a few seconds, so 12s is a safe "no playback evidence" backstop —
+       long enough for a slow start, short enough not to trap the viewer. */
+    const MEGAPLAY_NO_PLAY_TIMEOUT_MS = 12000;
     let loadToken = 0;
     let zokoFailTimer = null;
     let backupFailTimer = null;
@@ -2684,6 +2714,12 @@
       zokoFailTimer = setTimeout(() => {
         zokoFailTimer = null;
         if (token !== loadToken || activeServer !== "zoko" || playerReady) return;
+        /* Failure is detected: release the switch lock (so the offer's
+           button actually works) and clear the loading overlays instead of
+           leaving them stacked over the error. */
+        markPlayerSettled();
+        if (spinner) spinner.hidden = true;
+        if (coverOverlay) coverOverlay.style.display = "none";
         showFallbackOffer();
       }, ZOKO_NO_READY_TIMEOUT_MS);
       /* Reachability probe of the exact embed URL (see detection notes).
@@ -2714,7 +2750,10 @@
       backupFailTimer = setTimeout(() => {
         backupFailTimer = null;
         if (token !== loadToken || activeServer !== "backup" || playerReady) return;
+        /* Release the switch lock so "Back to Zoko" works immediately. */
+        markPlayerSettled();
         if (spinner) spinner.hidden = true;
+        if (coverOverlay) coverOverlay.style.display = "none";
         showBackupNote("TVplus player isn't responding.");
       }, BACKUP_NO_READY_TIMEOUT_MS);
     }
@@ -2729,6 +2768,10 @@
       megaplayFailTimer = setTimeout(() => {
         megaplayFailTimer = null;
         if (token !== loadToken || activeServer !== "megaplay" || playerReady) return;
+        /* Failure detected: release the switch lock (the offer's "Try Zoko
+           player" must work), clear the loading overlays and offer the way
+           back. The dead file's own 410 page stays visible inside the frame. */
+        markPlayerSettled();
         if (spinner) spinner.hidden = true;
         if (coverOverlay) coverOverlay.style.display = "none";
         showMegaPlayFailureOffer("MegaPlay isn't responding.");
@@ -2740,17 +2783,26 @@
        switch (Zoko and MegaPlay report time events; TVplus exposes none, so
        this captured position is also what a later switch BACK resumes from).
 
-       Idempotent + teardown-first: a second click while a switch is still
-       settling is ignored, every player-side timer/probe from the dying
-       document is cleared before the new load, per-load flags are reset
+       Idempotent + teardown-first: every player-side timer/probe from the
+       dying document is cleared before the new load, per-load flags are reset
        (playerEp is nulled so stale events can't be attributed to the new
        document), server toasts are dropped, and a settle watchdog arms for
-       the new load. */
+       the new load.
+
+       A manual switch is NEVER swallowed: it works while a load is in flight
+       (the pending load is invalidated by token, so it cannot re-assign the
+       iframe src after the swap) and while a previous switch is still
+       settling (the settle lock exists to serialize recovery, not to block
+       the viewer's own click — that lock used to make the server pills dead
+       for up to 40s on a failed MegaPlay load). */
     function switchServer(server) {
       if (server !== "zoko" && server !== "backup" && server !== "megaplay") return;
       if (server === activeServer) return;
-      if (switchBusy) return;
-      switchBusy = true;
+      /* Cancel the in-flight load/probes BEFORE swapping: the token bump
+         makes every awaiting loadEpisode abort at its next guard. */
+      loadToken++;
+      loadInFlight = false;
+      switchBusy = false;
       settleAttempt = 0;
       const pos = Math.floor(currentPosition || 0);
       activeServer = server;
@@ -3694,7 +3746,10 @@
       }
       if (spinner) {
         spinner.hidden = false;
-        spinner.style.pointerEvents = "";
+        /* The loading overlay must never intercept clicks — keep it
+           click-through so nothing under it (the embed's own play button,
+           or any overlapping control) is ever blocked while loading. */
+        spinner.style.pointerEvents = "none";
       }
       if (coverOverlay) {
         /* The title's OWN poster stays up as the loading backdrop (under the
@@ -5148,8 +5203,7 @@
                     <img src="${coverOf(o)}" alt="${escapeHtml(o.name)}" loading="lazy" decoding="async">
                     <div class="zoro-play-overlay"><div class="zoro-play-circle">▶</div></div>
                     <div class="zoro-poster-badges">
-                      <div class="badges-left"><span class="badge-mini-sub">SUB</span>${o.dubCount > 0 ? `<span class="badge-mini-dub">DUB ${o.dubCount}</span>` : ""}</div>
-                      <span class="badge-mini-ep">Ep ${o.episodes || 1}</span>
+                      <div class="badges-left">${subBadge(o)}${dubBadge(o)}</div>
                     </div>
                   </a>
                   <div class="zoro-card-info">
@@ -5276,9 +5330,6 @@
         const studio = real.studio || real.studios || "—";
         const dHref = detailHref(real.slug);
         const wHref = watchHref(real.slug, watchEp);
-        const epBadge = isFilm
-          ? `<span class="badge-mini-ep">Film${real.runtimeMin ? " • " + real.runtimeMin + "m" : ""}</span>`
-          : `<span class="badge-mini-ep">Ep ${epCount}</span>`;
         const watchLabel = isFilm ? "▶ Watch Film" : `▶ Watch Ep ${watchEp}`;
         return `
         <div class="schedule-item-card">
@@ -5290,9 +5341,8 @@
             <div class="schedule-title-block">
               <a class="schedule-title-link" href="${dHref}">${escapeHtml(name)}</a>
               <div class="schedule-meta-badges">
-                <span class="badge-mini-sub">SUB</span>
-                ${real.dubCount > 0 ? `<span class="badge-mini-dub">DUB ${real.dubCount}</span>` : ""}
-                ${epBadge}
+                ${subBadge(real)}
+                ${dubBadge(real)}
                 <span style="color: var(--text-muted); font-size: 0.75rem;">• ${escapeHtml(studio)}</span>
               </div>
             </div>

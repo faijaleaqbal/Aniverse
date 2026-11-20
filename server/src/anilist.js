@@ -167,6 +167,25 @@ export function isAdultMedia(media) {
   return ADULT_TITLE_PATTERN.test(String(media.description || ""));
 }
 
+/* AniList's image CDN (s4.anilist.co) refuses cross-site <img> requests, so
+   hotlinked live posters never render and every card falls back to the
+   placeholder. Live covers are therefore served through the site's OWN
+   origin (/api/cover) — the same artwork, but a same-origin URL the browser
+   can always load. Non-AniList URLs pass through untouched. */
+const ANILIST_COVER_HOSTS = new Set(["s4.anilist.co"]);
+function localCoverUrl(url) {
+  if (!url) return url;
+  try {
+    const u = new URL(url);
+    if (u.protocol === "https:" && ANILIST_COVER_HOSTS.has(u.hostname)) {
+      return `/api/cover?url=${encodeURIComponent(u.href)}`;
+    }
+  } catch {
+    /* Not an absolute URL — leave it alone. */
+  }
+  return url;
+}
+
 /* Map AniList media to the site's title shape. is18plus is a SERVER rule:
    true when the genres include "Ecchi" (mature-but-not-hentai stays visible
    with an 18+ tag). isAdult titles never reach this mapper — every query
@@ -184,8 +203,8 @@ export function mediaView(media) {
     englishTitle: title.english || null,
     romajiTitle: title.romaji || null,
     nativeTitle: title.native || null,
-    cover: (media.coverImage && media.coverImage.large) || null,
-    banner: (media.coverImage && media.coverImage.large) || null,
+    cover: localCoverUrl((media.coverImage && media.coverImage.large) || null),
+    banner: localCoverUrl((media.coverImage && media.coverImage.large) || null),
     synopsis: cleanDescription(media.description),
     episodes: media.episodes != null ? Number(media.episodes) : null,
     runtimeMin: media.duration != null ? Number(media.duration) : null,

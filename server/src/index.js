@@ -489,7 +489,11 @@ function catalogIndex() {
     if (row.mal_id != null) byMal.set(Number(row.mal_id), row);
     if (row.anilist_id != null) byAnilist.set(Number(row.anilist_id), row);
   }
-  return { rows, byMal, byAnilist };
+  /* Probe-backed DUB counts by slug, so a live result that IS a catalog
+     title carries the SAME dub number as its spotlight/detail cards. */
+  const dubBySlug = new Map();
+  for (const r of dubCountsAllStmt.all()) dubBySlug.set(r.title_slug, r.c);
+  return { rows, byMal, byAnilist, dubBySlug };
 }
 
 /* Find the catalog row that owns this live title (MAL id first, AniList id
@@ -502,11 +506,18 @@ function catalogRowFor(live, index) {
 }
 
 /* Attach the catalog slug (when this live title IS a catalog title) so the UI
-   can link to the richer catalog detail page instead of the live one. */
+   can link to the richer catalog detail page instead of the live one. The
+   catalog twin's PROBE-BACKED dub count travels with it too, so a live card
+   shows the same DUB number as the spotlight/detail/catalog cards. A pure
+   live title has no row and never gets a DUB badge — its dub availability is
+   unknown and must not be invented. */
 function withCatalogSlug(live, index) {
   if (!live) return live;
   const row = catalogRowFor(live, index);
-  if (row) live.catalogSlug = row.slug;
+  if (row) {
+    live.catalogSlug = row.slug;
+    live.dubCount = index.dubBySlug.get(row.slug) || 0;
+  }
   return live;
 }
 
@@ -653,6 +664,53 @@ app.get("/api/airing", async (req, res, next) => {
     });
   } catch (err) {
     if (err instanceof AniListBusyError) return busyResponse(res);
+    next(err);
+  }
+});
+
+/* GET /api/cover?url=<absolute https AniList image URL>
+   Same-origin image proxy for live posters/banners: the browser cannot load
+   AniList's CDN cross-site, so the site fetches the bytes itself and serves
+   them from its own origin. Only AniList image hosts are allowed — this is
+   not an open proxy. */
+const COVER_PROXY_HOSTS = new Set(["s4.anilist.co"]);
+const COVER_PROXY_MAX_BYTES = 8 * 1024 * 1024;
+app.get("/api/cover", async (req, res, next) => {
+  try {
+    let target;
+    try {
+      target = new URL(String(req.query.url || ""));
+    } catch {
+      return res.status(400).json({ ok: false, error: "bad_url" });
+    }
+    if (target.protocol !== "https:" || !COVER_PROXY_HOSTS.has(target.hostname)) {
+      return res.status(400).json({ ok: false, error: "bad_url" });
+    }
+
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), 8000);
+    let upstream;
+    try {
+      upstream = await fetch(target, {
+        signal: ctl.signal,
+        headers: { Accept: "image/*", "User-Agent": "AniVerse/1.0 (poster proxy)" },
+      });
+    } catch {
+      return res.status(502).json({ ok: false, error: "cover_unavailable" });
+    } finally {
+      clearTimeout(timer);
+    }
+    if (!upstream.ok) {
+      return res.status(upstream.status).json({ ok: false, error: "cover_unavailable" });
+    }
+    const buf = Buffer.from(await upstream.arrayBuffer());
+    if (buf.length > COVER_PROXY_MAX_BYTES) {
+      return res.status(413).json({ ok: false, error: "cover_too_large" });
+    }
+    res.set("Content-Type", upstream.headers.get("content-type") || "image/jpeg");
+    res.set("Cache-Control", "public, max-age=86400");
+    res.send(buf);
+  } catch (err) {
     next(err);
   }
 });
