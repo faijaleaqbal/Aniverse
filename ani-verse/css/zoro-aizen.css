@@ -464,6 +464,18 @@ img {
   border-bottom: 1px solid rgba(255, 255, 255, 0.04);
   transition: background 0.15s;
 }
+
+/* Group heading inside the search dropdown ("On Aniverse" / "More results"). */
+.search-group-label {
+  padding: 0.5rem 0.9rem 0.35rem;
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--zoro-lime);
+  background: rgba(202, 233, 98, 0.06);
+  border-bottom: 1px solid rgba(202, 233, 98, 0.16);
+}
 .search-result-item:hover {
   background: rgba(202, 233, 98, 0.1);
 }
@@ -1106,11 +1118,16 @@ img {
 
 .four-col-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 1.5rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));  gap: 1.5rem;
   margin-top: 2rem;
   margin-bottom: 3.5rem;
   width: 100%;
+}
+
+/* The home page promotes "Top Airing" to its own section, so the local
+   column grid carries three blocks now. */
+.four-col-grid.cols-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .col-block {
@@ -2667,6 +2684,7 @@ body.drawer-open .zoro-header {
 @media (max-width: 1200px) {
   .cards-grid-zoro { grid-template-columns: repeat(4, 1fr); }
   .four-col-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .four-col-grid.cols-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .genres-shelf-grid { grid-template-columns: repeat(3, 1fr); }
 }
 
@@ -2798,6 +2816,107 @@ body.drawer-open .zoro-header {
 .detail-info { flex: 1; min-width: 0; }
 .detail-badges { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-bottom: 0.9rem; }
 .badge-score { background: var(--zoro-lime); color: #0c0d12; font-weight: 800; }
+
+/* ==========================================================================
+   LIVE CATALOG (AniList) — 18+ badge, busy notice, filter row, live rails
+   The 18+ badge is rendered ONLY from the server's is18plus flag (Ecchi
+   genre). Mature-but-not-hentai titles stay visible; hentai never reaches
+   the site at all.
+   ========================================================================== */
+
+.badge-18plus {
+  background: rgba(255, 141, 161, 0.18);
+  color: #ff8da1;
+  border: 1px solid rgba(255, 141, 161, 0.45);
+}
+
+.badge-mini-18 {
+  background: #ff8da1;
+  color: #0c0d12;
+  font-weight: 800;
+  font-size: 0.65rem;
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+/* "Service is busy — try again in a moment." / library fallback notice. */
+.zoro-live-notice {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  background: rgba(202, 233, 98, 0.08);
+  border: 1px solid rgba(202, 233, 98, 0.35);
+  border-left: 3px solid var(--zoro-lime);
+  border-radius: 8px;
+  padding: 0.7rem 1rem;
+  margin-bottom: 1.25rem;
+  font-size: 0.85rem;
+  color: var(--text-sub);
+}
+
+.zoro-live-notice strong { color: var(--zoro-lime); font-weight: 700; }
+.zoro-live-notice.is-busy {
+  background: rgba(255, 141, 161, 0.08);
+  border-color: rgba(255, 141, 161, 0.35);
+  border-left-color: var(--zoro-dub);
+}
+.zoro-live-notice.is-busy strong { color: var(--zoro-dub); }
+
+/* Live filter row: genre chips + format / status / year / sort selects. */
+.live-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.live-filter-group {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.live-filter-group > label {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+/* "On Aniverse" / "More results" section headings inside the browse grid. */
+.live-result-group + .live-result-group { margin-top: 2.25rem; }
+
+.live-result-group-title {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #fff;
+  margin-bottom: 0.9rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.live-result-group-title .accent { color: var(--zoro-lime); }
+.live-result-group-count {
+  font-size: 0.78rem;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+/* Live rails on the home page (Trending Now / Top Rated / Latest Episodes). */
+.live-rail-section { margin-bottom: 3rem; }
+
+.live-ep-time {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
 .detail-title { font-size: 2.4rem; font-weight: 900; letter-spacing: -0.5px; line-height: 1.1; color: #fff; }
 .detail-alt-titles { margin-top: 0.4rem; font-size: 0.95rem; color: var(--text-sub); }
 .detail-meta { display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem; margin-top: 1rem; font-size: 0.875rem; color: var(--text-sub); }

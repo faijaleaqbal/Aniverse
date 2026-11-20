@@ -10,8 +10,8 @@
   <!-- Loaded async: a slow Google Fonts response must never block the app script or render. -->
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
   <noscript><link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet"></noscript>
-  <link rel="preload" href="css/zoro-aizen.css?v=10" as="style">
-  <link rel="preload" href="js/zoro-aizen.js?v=10" as="script">
+  <link rel="preload" href="css/zoro-aizen.css?v=11" as="style">
+  <link rel="preload" href="js/zoro-aizen.js?v=12" as="script">
   <script>
     /* Warm the API while the app script is still downloading: this removes a
        full round trip from the critical path. The app script adopts these
@@ -33,7 +33,7 @@
           });
       });
     })();
-  </script>  <link rel="stylesheet" href="css/zoro-aizen.css?v=10">
+  </script>  <link rel="stylesheet" href="css/zoro-aizen.css?v=11">
 </head>
 <body>
 
@@ -57,7 +57,7 @@
         <a class="nav-link" href="genres.html">Genres</a>
         <a class="nav-link" href="schedule.html">Schedule</a>
         <a class="nav-link" href="browse.html?kind=film">Movies</a>
-        <a class="nav-link" href="browse.html?view=top-airing&sort=newest">Top Airing</a>
+        <a class="nav-link" href="browse.html?view=top-airing">Top Airing</a>
       </nav>
 
       <div class="search-wrapper">
@@ -93,62 +93,101 @@
     </div>
 
     <!-- Filter Bar -->
-    <div class="filter-bar-zoro" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+    <div class="filter-bar-zoro" style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem;">
       <div class="genre-chips-wrap" id="genre-chips-container">
-        <!-- Genre chips are rendered from GET /api/genres by zoro-aizen.js so
-             every genre with titles gets a chip (no hardcoded subset). -->
+        <!-- Genre chips are rendered by zoro-aizen.js — AniList genres for the
+             live catalog (the local catalog's genres are mapped onto them). -->
         <button class="genre-chip-zoro active" data-genre="all" type="button">All</button>
       </div>
-      <div class="sort-control-wrap">
-        <label for="catalog-sort-select" style="font-size: 0.85rem; color: var(--text-muted); font-weight: 500;">Sort by:</label>
-        <select id="catalog-sort-select" class="sort-select-zoro" aria-label="Sort Anime Catalog">
-          <option value="popularity">Popularity</option>
-          <option value="newest">Release date</option>
-          <option value="az">A–Z</option>
-        </select>
-        <script>
-          /* Set the sort select, heading and nav highlight from the URL at
-             PARSE time (before first paint) so ?sort=newest never flashes
-             "Popularity" and ?view=top-airing / ?kind=film / ?q= never flash
-             "Explore Anime Shelf" while the app script waits on the catalog
-             API. The app re-renders the heading with the live result count
-             once the catalog answers. */
-          (function () {
-            var p = new URLSearchParams(location.search);
-            var s = p.get("sort");
-            var el = document.getElementById("catalog-sort-select");
-            if (el && (s === "newest" || s === "az" || s === "popularity")) el.value = s;
-            var h = document.getElementById("browse-heading");
-            var sub = document.getElementById("browse-subheading");
-            var q = (p.get("q") || "").trim();
-            var view = (p.get("view") || "").toLowerCase();
-            var kind = (p.get("kind") || "").toLowerCase();
-            var mode = q ? "search" : kind === "film" ? "movies" : view === "top-airing" ? "topairing" : "browse";
-            if (h) {
-              if (mode === "search") {
-                h.innerHTML = "<span>Results for '<span class=\"accent\"></span>'</span>";
-                h.querySelector(".accent").textContent = q;
-                if (sub) sub.textContent = "Refine with the genre filters below, or clear the search to see the full shelf.";
-              } else if (mode === "movies") {
-                h.innerHTML = "Movies";
-                if (sub) sub.textContent = "Every film in the catalog — feature-length titles ready to stream.";
-              } else if (mode === "topairing") {
-                h.innerHTML = "Top <span class=\"accent\">Airing</span>";
-                if (sub) sub.textContent = "The currently airing shelf — newest releases first by default; sort however you like.";
-              }
-            }
-            var wantHref = mode === "movies" ? "browse.html?kind=film"
-              : mode === "topairing" ? "browse.html?view=top-airing&sort=newest"
-              : "browse.html";
-            document.querySelectorAll(".header-nav .nav-link").forEach(function (a) {
-              a.classList.toggle("active", a.getAttribute("href") === wantHref);
-            });
-          })();
-        </script>
+      <div class="live-filter-row" id="live-filter-row" style="margin-bottom: 0;">
+        <div class="live-filter-group">
+          <label for="catalog-sort-select">Sort</label>
+          <select id="catalog-sort-select" class="sort-select-zoro" aria-label="Sort Anime Catalog">
+            <option value="trending">Trending</option>
+            <option value="popular">Most Popular</option>
+            <option value="top">Top Rated</option>
+            <option value="newest">Newest</option>
+          </select>
+        </div>
+        <div class="live-filter-group">
+          <label for="browse-format-select">Format</label>
+          <select id="browse-format-select" class="sort-select-zoro" aria-label="Filter by format">
+            <option value="">All formats</option>
+            <option value="TV">TV</option>
+            <option value="MOVIE">Movie</option>
+            <option value="OVA">OVA</option>
+            <option value="ONA">ONA</option>
+            <option value="SPECIAL">Special</option>
+          </select>
+        </div>
+        <div class="live-filter-group">
+          <label for="browse-status-select">Status</label>
+          <select id="browse-status-select" class="sort-select-zoro" aria-label="Filter by status">
+            <option value="">All statuses</option>
+            <option value="RELEASING">Airing</option>
+            <option value="FINISHED">Finished</option>
+            <option value="NOT_YET_RELEASED">Upcoming</option>
+          </select>
+        </div>
+        <div class="live-filter-group">
+          <label for="browse-year-select">Year</label>
+          <select id="browse-year-select" class="sort-select-zoro" aria-label="Filter by year">
+            <option value="">All years</option>
+          </select>
+        </div>
       </div>
     </div>
 
+    <!-- Live catalog notice: "Service is busy — try again in a moment." or
+         the library fallback notice. Rendered by zoro-aizen.js. -->
+    <div id="browse-notice"></div>
+
+    <script>
+      /* Set the filters, heading and nav highlight from the URL at PARSE time
+         (before first paint) so ?sort=top never flashes "Trending" and
+         ?view=top-airing / ?kind=film / ?q= never flash "Explore Anime Shelf"
+         while the app script waits on the live catalog API. The app
+         re-renders the heading with the live result count once the catalog
+         answers. */
+      (function () {
+        var p = new URLSearchParams(location.search);
+        var s = p.get("sort");
+        var el = document.getElementById("catalog-sort-select");
+        if (el && ["trending", "popular", "top", "newest"].indexOf(s) >= 0) el.value = s;
+        var fmt = document.getElementById("browse-format-select");
+        if (fmt && p.get("format")) fmt.value = p.get("format").toUpperCase();
+        var st = document.getElementById("browse-status-select");
+        if (st && p.get("status")) st.value = p.get("status").toUpperCase();
+        var h = document.getElementById("browse-heading");
+        var sub = document.getElementById("browse-subheading");
+        var q = (p.get("q") || "").trim();
+        var view = (p.get("view") || "").toLowerCase();
+        var kind = (p.get("kind") || "").toLowerCase();
+        var mode = q ? "search" : kind === "film" ? "movies" : view === "top-airing" ? "topairing" : "browse";
+        if (h) {
+          if (mode === "search") {
+            h.innerHTML = "<span>Results for '<span class=\"accent\"></span>'</span>";
+            h.querySelector(".accent").textContent = q;
+            if (sub) sub.textContent = "Searching the full AniList catalog — your curated shelf comes first.";
+          } else if (mode === "movies") {
+            h.innerHTML = "Movies";
+            if (sub) sub.textContent = "Every film in the live catalog — feature-length titles ready to stream.";
+          } else if (mode === "topairing") {
+            h.innerHTML = "Top <span class=\"accent\">Airing</span>";
+            if (sub) sub.textContent = "Currently airing anime, ranked by popularity.";
+          }
+        }
+        var wantHref = mode === "movies" ? "browse.html?kind=film"
+          : mode === "topairing" ? "browse.html?view=top-airing"
+          : "browse.html";
+        document.querySelectorAll(".header-nav .nav-link").forEach(function (a) {
+          a.classList.toggle("active", a.getAttribute("href") === wantHref);
+        });
+      })();
+    </script>
+
     <!-- Zoro Card Grid with Hover Tooltip System -->
+    <div id="browse-results"></div>
     <div class="cards-grid-zoro" id="zoro-main-grid">
       <!-- Populated dynamically via zoro-aizen.js -->
     </div>
@@ -182,6 +221,6 @@
     </div>
   </footer>
 
-  <script src="js/zoro-aizen.js?v=10"></script>
+  <script src="js/zoro-aizen.js?v=12"></script>
 </body>
 </html>

@@ -127,6 +127,183 @@
   }
 
   /* ==========================================================================
+     LIVE CATALOG (AniList) HELPERS
+     The browser NEVER calls AniList — it goes through the server endpoints
+     (/api/search, /api/browse, /api/live/:id, /api/airing), which enforce
+     the content rules and add the is18plus flag.
+     ========================================================================== */
+
+  const LIVE_BUSY_MESSAGE = "Service is busy — try again in a moment.";
+  const LIVE_LIBRARY_MESSAGE = "Showing your library — live catalog is busy.";
+  const LIVE_PAGE_SIZE = 12;
+
+  /* AniList's genre list — the browse filters speak these names. */
+  const ANILIST_GENRES = [
+    "Action", "Adventure", "Comedy", "Drama", "Ecchi", "Fantasy", "Horror",
+    "Mahou Shoujo", "Mecha", "Music", "Mystery", "Romance", "Sci-Fi",
+    "Slice of Life", "Sports", "Supernatural", "Thriller",
+  ];
+
+  const SORT_LABELS = {
+    trending: "Trending",
+    popular: "Most Popular",
+    top: "Top Rated",
+    newest: "Newest",
+  };
+
+  /* The local catalog's genre names mapped onto AniList's spelling — the
+     genres page and the detail pages link with the local names. */
+  const GENRE_ALIASES = {
+    life: "Slice of Life",
+    "slice of life": "Slice of Life",
+    "slice-of-life": "Slice of Life",
+    "sci-fi": "Sci-Fi",
+    "science fiction": "Sci-Fi",
+    "mahou shoujo": "Mahou Shoujo",
+  };
+
+  function canonicalGenreName(name) {
+    const raw = String(name || "").trim();
+    if (!raw) return "";
+    return GENRE_ALIASES[raw.toLowerCase()] || raw;
+  }
+
+  /* A live title that IS one of the 18 curated catalog titles links to the
+     CATALOG detail page (it has the full data: dub badges, episode titles).
+     Everything else opens the live detail view. */
+  function liveDetailHref(t) {
+    if (!t) return "browse.html";
+    if (t.catalogSlug) return detailHref(t.catalogSlug);
+    if (t.anilistId != null) return `detail.html?live=${encodeURIComponent(t.anilistId)}`;
+    return "browse.html";
+  }
+
+  function liveWatchHref(t, ep) {
+    if (!t || t.anilistId == null) return "browse.html";
+    return `watch.html?live=${encodeURIComponent(t.anilistId)}&ep=${encodeURIComponent(ep == null ? 1 : ep)}`;
+  }
+
+  /* Live titles have NO dub data (no dub_checks rows) — never show a DUB
+     badge or count for them. The 18+ badge comes from the server's
+     is18plus flag (Ecchi genre) and nothing else. */
+  function eighteenBadge(t) {
+    return t && t.is18plus ? `<span class="badge-mini-18">18+</span>` : "";
+  }
+
+  function liveEpisodesLabel(t) {
+    if (!t) return "";
+    if (t.episodes == null) return "Ongoing";
+    return `Ep ${t.episodes}`;
+  }
+
+  function liveFormatLabel(t) {
+    if (!t || !t.format) return "TV";
+    const map = { TV: "TV", MOVIE: "Movie", OVA: "OVA", ONA: "ONA", SPECIAL: "Special" };
+    return map[t.format] || t.format;
+  }
+
+  function liveStatusLabel(t) {
+    if (!t) return "Unknown";
+    const map = {
+      FINISHED: "Finished", RELEASING: "Airing", NOT_YET_RELEASED: "Upcoming",
+      CANCELLED: "Cancelled", HIATUS: "Hiatus",
+    };
+    return map[t.status] || t.status || "Unknown";
+  }
+
+  /* "2 hours ago" / "3 days ago" for the Latest Episodes rail. */
+  function timeSinceLabel(unixSeconds) {
+    const ts = Number(unixSeconds);
+    if (!Number.isFinite(ts) || ts <= 0) return "";
+    const diff = Math.max(0, Math.floor(Date.now() / 1000) - ts);
+    const minutes = Math.floor(diff / 60);
+    if (minutes < 60) return `${Math.max(1, minutes)}m ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    return `${days}d ago`;
+  }
+
+  function formatAiringDate(unixSeconds) {
+    const ts = Number(unixSeconds);
+    if (!Number.isFinite(ts) || ts <= 0) return "";
+    try {
+      return new Date(ts * 1000).toLocaleDateString(undefined, {
+        year: "numeric", month: "short", day: "numeric",
+      });
+    } catch {
+      return "";
+    }
+  }
+
+  /* One live card — same markup/style as the catalog cards. */
+  function renderLiveCard(t, opts = {}) {
+    if (!t) return "";
+    const href = opts.href || liveDetailHref(t);
+    const cover = t.cover || COVER_FALLBACK;
+    const score = scoreLabel(t);
+    const year = t.year || "—";
+    const epLabel = opts.epLabel || liveEpisodesLabel(t);
+    return `
+      <div class="zoro-card" data-anilist-id="${escapeHtml(t.anilistId)}" data-title="${escapeHtml(t.name)}">
+        <a class="zoro-card-poster" href="${href}">
+          <img src="${cover}" alt="${escapeHtml(t.name)}" loading="lazy" decoding="async">
+          <div class="zoro-play-overlay">
+            <div class="zoro-play-circle">▶</div>
+          </div>
+          <div class="zoro-poster-badges">
+            <div class="badges-left">
+              <span class="badge-mini-sub">SUB</span>
+              ${eighteenBadge(t)}
+            </div>
+            <span class="badge-mini-ep">${escapeHtml(epLabel)}</span>
+          </div>
+        </a>
+        <div class="zoro-card-info">
+          <a class="zoro-card-title" href="${href}" title="${escapeHtml(t.name)}">${escapeHtml(t.name)}</a>
+          <div class="zoro-card-submeta">
+            <span>${escapeHtml(liveFormatLabel(t))}</span> • <span>${escapeHtml(String(year))}</span>${score ? ` • <span style="color: var(--zoro-lime);">★ ${score}</span>` : ""}
+          </div>
+          ${opts.submeta ? `<div class="zoro-card-submeta live-ep-time">${opts.submeta}</div>` : ""}
+        </div>
+      </div>
+    `;
+  }
+
+  /* One row in the search dropdown — works for catalog titles and live
+     AniList titles alike. */
+  function searchRowHtml(t, href) {
+    const isLive = !!(t && t.live);
+    const meta = isLive
+      ? `<span>${escapeHtml(liveFormatLabel(t))}</span> • <span>${escapeHtml(String(t.year || "—"))}</span> • <span style="color: var(--zoro-sub);">${t.episodes != null ? `EP ${t.episodes}` : "ONGOING"}</span>`
+      : `<span>${t.year || 2025}</span> • <span>${t.kind || "Series"}</span> • <span style="color: var(--zoro-sub);">SUB ${t.episodes || 1}</span>`;
+    return `
+      <a class="search-result-item" href="${href}">
+        <img class="search-result-thumb" src="${coverOf(t)}" alt="${escapeHtml(t.name)}" loading="lazy">
+        <div class="search-result-info">
+          <div class="search-result-title">${escapeHtml(t.name)}${t && t.is18plus ? ' <span class="badge-mini-18">18+</span>' : ""}</div>
+          <div class="search-result-meta">${meta}</div>
+        </div>
+      </a>`;
+  }
+
+  /* The busy / library-fallback notice above a grid. */
+  function renderLiveNotice(message, kind) {
+    const wrap = document.getElementById("browse-notice");
+    if (!wrap) return;
+    if (!message) {
+      wrap.innerHTML = "";
+      return;
+    }
+    wrap.innerHTML = `
+      <div class="zoro-live-notice${kind === "busy" ? " is-busy" : ""}">
+        <span>⚠</span>
+        <strong>${escapeHtml(kind === "busy" ? "Service is busy" : "Library mode")}</strong>
+        <span>${escapeHtml(message)}</span>
+      </div>`;
+  }
+
+  /* ==========================================================================
      1. AIZEN CINEMATIC SHUTTER INTRO
      ========================================================================== */
 
@@ -581,6 +758,7 @@
     if (!input || !dropdown) return;
 
     let debounceTimer = null;
+    let searchToken = 0;
 
     input.addEventListener("input", () => {
       const q = input.value.trim();
@@ -597,28 +775,55 @@
         return;
       }
 
+      /* Minimum 2 characters — a single letter matches thousands of titles
+         and burns the AniList rate limit for nothing. */
+      if (q.length < 2) {
+        dropdown.innerHTML = `<div style="padding: 12px; font-size: 0.8rem; color: var(--text-muted); text-align: center;">Type at least 2 characters</div>`;
+        dropdown.classList.add("is-open");
+        return;
+      }
+
+      dropdown.innerHTML = `<div style="padding: 12px; font-size: 0.8rem; color: var(--text-muted); text-align: center;">Searching…</div>`;
+      dropdown.classList.add("is-open");
+
+      const token = ++searchToken;
       debounceTimer = setTimeout(async () => {
-        const res = await api(`/api/titles?q=${encodeURIComponent(q)}&limit=5`);
-        if (res.ok && res.data && res.data.titles && res.data.titles.length > 0) {
-          dropdown.innerHTML = res.data.titles
-            .map((t) => `
-              <a class="search-result-item" href="${detailHref(t.slug)}">
-                <img class="search-result-thumb" src="${coverOf(t)}" alt="${escapeHtml(t.name)}" loading="lazy">
-                <div class="search-result-info">
-                  <div class="search-result-title">${escapeHtml(t.name)}</div>
-                  <div class="search-result-meta">
-                    <span>${t.year || 2025}</span> • <span>${t.kind || "Series"}</span> • <span style="color: var(--zoro-sub);">SUB ${t.episodes || 1}</span>
-                  </div>
-                </div>
-              </a>
-            `)
-            .join("");
+        const res = await api(`/api/search?q=${encodeURIComponent(q)}&page=1`);
+        /* A newer keystroke won the race — this answer is stale. */
+        if (token !== searchToken) return;
+
+        const local = (res.ok && res.data && Array.isArray(res.data.local)) ? res.data.local : [];
+        const more = (res.ok && res.data && Array.isArray(res.data.results)) ? res.data.results : [];
+
+        if (!res.ok) {
+          /* AniList is down: the LOCAL catalog still searches. */
+          const localRes = await api(`/api/titles?q=${encodeURIComponent(q)}&limit=6`);
+          if (token !== searchToken) return;
+          const localTitles = (localRes.ok && localRes.data && Array.isArray(localRes.data.titles))
+            ? localRes.data.titles : [];
+          dropdown.innerHTML = localTitles.length
+            ? `<div style="padding: 6px 12px; font-size: 0.7rem; color: var(--zoro-dub);">${escapeHtml(LIVE_BUSY_MESSAGE)}</div>` +
+              localTitles.map((t) => searchRowHtml(t, detailHref(t.slug))).join("")
+            : `<div style="padding: 12px; font-size: 0.8rem; color: var(--text-muted); text-align: center;">${escapeHtml(LIVE_BUSY_MESSAGE)}</div>`;
           dropdown.classList.add("is-open");
-        } else {
+          return;
+        }
+
+        if (!local.length && !more.length) {
           dropdown.innerHTML = `<div style="padding: 12px; font-size: 0.8rem; color: var(--text-muted); text-align: center;">No anime found for "${escapeHtml(q)}"</div>`;
           dropdown.classList.add("is-open");
+          return;
         }
-      }, 200);
+
+        dropdown.innerHTML =
+          (local.length
+            ? `<div class="search-group-label">On Aniverse</div>` + local.map((t) => searchRowHtml(t, detailHref(t.slug))).join("")
+            : "") +
+          (more.length
+            ? `<div class="search-group-label">More results</div>` + more.map((t) => searchRowHtml(t, liveDetailHref(t))).join("")
+            : "");
+        dropdown.classList.add("is-open");
+      }, 300);
     });
 
     // Close dropdown on outside click
@@ -1046,6 +1251,13 @@
     const isBrowse = window.location.pathname.endsWith("browse.html");
     const PAGE_SIZE = 12;
 
+    /* Browse is now the FULL live catalog (AniList, ~20k titles). The home
+       page keeps its curated local grid untouched. */
+    if (isBrowse) {
+      initLiveBrowse();
+      return;
+    }
+
     /* First paint must never be a blank dark grid: skeleton cards hold the
        layout until the catalog API answers (~1s), then real posters replace
        them. Above-the-fold posters load eagerly (see renderCards). */
@@ -1364,11 +1576,477 @@
     }
   }
 
+  /* ==========================================================================
+     6C. LIVE BROWSE — the full AniList catalog on browse.html
+     One grid, two modes:
+       - search  (?q=…): "On Aniverse" (the curated catalog) first, then
+                         "More results" (the live catalog).
+       - browse  (no q): the live catalog with genre / format / status /
+                         sort / year filters and AniList pagination.
+     If AniList is down, the page falls back to the local library with a
+     notice — it never shows an empty grid or a stack trace.
+     ========================================================================== */
+
+  async function initLiveBrowse() {
+    const grid = document.getElementById("zoro-main-grid");
+    if (!grid) return;
+
+    const chipsWrap = document.getElementById("genre-chips-container");
+    const sortSelect = document.getElementById("catalog-sort-select");
+    const formatSelect = document.getElementById("browse-format-select");
+    const statusSelect = document.getElementById("browse-status-select");
+    const yearSelect = document.getElementById("browse-year-select");
+    const filterRow = document.getElementById("live-filter-row");
+    const headingEl = document.getElementById("browse-heading");
+    const subheadingEl = document.getElementById("browse-subheading");
+    const paginationWrap = document.getElementById("catalog-pagination");
+    const searchInput = document.getElementById("zoro-search-input");
+
+    const params = new URLSearchParams(window.location.search);
+    const view = (params.get("view") || "").toLowerCase();
+    const kind = (params.get("kind") || "").toLowerCase();
+
+    const state = {
+      q: (params.get("q") || "").trim(),
+      sort: params.get("sort") || (view === "top-airing" ? "popular" : "trending"),
+      genre: canonicalGenreName(params.get("genre") || ""),
+      format: params.get("format") || (kind === "film" ? "MOVIE" : ""),
+      status: params.get("status") || (view === "top-airing" ? "RELEASING" : ""),
+      year: params.get("year") || "",
+      page: (() => {
+        const p = Number(params.get("page"));
+        return Number.isFinite(p) && p > 0 ? Math.floor(p) : 1;
+      })(),
+    };
+    if (!SORT_LABELS[state.sort]) state.sort = "trending";
+
+    const isSearch = !!state.q;
+    if (searchInput && state.q) searchInput.value = state.q;
+
+    /* ---- skeleton (never an empty dark grid) ---- */
+    grid.innerHTML = Array.from({ length: LIVE_PAGE_SIZE }, () => `
+      <div class="zoro-card zoro-card-skeleton" aria-hidden="true">
+        <div class="zoro-card-poster skeleton-shimmer"></div>
+        <div class="zoro-card-info">
+          <div class="skeleton-line skeleton-shimmer" style="width: 85%;"></div>
+          <div class="skeleton-line skeleton-shimmer" style="width: 55%;"></div>
+        </div>
+      </div>`).join("");
+
+    /* ---- genre chips (AniList genres) ---- */
+    function renderChips() {
+      if (!chipsWrap) return;
+      chipsWrap.innerHTML =
+        `<button class="genre-chip-zoro${state.genre ? "" : " active"}" data-genre="" type="button">All</button>` +
+        ANILIST_GENRES.map((g) => {
+          const active = state.genre && state.genre.toLowerCase() === g.toLowerCase();
+          return `<button class="genre-chip-zoro${active ? " active" : ""}" data-genre="${encodeURIComponent(g)}" type="button">${escapeHtml(g)}</button>`;
+        }).join("");
+    }
+
+    /* ---- year select ---- */
+    function renderYears() {
+      if (!yearSelect) return;
+      const current = Number(new Date().getFullYear());
+      let html = `<option value="">All years</option>`;
+      for (let y = current + 1; y >= current - 30; y--) {
+        html += `<option value="${y}">${y}</option>`;
+      }
+      yearSelect.innerHTML = html;
+      yearSelect.value = state.year || "";
+    }
+
+    /* ---- URL sync (so the filters survive a reload / share) ---- */
+    function updateUrl() {
+      const p = new URLSearchParams();
+      if (state.q) p.set("q", state.q);
+      if (state.sort !== "trending") p.set("sort", state.sort);
+      if (state.genre) p.set("genre", state.genre);
+      if (state.format) p.set("format", state.format);
+      if (state.status) p.set("status", state.status);
+      if (state.year) p.set("year", state.year);
+      if (state.page > 1) p.set("page", String(state.page));
+      if (view) p.set("view", view);
+      if (kind) p.set("kind", kind);
+      const qs = p.toString();
+      window.history.replaceState({}, "", `browse.html${qs ? `?${qs}` : ""}`);
+    }
+
+    /* ---- heading: active filter + result count ---- */
+    function updateHeading(count, pageInfo) {
+      if (!headingEl) return;
+      const total = pageInfo && Number.isFinite(pageInfo.total) ? pageInfo.total : null;
+      /* AniList caps the reported total at 5,000 — show it as "5,000+" rather
+         than pretending that is the exact number. */
+      const countLabel = total != null
+        ? (total >= 5000
+          ? `5,000+ ${total === 1 ? "title" : "titles"}`
+          : `${total.toLocaleString()} ${total === 1 ? "title" : "titles"}`)
+        : count != null ? `${count} ${count === 1 ? "title" : "titles"}` : "";
+
+      if (isSearch) {
+        const countPart = countLabel ? ` (${countLabel})` : "";
+        headingEl.innerHTML = `<span>Results for '<span class="accent">${escapeHtml(state.q)}</span>'${countPart}</span>`;
+        if (subheadingEl) {
+          subheadingEl.textContent = countLabel
+            ? "Searching the full catalog — your curated shelf comes first."
+            : "Searching the full catalog — your curated shelf comes first.";
+        }
+        return;
+      }
+
+      const chips = [];
+      if (state.genre) chips.push(state.genre);
+      if (state.format) chips.push(state.format === "MOVIE" ? "Movies" : state.format);
+      if (state.status) chips.push(state.status === "RELEASING" ? "Airing" : state.status === "FINISHED" ? "Finished" : state.status);
+      if (state.year) chips.push(state.year);
+
+      let title;
+      if (view === "top-airing") {
+        title = `Top <span class="accent">Airing</span>`;
+      } else if (kind === "film") {
+        title = `Movies <span class="accent">${escapeHtml(SORT_LABELS[state.sort] || "")}</span>`;
+      } else if (chips.length) {
+        title = `${escapeHtml(chips[0])} <span class="accent">· ${escapeHtml(SORT_LABELS[state.sort] || "Trending")}</span>`;
+      } else {
+        title = `Explore <span class="accent">Anime Shelf</span>`;
+      }
+      const countPart = countLabel ? ` <span class="accent">(${escapeHtml(countLabel)})</span>` : "";
+      headingEl.innerHTML = `<span>${title}${countPart}</span>`;
+
+      if (subheadingEl) {
+        const bits = [];
+        if (chips.length > 1) bits.push(chips.slice(1).join(" · "));
+        bits.push("The full AniList catalog — filters update live.");
+        subheadingEl.textContent = bits.join(" · ");
+      }
+    }
+
+    /* ---- pagination (AniList page numbers, windowed) ---- */
+    function renderPagination(pageInfo) {
+      if (!paginationWrap) return;
+      const current = (pageInfo && Number(pageInfo.currentPage)) || state.page;
+      const last = (pageInfo && Number(pageInfo.lastPage)) || current;
+      if (!pageInfo || !pageInfo.hasNextPage && current >= last) {
+        if (current <= 1) {
+          paginationWrap.hidden = true;
+          paginationWrap.innerHTML = "";
+          return;
+        }
+      }
+      const pages = [];
+      const push = (p) => pages.push(p);
+      push(1);
+      const from = Math.max(2, current - 2);
+      const to = Math.min(last - 1, current + 2);
+      if (from > 2) push("…");
+      for (let p = from; p <= to; p++) push(p);
+      if (to < last - 1) push("…");
+      if (last > 1) push(last);
+
+      let html = `<button class="page-btn" type="button" data-page="${current - 1}"${current === 1 ? " disabled" : ""} aria-label="Previous page">‹ Prev</button>`;
+      for (const p of pages) {
+        if (p === "…") {
+          html += `<span class="page-btn" style="border:none; background:none; cursor:default;">…</span>`;
+        } else {
+          html += `<button class="page-btn${p === current ? " active" : ""}" type="button" data-page="${p}"${p === current ? ' aria-current="page"' : ""}>${p}</button>`;
+        }
+      }
+      html += `<button class="page-btn" type="button" data-page="${current + 1}"${current >= last ? " disabled" : ""} aria-label="Next page">Next ›</button>`;
+      paginationWrap.innerHTML = html;
+      paginationWrap.hidden = false;
+    }
+
+    /* ---- the local library fallback (AniList is down) ---- */
+    async function renderLibraryFallback() {
+      renderLiveNotice(LIVE_LIBRARY_MESSAGE, "library");
+      const res = await api("/api/titles?limit=18");
+      const titles = (res.ok && res.data && Array.isArray(res.data.titles)) ? res.data.titles : [];
+      if (!titles.length) {
+        grid.innerHTML = `<div class="zoro-empty-state"><h3 class="zoro-empty-state-title">Nothing to show</h3><p class="zoro-empty-state-msg">The catalog could not be reached right now. Please try again in a moment.</p></div>`;
+        return;
+      }
+      grid.innerHTML = titles.map((t, i) => `
+        <div class="zoro-card" data-slug="${escapeHtml(t.slug)}" data-title="${escapeHtml(t.name)}">
+          <a class="zoro-card-poster" href="${detailHref(t.slug)}">
+            <img src="${coverOf(t)}" alt="${escapeHtml(t.name)}" loading="${i < 6 ? "eager" : "lazy"}" decoding="async">
+            <div class="zoro-play-overlay"><div class="zoro-play-circle">▶</div></div>
+            <div class="zoro-poster-badges">
+              <div class="badges-left"><span class="badge-mini-sub">SUB</span>${t.dubCount > 0 ? `<span class="badge-mini-dub">DUB ${t.dubCount}</span>` : ""}</div>
+              <span class="badge-mini-ep">Ep ${t.episodes || 1}</span>
+            </div>
+          </a>
+          <div class="zoro-card-info">
+            <a class="zoro-card-title" href="${detailHref(t.slug)}">${escapeHtml(t.name)}</a>
+            <div class="zoro-card-submeta"><span>${escapeHtml(t.kind || "Series")}</span> • <span>${escapeHtml(String(t.year || "—"))}</span></div>
+          </div>
+        </div>`).join("");
+      attachTooltipListeners();
+      if (paginationWrap) {
+        paginationWrap.hidden = true;
+        paginationWrap.innerHTML = "";
+      }
+      markContentReady();
+    }
+
+    function renderEmptyState() {
+      grid.innerHTML = `
+        <div class="zoro-empty-state" id="zoro-empty-state">
+          <div class="zoro-empty-state-icon">
+            <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+          </div>
+          <h3 class="zoro-empty-state-title">${isSearch ? `No anime found for '${escapeHtml(state.q)}'` : "No Anime Found"}</h3>
+          <p class="zoro-empty-state-msg">We couldn't find any results${isSearch ? ` for "<span class="accent-query">${escapeHtml(state.q)}</span>"` : ""}. Try another title or genre, or return to the full shelf.</p>
+          <a href="browse.html" class="empty-state-browse-link">Back to Browse</a>
+        </div>`;
+      if (paginationWrap) {
+        paginationWrap.hidden = true;
+        paginationWrap.innerHTML = "";
+      }
+      markContentReady();
+    }
+
+    /* ---- the main load ---- */
+    let loadToken = 0;
+    async function load() {
+      const token = ++loadToken;
+      let path;
+      if (isSearch) {
+        path = `/api/search?q=${encodeURIComponent(state.q)}&page=${state.page}`;
+      } else {
+        const qs = new URLSearchParams();
+        qs.set("sort", state.sort);
+        if (state.genre) qs.set("genre", state.genre);
+        if (state.format) qs.set("format", state.format);
+        if (state.status) qs.set("status", state.status);
+        if (state.year) qs.set("year", state.year);
+        qs.set("page", String(state.page));
+        path = `/api/browse?${qs.toString()}`;
+      }
+
+      const res = await api(path);
+      if (token !== loadToken) return;
+
+      if (!res.ok) {
+        /* 502 = AniList is busy / down → the local library keeps the page
+           usable. Any other error → same graceful fallback. */
+        await renderLibraryFallback();
+        updateHeading(null, null);
+        return;
+      }
+
+      renderLiveNotice(null);
+      const data = res.data || {};
+      const pageInfo = data.pageInfo || {};
+
+      if (isSearch) {
+        const local = Array.isArray(data.local) ? data.local : [];
+        const more = Array.isArray(data.results) ? data.results : [];
+        /* The genre chip refines the live results client-side (the search
+           endpoint itself is a pure SEARCH_MATCH query). */
+        const filtered = state.genre
+          ? more.filter((t) => (t.genres || []).some((g) => g.toLowerCase() === state.genre.toLowerCase()))
+          : more;
+
+        if (!local.length && !filtered.length) {
+          renderEmptyState();
+          updateHeading(0, pageInfo);
+          return;
+        }
+        grid.innerHTML =
+          (local.length
+            ? `<div class="live-result-group"><div class="live-result-group-title">On <span class="accent">Aniverse</span><span class="live-result-group-count">${local.length} curated</span></div><div class="cards-grid-zoro" id="live-local-grid">${local.map((t) => `
+              <div class="zoro-card" data-slug="${escapeHtml(t.slug)}" data-title="${escapeHtml(t.name)}">
+                <a class="zoro-card-poster" href="${detailHref(t.slug)}">
+                  <img src="${coverOf(t)}" alt="${escapeHtml(t.name)}" loading="lazy" decoding="async">
+                  <div class="zoro-play-overlay"><div class="zoro-play-circle">▶</div></div>
+                  <div class="zoro-poster-badges">
+                    <div class="badges-left"><span class="badge-mini-sub">SUB</span>${t.dubCount > 0 ? `<span class="badge-mini-dub">DUB ${t.dubCount}</span>` : ""}</div>
+                    <span class="badge-mini-ep">Ep ${t.episodes || 1}</span>
+                  </div>
+                </a>
+                <div class="zoro-card-info">
+                  <a class="zoro-card-title" href="${detailHref(t.slug)}">${escapeHtml(t.name)}</a>
+                  <div class="zoro-card-submeta"><span>${escapeHtml(t.kind || "Series")}</span> • <span>${escapeHtml(String(t.year || "—"))}</span></div>
+                </div>
+              </div>`).join("")}</div></div>`
+            : "") +
+          (filtered.length
+            ? `<div class="live-result-group"><div class="live-result-group-title">More <span class="accent">results</span><span class="live-result-group-count">${filtered.length} of ${pageInfo.total != null ? pageInfo.total.toLocaleString() : filtered.length}</span></div><div class="cards-grid-zoro">${filtered.map((t) => renderLiveCard(t)).join("")}</div></div>`
+            : "");
+        updateHeading(local.length + filtered.length, pageInfo);
+        renderPagination(pageInfo);
+        attachTooltipListeners();
+        markContentReady();
+        return;
+      }
+
+      const results = Array.isArray(data.results) ? data.results : [];
+      if (!results.length) {
+        renderEmptyState();
+        updateHeading(0, pageInfo);
+        return;
+      }
+      grid.innerHTML = results.map((t, i) => renderLiveCard(t, {})).join("");
+      updateHeading(results.length, pageInfo);
+      renderPagination(pageInfo);
+      markContentReady();
+    }
+
+    /* ---- filters ---- */
+    function setSort(value) {
+      state.sort = SORT_LABELS[value] ? value : "trending";
+      state.page = 1;
+      updateUrl();
+      load();
+    }
+
+    if (chipsWrap) {
+      chipsWrap.addEventListener("click", (e) => {
+        const chip = e.target.closest(".genre-chip-zoro");
+        if (!chip) return;
+        chipsWrap.querySelectorAll(".genre-chip-zoro").forEach((c) => c.classList.remove("active"));
+        chip.classList.add("active");
+        state.genre = chip.dataset.genre || "";
+        state.page = 1;
+        updateUrl();
+        load();
+      });
+    }
+
+    if (sortSelect) {
+      sortSelect.value = state.sort;
+      sortSelect.addEventListener("change", () => setSort(sortSelect.value));
+    }
+    if (formatSelect) {
+      formatSelect.value = state.format || "";
+      formatSelect.addEventListener("change", () => {
+        state.format = formatSelect.value || "";
+        state.page = 1;
+        updateUrl();
+        load();
+      });
+    }
+    if (statusSelect) {
+      statusSelect.value = state.status || "";
+      statusSelect.addEventListener("change", () => {
+        state.status = statusSelect.value || "";
+        state.page = 1;
+        updateUrl();
+        load();
+      });
+    }
+    if (yearSelect) {
+      yearSelect.addEventListener("change", () => {
+        state.year = yearSelect.value || "";
+        state.page = 1;
+        updateUrl();
+        load();
+      });
+    }
+
+    /* Pagination (delegated; re-rendered on every page change). */
+    if (paginationWrap) {
+      paginationWrap.addEventListener("click", (e) => {
+        const btn = e.target.closest(".page-btn");
+        if (!btn || btn.disabled) return;
+        const p = Number(btn.dataset.page);
+        if (!Number.isFinite(p) || p === state.page) return;
+        state.page = p;
+        updateUrl();
+        load();
+        const top = grid.getBoundingClientRect().top + window.scrollY - 90;
+        window.scrollTo({ top: Math.max(0, top), behavior: "instant" });
+      });
+    }
+
+    /* The header search drives this page live. */
+    window.__onSearchLiveFilter = (q) => {
+      state.q = (q || "").trim();
+      state.page = 1;
+      if (searchInput) searchInput.value = state.q;
+      /* Search mode has no server-side sort/format/status/year filters —
+         only the genre chip refines the results. */
+      if (filterRow) filterRow.hidden = isSearch;
+      updateUrl();
+      load();
+    };
+
+    renderChips();
+    renderYears();
+    if (filterRow) filterRow.hidden = isSearch;
+    updateHeading(null, null);
+    await load();
+  }
+
+  /* ==========================================================================
+     6D. HOME LIVE RAILS (AniList)
+     Top Airing / Trending Now / Top Rated / Latest Episodes. A rail that
+     fails is simply hidden — the curated catalog keeps working.
+     ========================================================================== */
+
+  async function initLiveRails() {
+    const rails = [
+      { id: "live-top-airing-grid", path: "/api/browse?sort=popular&status=RELEASING&page=1", mode: "browse" },
+      { id: "live-trending-grid", path: "/api/browse?sort=trending&page=1", mode: "browse" },
+      { id: "live-top-rated-grid", path: "/api/browse?sort=top&page=1", mode: "browse" },
+      { id: "live-latest-episodes-grid", path: "/api/airing?page=1", mode: "airing" },
+    ];
+
+    for (const rail of rails) {
+      const el = document.getElementById(rail.id);
+      if (!el) continue;
+      const section = el.closest("section");
+
+      el.innerHTML = Array.from({ length: 12 }, () => `
+        <div class="zoro-card zoro-card-skeleton" aria-hidden="true">
+          <div class="zoro-card-poster skeleton-shimmer"></div>
+          <div class="zoro-card-info">
+            <div class="skeleton-line skeleton-shimmer" style="width: 85%;"></div>
+            <div class="skeleton-line skeleton-shimmer" style="width: 55%;"></div>
+          </div>
+        </div>`).join("");
+
+      const res = await api(rail.path);
+      if (!res.ok || !res.data || !Array.isArray(res.data.results)) {
+        if (section) section.hidden = true;
+        el.innerHTML = "";
+        continue;
+      }
+      const results = res.data.results;
+      if (!results.length) {
+        if (section) section.hidden = true;
+        el.innerHTML = "";
+        continue;
+      }
+
+      if (rail.mode === "airing") {
+        /* Latest Episodes: the card opens the watch page at THAT episode. */
+        el.innerHTML = results.map((row) => {
+          const media = row.media || {};
+          return renderLiveCard(media, {
+            href: liveWatchHref(media, row.episode),
+            epLabel: `Ep ${row.episode}`,
+            submeta: timeSinceLabel(row.airingAt),
+          });
+        }).join("");
+      } else {
+        el.innerHTML = results.map((t) => renderLiveCard(t)).join("");
+      }
+    }
+  }
+
   function attachTooltipListeners() {
     const tip = createHoverTooltip();
     const cards = document.querySelectorAll(".zoro-card");
 
     cards.forEach((card) => {
+      /* Live cards have no catalog slug — the tooltip fetches the catalog
+         title by slug, so it simply does not apply to them. */
+      if (!card.dataset.slug) return;
       card.addEventListener("mouseenter", async (e) => {
         const slug = card.dataset.slug;
         activeHoverSlug = slug;
@@ -1509,6 +2187,22 @@
     const params = new URLSearchParams(window.location.search);
     const currentSlug = params.get("slug") || "kagerou-protocol";
     let currentEp = parseInt(params.get("ep"), 10) || 1;
+
+    /* LIVE MODE — watch.html?live=<anilistId>&ep=<n>
+       A title from the FULL AniList catalog (not one of the 18 curated
+       titles): the metadata comes from /api/live/:id, the episode list from
+       the AIRED episode count, and the player from the MAL id — or the
+       AniList id when the title has no MAL id. Progress lives under its own
+       "live-<id>" key namespace so live progress never collides with the
+       catalog slugs. */
+    const liveParam = params.get("live");
+    const liveId = liveParam ? parseInt(liveParam, 10) : null;
+    const isLive = !!liveId && Number.isFinite(liveId) && liveId > 0;
+    const progressKey = isLive ? `live-${liveId}` : currentSlug;
+    /* Live titles have no dub data at all (no dub_checks rows), so the
+       episode list is derived from the AIRED episode count. */
+    let liveAiredCount = 0;
+    let liveEpisodesUnknown = false;
     /* currentTrack  = the track of the stream that is actually loaded in the
        player right now. The highlighted pill ALWAYS mirrors it.
        preferredTrack = the viewer's audio choice. It survives episode
@@ -1707,7 +2401,9 @@
     };
 
     function getBackupEmbedUrl(epNum, startTime, restart) {
-      const ex = BACKUP_ID_EXCEPTIONS[currentSlug];
+      /* The pinned exceptions are CATALOG titles — a live title never uses
+         them (it has no catalog slug). */
+      const ex = isLive ? null : BACKUP_ID_EXCEPTIONS[currentSlug];
       let route, id;
       if (ex) {
         route = ex.route;
@@ -1754,9 +2450,15 @@
        fallback resume notice. Position tracking still runs on MegaPlay, so
        a switch back to Zoko resumes from the stored position. */
     function getMegaPlayEmbedUrl(epNum, track) {
-      if (!(titleData && titleData.malId)) return null;
       const lang = track === "dub" ? "dub" : "sub";
-      return `${MEGAPLAY_ORIGIN}/stream/mal/${titleData.malId}/${epNum}/${lang}`;
+      if (titleData && titleData.malId) {
+        return `${MEGAPLAY_ORIGIN}/stream/mal/${titleData.malId}/${epNum}/${lang}`;
+      }
+      /* Live titles without a MAL id use MegaPlay's AniList route. */
+      if (titleData && titleData.anilistId) {
+        return `${MEGAPLAY_ORIGIN}/stream/ani/${titleData.anilistId}/${epNum}/${lang}`;
+      }
+      return null;
     }
 
     /* ------------------------------------------------------------------
@@ -2063,16 +2765,20 @@
     }
 
     // Spec-compliant embed URL builder (ZokoAnime spec only)
+    /* `source` is "mal" for catalog titles and "anilist" for live titles
+       that have no MAL id — the embed supports both routes. */
     function getEmbedUrl(malId, epNum, track, opts = {}) {
-      if (!malId) {
-        showToast("No MAL ID mapped for this title");
+      const source = opts.source === "anilist" ? "anilist" : "mal";
+      const id = opts.id != null ? opts.id : malId;
+      if (!id) {
+        showToast("No anime id mapped for this title");
         return null;
       }
       const color = "cae962";
       const ap = opts.autoplay ? 1 : 0;
       const as = opts.autoskip ? 1 : 0;
       const an = opts.autonext ? 1 : 0;
-      let url = `https://zokoanime.video/stream/mal/${malId}/${epNum}/${track}?color=${color}&autoplay=${ap}&autoskip=${as}&autonext=${an}`;
+      let url = `https://zokoanime.video/stream/${source}/${id}/${epNum}/${track}?color=${color}&autoplay=${ap}&autoskip=${as}&autonext=${an}`;
       if (opts.startTime && opts.startTime > 0) {
         /* The live embed reads the start offset from `time=` (verified: `t=`
            alone is ignored and playback starts at 0). Emit both. */
@@ -2124,11 +2830,96 @@
 
     /* Total episode count, or 0 while the title is unknown. */
     function totalEpisodes() {
+      if (isLive) return liveAiredCount;
       return (titleData && titleData.episodes) || episodesList.length || 0;
+    }
+
+    /* LIVE title details — /api/live/:anilistId.
+       The episode list comes from the AIRED episode count: an airing title
+       has aired (nextAiringEpisode.episode - 1) episodes, a finished title
+       has all of them, a film has one. A title with an unannounced episode
+       count shows "Episode list unavailable" but can still play Ep 1. */
+    async function loadLiveTitleData() {
+      hideDataError();
+      const res = await api(`/api/live/${encodeURIComponent(liveId)}`);
+      if (!res.ok || !res.data || !res.data.title) {
+        showPlaceholder("Could not load this title");
+        showDataError(
+          res.status === 404
+            ? "This title is not available."
+            : res.status === 502
+            ? "Service is busy — try again in a moment."
+            : "This title could not be loaded from the server.",
+          startWatch
+        );
+        return false;
+      }
+
+      const t = res.data.title;
+      titleData = t;
+
+      const next = t.nextAiringEpisode || null;
+      const isFilm = t.format === "MOVIE";
+      if (isFilm) {
+        liveAiredCount = 1;
+      } else if (next && next.episode) {
+        liveAiredCount = Math.max(0, Number(next.episode) - 1);
+      } else if (t.episodes != null) {
+        liveAiredCount = Number(t.episodes);
+      } else {
+        liveAiredCount = 0;
+      }
+      liveEpisodesUnknown = !isFilm && t.episodes == null && !next;
+      episodesList = [];
+      for (let n = 1; n <= liveAiredCount; n++) {
+        episodesList.push({ ep_num: n, title: `Episode ${n}` });
+      }
+
+      if (animeTitle) animeTitle.textContent = titleData.name;
+      if (animeTitleH1) animeTitleH1.textContent = titleData.name;
+      if (animeDesc) animeDesc.textContent = titleData.synopsis || "";
+
+      /* Live titles have no dub data — the 18+ tag comes from the server. */
+      const badgesEl = document.getElementById("watch-anime-badges");
+      if (badgesEl) {
+        badgesEl.innerHTML = t.is18plus
+          ? `<span class="badge badge-18plus">18+</span>`
+          : "";
+        badgesEl.hidden = !t.is18plus;
+      }
+
+      const setText = (id, val) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = val;
+      };
+      setText("watch-detail-status", liveStatusLabel(titleData));
+      setText("watch-detail-studios", "—");
+      setText("watch-detail-year", titleData.year || "—");
+      setText("watch-detail-score", scoreLabel(titleData) ? `★ ${scoreLabel(titleData)} / 10` : "—");
+      setText("watch-detail-episodes", titleData.episodes != null ? titleData.episodes : "—");
+      setText("watch-detail-duration", titleData.runtimeMin ? `${titleData.runtimeMin}m per ep` : "—");
+      setText("watch-detail-next", next ? `Ep ${next.episode} on ${formatAiringDate(next.airingAt)}` : "—");
+      const nextRow = document.getElementById("watch-detail-next-row");
+      if (nextRow) nextRow.hidden = !next;
+      const detailLink = document.getElementById("watch-detail-link");
+      if (detailLink) detailLink.href = liveDetailHref(titleData);
+      if (coverOverlay) coverOverlay.style.backgroundImage = `url('${bannerOf(titleData)}')`;
+
+      /* No watchlist row and no comments for live titles — neither exists in
+         the catalog DB, and this feature must not write to it. */
+      if (wlBtn) wlBtn.hidden = true;
+      const discussion = document.getElementById("watch-discussion");
+      if (discussion) discussion.hidden = true;
+
+      renderEpisodesGrid();
+      updateEpisodeNavState();
+      markContentReady();
+      return true;
     }
 
     /* Load Title Details (retryable) */
     async function loadTitleData() {
+      if (isLive) return loadLiveTitleData();
       hideDataError();
       const titleRes = await api(`/api/titles/${encodeURIComponent(currentSlug)}`);
       if (!titleRes.ok || !titleRes.data || !titleRes.data.title) {
@@ -2191,7 +2982,16 @@
 
       const totalEps = totalEpisodes();
       if (!totalEps) {
-        epGrid.innerHTML = `<p class="ep-grid-status">No episodes available for this title.</p>`;
+        if (isLive && liveEpisodesUnknown) {
+          /* The episode count is unannounced — say so honestly, but Ep 1 is
+             still playable. */
+          epGrid.innerHTML = `
+            <p class="ep-grid-status">Episode list unavailable for this title.</p>
+            <button class="ep-btn" data-ep="1" type="button" title="Episode 1"><span class="ep-btn-num">001</span><span class="ep-btn-title">Episode 1</span></button>`;
+        } else {
+          epGrid.innerHTML = `<p class="ep-grid-status">No episodes available for this title.</p>`;
+        }
+        bindEpisodeGridEvents();
         return;
       }
 
@@ -2251,19 +3051,24 @@
       }
 
       // Delegated click listener for episodes grid (ensures in-page swap without navigation)
-      if (epGrid.dataset.delegatedBound !== "true") {
-        epGrid.dataset.delegatedBound = "true";
-        epGrid.addEventListener("click", (e) => {
-          const btn = e.target.closest(".ep-btn");
-          if (!btn) return;
-          e.preventDefault();
-          e.stopPropagation();
-          const epNum = parseInt(btn.dataset.ep, 10);
-          if (epNum && epNum !== currentEp) {
-            loadEpisode(epNum);
-          }
-        });
-      }
+      bindEpisodeGridEvents();
+    }
+
+    /* The episode grid is re-rendered on every title/episode change, so the
+       delegated listener is bound ONCE and survives the re-render. */
+    function bindEpisodeGridEvents() {
+      if (!epGrid || epGrid.dataset.delegatedBound === "true") return;
+      epGrid.dataset.delegatedBound = "true";
+      epGrid.addEventListener("click", (e) => {
+        const btn = e.target.closest(".ep-btn");
+        if (!btn) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const epNum = parseInt(btn.dataset.ep, 10);
+        if (epNum && epNum !== currentEp) {
+          loadEpisode(epNum);
+        }
+      });
     }
 
     // Prev / Next button states (also used before the title has loaded)
@@ -2290,7 +3095,13 @@
       const isCurrent = Number(epNum) === Number(currentEp);
       if (epRes.ok && epRes.data && epRes.data.episode) {
         const ep = epRes.data.episode;
-        if (epSubtitle && isCurrent) epSubtitle.textContent = `Episode ${ep.epNum}: ${ep.title}`;
+        /* Live titles have generic episode names — "Episode 1: Episode 1"
+           says nothing, so the subtitle stays clean. */
+        if (epSubtitle && isCurrent) {
+          epSubtitle.textContent = isLive
+            ? `Episode ${ep.epNum}`
+            : `Episode ${ep.epNum}: ${ep.title}`;
+        }
         return ep;
       } else {
         if (epSubtitle && isCurrent) epSubtitle.textContent = `Episode ${epNum}`;
@@ -2298,10 +3109,30 @@
       }
     }
 
-    // Load an episode
+    /* Load an episode */
     /* Episode metadata only needs the slug + episode number, so it is fetched
        in parallel with the title instead of after it. */
     function fetchEpisodeData(epNum) {
+      /* Live titles have no episode rows (no DB write for them): the episode
+         metadata is derived from the title's own runtime, and the resume
+         position comes from the local store under the live key. */
+      if (isLive) {
+        const runtime = (titleData && titleData.runtimeMin) ? titleData.runtimeMin : 24;
+        const saved = readLocalProgress(progressKey, epNum);
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          error: null,
+          data: {
+            episode: {
+              epNum,
+              title: `Episode ${epNum}`,
+              durationSec: runtime * 60,
+              savedPositionSec: saved && typeof saved.t === "number" ? saved.t : 0,
+            },
+          },
+        });
+      }
       return api(`/api/titles/${encodeURIComponent(currentSlug)}/episodes/${epNum}`);
     }
 
@@ -2421,6 +3252,15 @@
         currentTrack = megaPlayTrack || (preferredTrack === "dub" ? "dub" : "sub");
         applyTrackPill(currentTrack);
         updateTrackLabel();
+      } else if (isLive) {
+        /* LIVE titles: dub availability is UNKNOWN (there are no dub_checks
+           rows for them, and this feature must not write any). Sub AND Dub
+           stay enabled and the viewer's stored preference is honoured as-is
+           — a track that does not exist surfaces as a player error and the
+           existing failure notice handles it. */
+        currentTrack = preferredTrack === "hsub" ? "hsub" : preferredTrack;
+        applyTrackPill(currentTrack);
+        updateTrackLabel();
       } else {
         const optimisticTrack = preferredTrack === "dub"
           ? (knownAvail === true ? "dub" : "sub")
@@ -2433,8 +3273,9 @@
       /* New episode: re-probe dub availability in the background (the Dub
          pill awaits this probe if it is still running when clicked). The
          fresh entry starts unknown, so the previous episode's answer can
-         never leak into this one. Zoko-only: the backup has no dub. */
-      const probePromise = activeServer === "zoko" ? probeDubAvailability(epNum) : null;
+         never leak into this one. Zoko-only: the backup has no dub.
+         Live titles are never probed — they have no dub data at all. */
+      const probePromise = activeServer === "zoko" && !isLive ? probeDubAvailability(epNum) : null;
 
       // Clear episode-search filter and input box on every episode change (Bug 5)
       const epSearchInput = document.getElementById("ep-search-input");
@@ -2463,7 +3304,9 @@
       if (spinner) spinner.hidden = false;
 
       // Update URL without reload
-      const newUrl = `watch.html?slug=${encodeURIComponent(currentSlug)}&ep=${epNum}`;
+      const newUrl = isLive
+        ? `watch.html?live=${encodeURIComponent(liveId)}&ep=${epNum}`
+        : `watch.html?slug=${encodeURIComponent(currentSlug)}&ep=${epNum}`;
       window.history.replaceState({ slug: currentSlug, ep: epNum }, "", newUrl);
 
       // Highlight active episode button
@@ -2502,11 +3345,20 @@
       if (startFromBeginning) {
         /* Restart: forget the saved position so the next reload does not
            resume again, and tell the embed to skip its own resume store. */
-        clearLocalProgress(currentSlug, epNum);
+        clearLocalProgress(progressKey, epNum);
       } else if (positionOverride != null) {
         /* Server switch: carry the last observable position across servers
            (Zoko time events -> backup t= param, and back). */
         resumeTime = positionOverride >= 1 ? Math.floor(positionOverride) : 0;
+      } else if (isLive) {
+        /* Live titles have no server-side progress (no catalog row) — the
+           site's own local store under the "live-<id>" namespace is the only
+           source of truth. */
+        const epDur = epData.durationSec || 1440;
+        const lp = readLocalProgress(progressKey, epNum);
+        if (lp && resumablePosition(lp.t, lp.d || epDur)) {
+          resumeTime = Math.floor(lp.t);
+        }
       } else {
         const epDur = epData.durationSec || 1440;
         if (typeof epData.savedPositionSec === "number" && resumablePosition(epData.savedPositionSec, epDur)) {
@@ -2563,7 +3415,13 @@
          On the backup the stream is always Sub — no probe, no preference
          write; the stored Dub choice waits for the return to Zoko. */
       if (activeServer === "zoko") {
-        if (preferredTrack === "dub") {
+        if (isLive) {
+          /* Live titles: the dub track is UNKNOWN, never probed and never
+             written to dub_checks. Both Sub and Dub stay enabled; the
+             viewer's stored preference plays as-is. */
+          currentTrack = preferredTrack === "hsub" ? "hsub" : preferredTrack;
+          applyTrackPill(currentTrack);
+        } else if (preferredTrack === "dub") {
           /* A dub needs proof: wait for this episode's probe before handing
              the dub URL to the embed. An answer already in the cache — a warm
              visit OR the seed from the title payload — IS that proof, so it is
@@ -2587,9 +3445,16 @@
       } else if (activeServer === "megaplay") {
         streamUrl = getMegaPlayEmbedUrl(currentEp, currentTrack);
       } else {
-        // Determine MAL ID (check custom override first, then title's malId)
-        const malId = getCustomMalId(currentSlug) || (titleData && titleData.malId);
-        streamUrl = getEmbedUrl(malId, currentEp, currentTrack, {
+        /* Determine the player id: the MAL id is preferred (it is what every
+           player maps best); a live title WITHOUT a MAL id uses the AniList
+           route with the AniList id. The Zoko debug override only applies to
+           catalog titles. */
+        const useAnilistRoute = isLive && !(titleData && titleData.malId);
+        const playerId = useAnilistRoute
+          ? (titleData && titleData.anilistId)
+          : (getCustomMalId(progressKey) || (titleData && titleData.malId));
+        streamUrl = getEmbedUrl(playerId, currentEp, currentTrack, {
+          source: useAnilistRoute ? "anilist" : "mal",
           autoplay: playerSettings.autoplay,
           autoskip: playerSettings.autoskip,
           autonext: playerSettings.autonext,
@@ -2610,7 +3475,9 @@
         if (overlay) {
           overlay.hidden = false;
           if (overlayTitle) overlayTitle.textContent = "Stream unavailable";
-          if (overlayText) overlayText.textContent = "No MAL ID mapped for this title, so the stream cannot be loaded.";
+          if (overlayText) overlayText.textContent = isLive
+            ? "This title has no playable id on the players yet."
+            : "No MAL ID mapped for this title, so the stream cannot be loaded.";
         }
         return;
       }
@@ -2743,6 +3610,11 @@
         label.textContent = "—";
         return;
       }
+      /* Live titles have no dub data: both tracks stay offered. */
+      if (isLive) {
+        label.textContent = "SUB / DUB";
+        return;
+      }
       const avail = dubAvailability.get(Number(currentEp));
       label.textContent = avail === true ? "SUB / DUB" : "SUB";
     }
@@ -2786,7 +3658,7 @@
             return;
           }
 
-          if (requestedTrack === "dub") {
+          if (requestedTrack === "dub" && !isLive) {
             let avail = dubAvailability.get(Number(epAtClick));
             if (avail === undefined || avail === null) {
               showToast("Checking dub availability…", "⏳", 2500);
@@ -2819,7 +3691,10 @@
              only reachable AFTER the Dub gate above, so a refused Dub click
              (episode has no dub) never overwrites the stored preference. */
           preferredTrack = requestedTrack;
-          writePreferredTrack(preferredTrack);
+          /* LIVE titles never overwrite the stored Dub preference: the
+             preference belongs to the catalog titles, and a live title's
+             track availability is unknown. */
+          if (!isLive) writePreferredTrack(preferredTrack);
           const changed = requestedTrack !== currentTrack;
           currentTrack = requestedTrack;
           applyTrackPill(currentTrack);
@@ -2833,12 +3708,16 @@
              when it assigns the src. */
           if (loadInFlight) return;
           if (iframe && iframe.src && iframe.src !== "about:blank") {
-            const malId = getCustomMalId(currentSlug) || (titleData && titleData.malId);
             // Read current playback position BEFORE swapping the iframe src (Bug 5).
             // The embed honours time= (t= alone is ignored), so every track
             // switch resumes where the viewer was — dub included.
             const resumePos = Math.floor(currentPosition || 0);
-            const newUrl = getEmbedUrl(malId, currentEp, currentTrack, {
+            const useAnilistRoute = isLive && !(titleData && titleData.malId);
+            const playerId = useAnilistRoute
+              ? (titleData && titleData.anilistId)
+              : (getCustomMalId(progressKey) || (titleData && titleData.malId));
+            const newUrl = getEmbedUrl(playerId, currentEp, currentTrack, {
+              source: useAnilistRoute ? "anilist" : "mal",
               autoplay: true,
               autoskip: playerSettings.autoskip,
               autonext: playerSettings.autonext,
@@ -2953,6 +3832,12 @@
     }
     if (customMalBtn) {
       customMalBtn.addEventListener("click", () => {
+        /* The override is keyed by the catalog slug — a live title has no
+           slug, so the debug tool does not apply to it. */
+        if (isLive) {
+          showToast("The MAL id override applies to catalog titles only.", "!");
+          return;
+        }
         const currentMalId = getCustomMalId(currentSlug) || (titleData && titleData.malId) || "";
         const inputId = prompt(
           `Enter the MyAnimeList id for this title (current: ${currentMalId}).\n` +
@@ -3019,7 +3904,7 @@
              playing in the iframe — under the SAME store as Zoko
              (av_zoko_progress signed-out, /api/progress signed-in), so a
              switch back to Zoko resumes where MegaPlay left off. */
-          if (currentUser && cur > 0 && now - lastProgressSync > 5000) {
+          if (currentUser && !isLive && cur > 0 && now - lastProgressSync > 5000) {
             lastProgressSync = now;
             api("/api/progress", {
               method: "POST",
@@ -3031,9 +3916,11 @@
               },
             });
           }
-          if (!currentUser && cur > 0 && now - lastLocalSave > 5000) {
+          /* Live titles have no catalog row — their progress lives ONLY in
+             the site's local store, under the "live-<id>" namespace. */
+          if ((!currentUser || isLive) && cur > 0 && now - lastLocalSave > 5000) {
             lastLocalSave = now;
-            writeLocalProgress(currentSlug, playerEp, cur, dur);
+            writeLocalProgress(progressKey, playerEp, cur, dur);
           }
           /* UI below is for the episode the page shows — stale events from
              the previous episode must not touch it. */
@@ -3084,7 +3971,9 @@
         // Event: complete → auto-next (parent-driven, same as Zoko's ended)
         if (mev === "complete") {
           if (playerEp == null || playerEp !== currentEp) return;
-          const totalEps = (titleData && titleData.episodes) || episodesList.length || 12;
+          /* totalEpisodes() is the AIRED count for live titles — auto-next
+             must never jump to an episode that has not aired yet. */
+          const totalEps = totalEpisodes() || 12;
           if (playerSettings.autonext && currentEp < totalEps) {
             showToast(`Episode finished! Auto-playing Episode ${currentEp + 1}...`);
             setTimeout(() => loadEpisode(currentEp + 1), 1500);
@@ -3273,7 +4162,7 @@
            never under the episode being loaded (that leak made ep 2 "resume"
            from ep 1's position). Applies to BOTH the signed-in server path
            and the signed-out localStorage path. */
-        if (currentUser && cur > 0 && now - lastProgressSync > 5000) {
+        if (currentUser && !isLive && cur > 0 && now - lastProgressSync > 5000) {
           lastProgressSync = now;
           api("/api/progress", {
             method: "POST",
@@ -3285,9 +4174,9 @@
             },
           });
         }
-        if (!currentUser && cur > 0 && now - lastLocalSave > 5000) {
+        if ((!currentUser || isLive) && cur > 0 && now - lastLocalSave > 5000) {
           lastLocalSave = now;
-          writeLocalProgress(currentSlug, playerEp, cur, dur);
+          writeLocalProgress(progressKey, playerEp, cur, dur);
         }
 
         /* Everything below is UI for the episode the page is showing — stale
@@ -3373,7 +4262,9 @@
       // Event: ended (auto-next is parent-driven)
       if (data.type === "ended") {
         if (!eventIsForCurrentLoad) return;
-        const totalEps = (titleData && titleData.episodes) || episodesList.length || 12;
+        /* totalEpisodes() is the AIRED count for live titles — auto-next must
+           never jump to an episode that has not aired yet. */
+        const totalEps = totalEpisodes() || 12;
         if (playerSettings.autonext && currentEp < totalEps) {
           showToast(`Episode finished! Auto-playing Episode ${currentEp + 1}...`);
           setTimeout(() => loadEpisode(currentEp + 1), 1500);
@@ -3476,6 +4367,12 @@
 
     if (wlBtn) {
       wlBtn.addEventListener("click", async () => {
+        /* Live titles are not catalog rows — they are never added to the
+           watchlist (this feature writes nothing to the catalog). */
+        if (isLive) {
+          showToast("This title is not part of your library.", "!");
+          return;
+        }
         if (!currentUser) {
           openAuthModal("login");
           return;
@@ -3498,6 +4395,14 @@
        episode at the saved position (the saved offset is applied through
        the embed's &t= parameter). */
     async function startWatch() {
+      /* LIVE titles: the episode metadata depends on the title (runtime),
+         so the title loads FIRST — the episode is then derived from it. */
+      if (isLive) {
+        const loaded = await loadTitleData();
+        if (!loaded) return;
+        await loadEpisode(currentEp, null);
+        return;
+      }
       /* Title and episode metadata are independent: fetch both at once. */
       const episodeDataPromise = fetchEpisodeData(currentEp);
       const loaded = await loadTitleData();
@@ -3527,7 +4432,12 @@
     })();
 
     // Initialize comments for current episode
-    initComments(currentSlug, currentEp);
+    /* Live titles have no catalog slug — comments are a catalog feature. */
+    if (!isLive) initComments(currentSlug, currentEp);
+    else {
+      const discussion = document.getElementById("watch-discussion");
+      if (discussion) discussion.hidden = true;
+    }
   }
 
   async function initComments(slug, ep) {
@@ -3631,11 +4541,182 @@
      DETAIL PAGE (Phase 1): real metadata hero, episode list, recommendations
      ========================================================================== */
 
+  /* ==========================================================================
+     LIVE DETAIL PAGE — detail.html?live=<anilistId>
+     Same layout as the catalog detail page, fed by /api/live/:id. No DB
+     write, no catalog import: a live title is never added to the catalog.
+     ========================================================================== */
+
+  async function initLiveDetail(liveId) {
+    const loadingEl = document.getElementById("detail-loading");
+    const errorEl = document.getElementById("detail-error");
+    const contentEl = document.getElementById("detail-content");
+
+    function showError(msg) {
+      if (loadingEl) loadingEl.hidden = true;
+      if (contentEl) contentEl.hidden = true;
+      if (errorEl) {
+        errorEl.hidden = false;
+        const t = errorEl.querySelector(".detail-error-text");
+        if (t) t.textContent = msg;
+      }
+      markContentReady();
+    }
+
+    const res = await api(`/api/live/${encodeURIComponent(liveId)}`);
+    if (!res.ok || !res.data || !res.data.title) {
+      showError(
+        res.status === 404
+          ? "This title is not available."
+          : res.status === 502
+          ? "Service is busy — try again in a moment."
+          : "This title could not be loaded from the server."
+      );
+      return;
+    }
+
+    const t = res.data.title;
+    const next = t.nextAiringEpisode || null;
+    const isFilm = t.format === "MOVIE";
+    /* Aired episodes: an airing title's last aired episode is the next one
+       minus one; a finished title has all of them. */
+    const airedCount = next && next.episode
+      ? Math.max(0, Number(next.episode) - 1)
+      : (t.episodes != null ? Number(t.episodes) : 0);
+    const episodesUnknown = t.episodes == null && !next;
+
+    const backdrop = document.getElementById("detail-backdrop");
+    if (backdrop) backdrop.style.backgroundImage = `url('${bannerOf(t)}')`;
+    const cover = document.getElementById("detail-cover");
+    if (cover) {
+      cover.src = coverOf(t);
+      cover.alt = t.name;
+    }
+    const titleEl = document.getElementById("detail-title");
+    if (titleEl) titleEl.textContent = t.name;
+    const altEl = document.getElementById("detail-alt-titles");
+    if (altEl) {
+      const parts = [];
+      if (t.romajiTitle && t.romajiTitle !== t.name) parts.push(t.romajiTitle);
+      if (t.nativeTitle) parts.push(t.nativeTitle);
+      altEl.textContent = parts.join("  •  ");
+      altEl.hidden = parts.length === 0;
+    }
+
+    /* Badges: the 18+ tag comes from the SERVER flag (Ecchi genre). Live
+       titles have no dub data at all — never a DUB badge or count. */
+    const badges = document.getElementById("detail-badges");
+    if (badges) {
+      badges.innerHTML = `
+        <span class="badge badge-sub">SUB ${airedCount || 1}</span>
+        ${t.is18plus ? `<span class="badge badge-18plus">18+</span>` : ""}
+        <span class="badge badge-type">${escapeHtml(liveFormatLabel(t))}</span>
+        <span class="badge badge-hd">HD</span>
+        ${scoreLabel(t) ? `<span class="badge badge-score">★ ${scoreLabel(t)}</span>` : ""}
+      `;
+    }
+    const trackLabel = document.getElementById("detail-track-label");
+    if (trackLabel) trackLabel.textContent = "SUB / DUB";
+
+    const meta = document.getElementById("detail-meta");
+    if (meta) {
+      meta.innerHTML = `
+        <span><strong>Year:</strong> ${t.year || "—"}</span>
+        <span><strong>Status:</strong> ${escapeHtml(liveStatusLabel(t))}</span>
+        <span><strong>Episodes:</strong> ${t.episodes != null ? t.episodes : "—"}</span>
+        <span><strong>Format:</strong> ${escapeHtml(liveFormatLabel(t))}</span>
+        <span><strong>Duration:</strong> ${t.runtimeMin ? t.runtimeMin + "m" : "—"}</span>
+        ${next ? `<span><strong>Next episode:</strong> Ep ${next.episode} on ${escapeHtml(formatAiringDate(next.airingAt))}</span>` : ""}
+      `;
+    }
+    const genresEl = document.getElementById("detail-genres");
+    if (genresEl) {
+      genresEl.innerHTML = (t.genres || [])
+        .map((g) => `<a class="genre-chip-zoro" href="browse.html?genre=${encodeURIComponent(g)}">${escapeHtml(genreLabel(g))}</a>`)
+        .join("");
+    }
+    const syn = document.getElementById("detail-synopsis");
+    if (syn) syn.textContent = t.synopsis || "";
+    const watchNow = document.getElementById("detail-watch-now");
+    if (watchNow) watchNow.href = liveWatchHref(t, 1);
+    document.title = `${t.name} - Ani Verse`;
+
+    /* No watchlist row for live titles — the catalog is never written to. */
+    const listBtn = document.getElementById("detail-add-list");
+    if (listBtn) listBtn.hidden = true;
+
+    /* Episode list: only the AIRED episodes. */
+    const epList = document.getElementById("detail-episode-list");
+    if (epList) {
+      if (episodesUnknown) {
+        epList.innerHTML = `<p style="color:var(--text-muted);padding:12px 0;">Episode list unavailable for this title.</p>`;
+      } else if (!airedCount) {
+        epList.innerHTML = `<p style="color:var(--text-muted);padding:12px 0;">No episodes have aired yet${next ? ` — Ep ${next.episode} airs on ${escapeHtml(formatAiringDate(next.airingAt))}.` : "."}</p>`;
+      } else {
+        const rows = [];
+        for (let n = 1; n <= airedCount; n++) {
+          const padded = String(n).padStart(3, "0");
+          rows.push(`
+            <a class="detail-episode-row" href="${liveWatchHref(t, n)}">
+              <span class="detail-episode-num">${padded}</span>
+              <span class="detail-episode-title">Episode ${n}</span>
+              <span class="detail-episode-duration">${t.runtimeMin ? t.runtimeMin + "m" : "—"}</span>
+              <span class="detail-episode-play">▶</span>
+            </a>`);
+        }
+        epList.innerHTML = rows.join("");
+      }
+      epList.classList.toggle("single-episode", airedCount === 1);
+    }
+
+    /* Recommendations: live titles from the same genres. */
+    const recWrap = document.getElementById("detail-recommendations");
+    if (recWrap) {
+      const genre = (t.genres || [])[0] || "";
+      const recRes = await api(`/api/browse?sort=popular${genre ? `&genre=${encodeURIComponent(genre)}` : ""}&page=1`);
+      const recs = (recRes.ok && recRes.data && Array.isArray(recRes.data.results))
+        ? recRes.data.results.filter((o) => o.anilistId !== t.anilistId).slice(0, 6)
+        : [];
+      recWrap.innerHTML = recs.length
+        ? recs.map((o) => renderLiveCard(o)).join("")
+        : `<p style="color:var(--text-muted);">No similar titles yet.</p>`;
+    }
+
+    if (loadingEl) loadingEl.hidden = true;
+    if (errorEl) errorEl.hidden = true;
+    if (contentEl) contentEl.hidden = false;
+    markContentReady();
+  }
+
   async function initDetailPage() {
     const stage = document.getElementById("detail-stage");
     if (!stage) return;
 
     const params = new URLSearchParams(window.location.search);
+
+    /* Live titles (?live=<anilistId>) reuse this layout but are fed by
+       /api/live/:id — never by the local catalog. */
+    const liveParam = params.get("live");
+    if (liveParam) {
+      const liveId = parseInt(liveParam, 10);
+      if (!Number.isFinite(liveId) || liveId <= 0) {
+        const errorEl = document.getElementById("detail-error");
+        const loadingEl = document.getElementById("detail-loading");
+        const contentEl = document.getElementById("detail-content");
+        if (loadingEl) loadingEl.hidden = true;
+        if (contentEl) contentEl.hidden = true;
+        if (errorEl) {
+          errorEl.hidden = false;
+          const t = errorEl.querySelector(".detail-error-text");
+          if (t) t.textContent = "This title is not available.";
+        }
+        markContentReady();
+        return;
+      }
+      await initLiveDetail(liveId);
+      return;
+    }
+
     // ?slug= is the canonical key; ?id= is accepted as an alias for stable
     // deep-linking (watchlist/progress/history keys all live under slugs).
     const rawId = (params.get("slug") || params.get("id") || "").trim();
@@ -4061,6 +5142,7 @@
     initSpotlightSlider();
     initTrendingAndColumns();
     initMainCatalogGrid();
+    initLiveRails();
     initGenresPage();
     initWatchPage();
     initDetailPage();
