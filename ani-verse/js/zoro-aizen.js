@@ -248,7 +248,7 @@
   function renderLiveCard(t, opts = {}) {
     if (!t) return "";
     const href = opts.href || liveDetailHref(t);
-    const cover = t.cover || COVER_FALLBACK;
+    const cover = coverOf(t);
     const score = scoreLabel(t);
     const year = t.year || "—";
     const epLabel = opts.epLabel || liveEpisodesLabel(t);
@@ -855,7 +855,8 @@
       const q = input.value.trim();
       if (!q) return;
       dropdown.classList.remove("is-open");
-      if (window.location.pathname.endsWith("browse.html")) {
+      const isBrowsePage = window.location.pathname.endsWith("browse.html") || window.location.pathname.endsWith("/browse");
+      if (isBrowsePage) {
         const url = new URL(window.location);
         url.searchParams.set("q", q);
         window.history.replaceState({}, "", url.toString());
@@ -913,7 +914,7 @@
     function goToSlide(n) {
       const slides = sliderContainer.querySelectorAll(".spotlight-slide");
       if (!slides.length) return;
-      if (slides[currentSlide]) slides[currentSlide].classList.remove("is-active");
+      slides.forEach((s) => s.classList.remove("is-active"));
       currentSlide = ((n % slides.length) + slides.length) % slides.length;
       slides[currentSlide].classList.add("is-active");
       applyBackdrop(slides[currentSlide]);
@@ -1216,9 +1217,8 @@
           <div class="col-item-details">
             <div class="col-item-title" title="${escapeHtml(t.name)}">${escapeHtml(t.name)}</div>
             <div class="col-item-meta">
-              <span class="badge-mini-sub">SUB</span>
+              <span class="badge-mini-sub">SUB ${t.episodes || 1}</span>
               ${t.dubCount > 0 ? `<span class="badge-mini-dub">DUB ${t.dubCount}</span>` : ""}
-              <span>Ep ${t.episodes || 1}</span>
             </div>
           </div>
         </a>
@@ -1266,7 +1266,7 @@
     const grid = document.getElementById("zoro-main-grid");
     if (!grid) return;
 
-    const isBrowse = window.location.pathname.endsWith("browse.html");
+    const isBrowse = window.location.pathname.endsWith("browse.html") || window.location.pathname.endsWith("/browse");
     const PAGE_SIZE = 12;
 
     /* Browse is now the FULL live catalog (AniList, ~20k titles). The home
@@ -1520,10 +1520,9 @@
             </div>
             <div class="zoro-poster-badges">
               <div class="badges-left">
-                <span class="badge-mini-sub">SUB</span>
+                <span class="badge-mini-sub">SUB ${t.episodes || 1}</span>
                 ${t.dubCount > 0 ? `<span class="badge-mini-dub">DUB ${t.dubCount}</span>` : ""}
               </div>
-              <span class="badge-mini-ep">Ep ${t.episodes || 1}</span>
             </div>
           </a>
           <div class="zoro-card-info">
@@ -1638,7 +1637,7 @@
     };
     if (!SORT_LABELS[state.sort]) state.sort = "trending";
 
-    const isSearch = !!state.q;
+    function isSearch() { return !!state.q; }
     if (searchInput && state.q) searchInput.value = state.q;
 
     /* ---- skeleton (never an empty dark grid, and never a stale one) ---- */
@@ -1696,16 +1695,18 @@
     /* ---- heading: active filter + result count ---- */
     function updateHeading(count, pageInfo) {
       if (!headingEl) return;
-      const total = pageInfo && Number.isFinite(pageInfo.total) ? pageInfo.total : null;
+      const hasFilter = !!(state.genre || state.format || state.status || state.year);
+      const total = (!hasFilter && pageInfo && Number.isFinite(pageInfo.total)) ? pageInfo.total : null;
       /* AniList caps the reported total at 5,000 — show it as "5,000+" rather
-         than pretending that is the exact number. */
+         than pretending that is the exact number. Filtered views do not show
+         the 5,000+ capped total. */
       const countLabel = total != null
         ? (total >= 5000
           ? `5,000+ ${total === 1 ? "title" : "titles"}`
           : `${total.toLocaleString()} ${total === 1 ? "title" : "titles"}`)
-        : count != null ? `${count} ${count === 1 ? "title" : "titles"}` : "";
+        : count != null && isSearch() ? `${count} ${count === 1 ? "title" : "titles"}` : "";
 
-      if (isSearch) {
+      if (isSearch()) {
         const countPart = countLabel ? ` (${countLabel})` : "";
         headingEl.innerHTML = `<span>Results for '<span class="accent">${escapeHtml(state.q)}</span>'${countPart}</span>`;
         if (subheadingEl) {
@@ -1747,7 +1748,11 @@
     function renderPagination(pageInfo) {
       if (!paginationWrap) return;
       const current = (pageInfo && Number(pageInfo.currentPage)) || state.page;
-      const last = (pageInfo && Number(pageInfo.lastPage)) || current;
+      const hasFilter = !!(state.genre || state.format || state.status || state.year);
+      const isCapped = pageInfo && pageInfo.total >= 5000;
+      const last = (hasFilter && isCapped)
+        ? (pageInfo.hasNextPage ? current + 1 : current)
+        : ((pageInfo && Number(pageInfo.lastPage)) || current);
       if (!pageInfo || !pageInfo.hasNextPage && current >= last) {
         if (current <= 1) {
           paginationWrap.hidden = true;
@@ -1793,8 +1798,7 @@
             <img src="${coverOf(t)}" alt="${escapeHtml(t.name)}" loading="${i < 6 ? "eager" : "lazy"}" decoding="async">
             <div class="zoro-play-overlay"><div class="zoro-play-circle">▶</div></div>
             <div class="zoro-poster-badges">
-              <div class="badges-left"><span class="badge-mini-sub">SUB</span>${t.dubCount > 0 ? `<span class="badge-mini-dub">DUB ${t.dubCount}</span>` : ""}</div>
-              <span class="badge-mini-ep">Ep ${t.episodes || 1}</span>
+              <div class="badges-left"><span class="badge-mini-sub">SUB ${t.episodes || 1}</span>${t.dubCount > 0 ? `<span class="badge-mini-dub">DUB ${t.dubCount}</span>` : ""}</div>
             </div>
           </a>
           <div class="zoro-card-info">
@@ -1819,8 +1823,8 @@
               <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
             </svg>
           </div>
-          <h3 class="zoro-empty-state-title">${isSearch ? `No anime found for '${escapeHtml(state.q)}'` : "No Anime Found"}</h3>
-          <p class="zoro-empty-state-msg">We couldn't find any results${isSearch ? ` for "<span class="accent-query">${escapeHtml(state.q)}</span>"` : ""}. Try another title or genre, or return to the full shelf.</p>
+          <h3 class="zoro-empty-state-title">${isSearch() ? `No anime found for '${escapeHtml(state.q)}'` : "No Anime Found"}</h3>
+          <p class="zoro-empty-state-msg">We couldn't find any results${isSearch() ? ` for "<span class="accent-query">${escapeHtml(state.q)}</span>"` : ""}. Try another title or genre, or return to the full shelf.</p>
           <a href="browse.html" class="empty-state-browse-link">Back to Browse</a>
         </div>`;
       if (paginationWrap) {
@@ -1840,7 +1844,7 @@
       renderGridSkeleton();
       updateHeading(null, null);
       let path;
-      if (isSearch) {
+      if (isSearch()) {
         path = `/api/search?q=${encodeURIComponent(state.q)}&page=${state.page}`;
       } else {
         const qs = new URLSearchParams();
@@ -1868,7 +1872,7 @@
       const data = res.data || {};
       const pageInfo = data.pageInfo || {};
 
-      if (isSearch) {
+      if (isSearch()) {
         const local = Array.isArray(data.local) ? data.local : [];
         const more = Array.isArray(data.results) ? data.results : [];
         /* The genre chip refines the live results client-side (the search
@@ -1890,8 +1894,7 @@
                   <img src="${coverOf(t)}" alt="${escapeHtml(t.name)}" loading="lazy" decoding="async">
                   <div class="zoro-play-overlay"><div class="zoro-play-circle">▶</div></div>
                   <div class="zoro-poster-badges">
-                    <div class="badges-left"><span class="badge-mini-sub">SUB</span>${t.dubCount > 0 ? `<span class="badge-mini-dub">DUB ${t.dubCount}</span>` : ""}</div>
-                    <span class="badge-mini-ep">Ep ${t.episodes || 1}</span>
+                    <div class="badges-left"><span class="badge-mini-sub">SUB ${t.episodes || 1}</span>${t.dubCount > 0 ? `<span class="badge-mini-dub">DUB ${t.dubCount}</span>` : ""}</div>
                   </div>
                 </a>
                 <div class="zoro-card-info">
@@ -1996,14 +1999,14 @@
       if (searchInput) searchInput.value = state.q;
       /* Search mode has no server-side sort/format/status/year filters —
          only the genre chip refines the results. */
-      if (filterRow) filterRow.hidden = isSearch;
+      if (filterRow) filterRow.hidden = isSearch();
       updateUrl();
       load();
     };
 
     renderChips();
     renderYears();
-    if (filterRow) filterRow.hidden = isSearch;
+    if (filterRow) filterRow.hidden = isSearch();
     updateHeading(null, null);
     await load();
   }
@@ -2277,6 +2280,7 @@
     const dataError = document.getElementById("watch-data-error");
     const dataErrorText = document.getElementById("watch-data-error-text");
     const dataErrorRetry = document.getElementById("watch-data-error-retry");
+    const rangeTabs = document.querySelector(".ep-range-tabs");
 
     let titleData = null;
     let episodesList = [];
@@ -2963,6 +2967,23 @@
       if (dataError) dataError.hidden = true;
     }
 
+    function showNotFoundState(message) {
+      if (animeTitle) animeTitle.textContent = "Title not found";
+      if (animeTitleH1) animeTitleH1.textContent = "Title not found";
+      if (epSubtitle) epSubtitle.textContent = "Title not found";
+      if (animeDesc) animeDesc.textContent = "";
+      if (timeText) timeText.textContent = "00:00 / --:--";
+      if (epGrid) epGrid.innerHTML = `<p class="ep-grid-status">Title not found.</p>`;
+      if (rangeTabs) rangeTabs.innerHTML = "";
+      if (spinner) spinner.hidden = true;
+      const bigPlay = document.querySelector(".player-big-play");
+      if (bigPlay) bigPlay.style.display = "none";
+      const badge = document.getElementById("player-cover-badge");
+      if (badge) badge.hidden = true;
+      showDataError(message, startWatch);
+      markContentReady();
+    }
+
     function showPlaceholder(message) {
       if (animeTitle) animeTitle.textContent = "Loading…";
       if (animeTitleH1) animeTitleH1.textContent = "Loading…";
@@ -2989,14 +3010,12 @@
       hideDataError();
       const res = await api(`/api/live/${encodeURIComponent(liveId)}`);
       if (!res.ok || !res.data || !res.data.title) {
-        showPlaceholder("Could not load this title");
-        showDataError(
+        showNotFoundState(
           res.status === 404
             ? "This title is not available."
             : res.status === 502
             ? "Service is busy — try again in a moment."
-            : "This title could not be loaded from the server.",
-          startWatch
+            : "This title could not be loaded from the server."
         );
         return false;
       }
@@ -3071,26 +3090,17 @@
          never invent a title (the old default silently played Jujutsu Kaisen
          for any ?id= garbage). */
       if (!currentSlug) {
-        showPlaceholder("Title not found");
-        if (animeTitle) animeTitle.textContent = "Title not found";
-        if (animeTitleH1) animeTitleH1.textContent = "Title not found";
-        if (animeDesc) animeDesc.textContent = "";
-        showDataError(
-          "No title specified. Browse the catalog to pick an anime.",
-          startWatch
-        );
+        showNotFoundState("No title specified. Browse the catalog to pick an anime.");
         return false;
       }
       const titleRes = await api(`/api/titles/${encodeURIComponent(currentSlug)}`);
       if (!titleRes.ok || !titleRes.data || !titleRes.data.title) {
-        showPlaceholder("Could not load episode data");
-        showDataError(
+        showNotFoundState(
           titleRes.status === 404
             ? `We couldn't find a title for "${currentSlug}". Browse the catalog to pick an anime.`
             : titleRes.error === "Request timed out"
             ? "The server took too long to respond. Check your connection and retry."
-            : "This title could not be loaded from the server.",
-          startWatch
+            : "This title could not be loaded from the server."
         );
         return false;
       }
@@ -3158,7 +3168,6 @@
       }
 
       // Update range tabs label (Bug 7)
-      const rangeTabs = document.querySelector(".ep-range-tabs");
       if (rangeTabs) {
         const maxEpStr = String(totalEps).padStart(3, "0");
         rangeTabs.innerHTML = `<button class="ep-tab-btn active" type="button">001 - ${maxEpStr}</button>`;
@@ -3354,6 +3363,13 @@
     }
 
     async function loadEpisode(epNum, prefetched, startFromBeginning = false, positionOverride = null) {
+      if (!titleData) {
+        loadInFlight = false;
+        if (spinner) spinner.hidden = true;
+        const bigPlay = document.querySelector(".player-big-play");
+        if (bigPlay) bigPlay.style.display = "none";
+        return;
+      }
       currentEp = epNum;
       activeEpisode = epNum;
       loadInFlight = true;
@@ -4142,6 +4158,18 @@
           ) {
             showResumeNote(cur);
           }
+          if (
+            resumeNote &&
+            !resumeNote.hidden &&
+            resumeNoteShownForLoad &&
+            !skippedThisLoad &&
+            !seekCommandThisLoad &&
+            now - loadStartedAt < 15000 &&
+            Math.abs(cur - resumeTimeForLoad) >= 2
+          ) {
+            resumeTimeForLoad = Math.floor(cur);
+            showResumeNote(cur);
+          }
           if (cur > 0) armResumeNoteAutoHide();
           return;
         }
@@ -4407,6 +4435,18 @@
           cur > 30 &&
           now - loadStartedAt < 15000
         ) {
+          showResumeNote(cur);
+        }
+        if (
+          resumeNote &&
+          !resumeNote.hidden &&
+          resumeNoteShownForLoad &&
+          !skippedThisLoad &&
+          !seekCommandThisLoad &&
+          now - loadStartedAt < 15000 &&
+          Math.abs(cur - resumeTimeForLoad) >= 2
+        ) {
+          resumeTimeForLoad = Math.floor(cur);
           showResumeNote(cur);
         }
         if (cur > 0) armResumeNoteAutoHide();
@@ -4821,7 +4861,7 @@
       meta.innerHTML = `
         <span><strong>Year:</strong> ${t.year || "—"}</span>
         <span><strong>Status:</strong> ${escapeHtml(liveStatusLabel(t))}</span>
-        <span><strong>Episodes:</strong> ${t.episodes != null ? t.episodes : "—"}</span>
+        <span><strong>Episodes:</strong> ${t.episodes != null ? t.episodes : (airedCount || "—")}</span>
         <span><strong>Format:</strong> ${escapeHtml(liveFormatLabel(t))}</span>
         <span><strong>Duration:</strong> ${t.runtimeMin ? t.runtimeMin + "m" : "—"}</span>
         ${next ? `<span><strong>Next episode:</strong> Ep ${next.episode} on ${escapeHtml(formatAiringDate(next.airingAt))}</span>` : ""}
@@ -5245,7 +5285,7 @@
           <div class="schedule-item-left">
             <div class="schedule-slot-time">${slot.time}</div>
             <a class="schedule-thumb" href="${dHref}">
-              <img src="${cover}" alt="${escapeHtml(name)}" loading="lazy">
+              <img src="${escapeHtml(cover)}" alt="${escapeHtml(name)}" loading="lazy" ${livePosterAttrs()}>
             </a>
             <div class="schedule-title-block">
               <a class="schedule-title-link" href="${dHref}">${escapeHtml(name)}</a>
