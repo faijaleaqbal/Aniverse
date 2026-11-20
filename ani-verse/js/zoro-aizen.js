@@ -37,6 +37,14 @@
   function coverOf(t) {
     return (t && (t.cover || t.coverLocal)) || COVER_FALLBACK;
   }
+  /* AniList's CDN (s4.anilist.co) answers cross-site hotlinked <img> requests
+     with 403 when a Referer is sent, so live posters are loaded with
+     referrerpolicy="no-referrer". The onerror fallback guarantees a failed
+     poster degrades to the local placeholder instead of a broken-image card. */
+  const LIVE_POSTER_FALLBACK = "img/banner.jpg";
+  function livePosterAttrs() {
+    return `referrerpolicy="no-referrer" onerror="this.onerror=null;this.src='${LIVE_POSTER_FALLBACK}';"`;
+  }
   function bannerOf(t) {
     return (t && (t.banner || t.bannerLocal || t.cover || t.coverLocal)) || COVER_FALLBACK;
   }
@@ -247,7 +255,7 @@
     return `
       <div class="zoro-card" data-anilist-id="${escapeHtml(t.anilistId)}" data-title="${escapeHtml(t.name)}">
         <a class="zoro-card-poster" href="${href}">
-          <img src="${cover}" alt="${escapeHtml(t.name)}" loading="lazy" decoding="async">
+          <img src="${escapeHtml(cover)}" alt="${escapeHtml(t.name)}" loading="lazy" decoding="async" ${livePosterAttrs()}>
           <div class="zoro-play-overlay">
             <div class="zoro-play-circle">▶</div>
           </div>
@@ -279,7 +287,7 @@
       : `<span>${t.year || 2025}</span> • <span>${t.kind || "Series"}</span> • <span style="color: var(--zoro-sub);">SUB ${t.episodes || 1}</span>`;
     return `
       <a class="search-result-item" href="${href}">
-        <img class="search-result-thumb" src="${coverOf(t)}" alt="${escapeHtml(t.name)}" loading="lazy">
+        <img class="search-result-thumb" src="${escapeHtml(coverOf(t))}" alt="${escapeHtml(t.name)}" loading="lazy" ${livePosterAttrs()}>
         <div class="search-result-info">
           <div class="search-result-title">${escapeHtml(t.name)}${t && t.is18plus ? ' <span class="badge-mini-18">18+</span>' : ""}</div>
           <div class="search-result-meta">${meta}</div>
@@ -422,6 +430,16 @@
       toast.classList.add("toast-leave");
       setTimeout(() => toast.remove(), 260);
     }, duration);
+  }
+
+  /* Server-switch cleanup: transient player toasts ("TVplus player ready —
+     press Play inside the player", skip notices, ...) belong to the player
+     that was just torn down. Left alone they linger over the NEXT server's
+     UI, which is exactly the stray-toast report. */
+  function clearPlayerToasts() {
+    document.querySelectorAll(".aizen-toast-container, #zoro-toasts").forEach((c) => {
+      c.innerHTML = "";
+    });
   }
 
   /* ==========================================================================
@@ -1623,15 +1641,18 @@
     const isSearch = !!state.q;
     if (searchInput && state.q) searchInput.value = state.q;
 
-    /* ---- skeleton (never an empty dark grid) ---- */
-    grid.innerHTML = Array.from({ length: LIVE_PAGE_SIZE }, () => `
-      <div class="zoro-card zoro-card-skeleton" aria-hidden="true">
-        <div class="zoro-card-poster skeleton-shimmer"></div>
-        <div class="zoro-card-info">
-          <div class="skeleton-line skeleton-shimmer" style="width: 85%;"></div>
-          <div class="skeleton-line skeleton-shimmer" style="width: 55%;"></div>
-        </div>
-      </div>`).join("");
+    /* ---- skeleton (never an empty dark grid, and never a stale one) ---- */
+    function renderGridSkeleton() {
+      grid.innerHTML = Array.from({ length: LIVE_PAGE_SIZE }, () => `
+        <div class="zoro-card zoro-card-skeleton" aria-hidden="true">
+          <div class="zoro-card-poster skeleton-shimmer"></div>
+          <div class="zoro-card-info">
+            <div class="skeleton-line skeleton-shimmer" style="width: 85%;"></div>
+            <div class="skeleton-line skeleton-shimmer" style="width: 55%;"></div>
+          </div>
+        </div>`).join("");
+    }
+    renderGridSkeleton();
 
     /* ---- genre chips (AniList genres) ---- */
     function renderChips() {
@@ -1813,6 +1834,11 @@
     let loadToken = 0;
     async function load() {
       const token = ++loadToken;
+      /* Page/filter change: clear the stale grid IMMEDIATELY and hold the
+         layout with skeletons. The old page-1 cards used to stay on screen
+         for the whole network round trip, reading as "page 2 is broken". */
+      renderGridSkeleton();
+      updateHeading(null, null);
       let path;
       if (isSearch) {
         path = `/api/search?q=${encodeURIComponent(state.q)}&page=${state.page}`;
@@ -2185,7 +2211,11 @@
     if (!watchStage) return;
 
     const params = new URLSearchParams(window.location.search);
-    const currentSlug = params.get("slug") || "kagerou-protocol";
+    /* ?slug= is canonical; ?id= is the same alias the detail page accepts.
+       An UNKNOWN or MISSING slug must resolve to a not-found state — never
+       silently fall back to a catalog title (the old `|| "kagerou-protocol"`
+       loaded Jujutsu Kaisen for any garbage id). */
+    const currentSlug = (params.get("slug") || params.get("id") || "").trim();
     let currentEp = parseInt(params.get("ep"), 10) || 1;
 
     /* LIVE MODE — watch.html?live=<anilistId>&ep=<n>
@@ -2220,7 +2250,10 @@
        picks the new track up. */
     let loadInFlight = false;
 
-    const iframe = document.getElementById("zoko-embed-frame");
+    /* The iframe node is rebuilt by the switch watchdog when a player never
+       settles, so the reference is mutable (listeners are re-bound in
+       bindIframeListeners). */
+    let iframe = document.getElementById("zoko-embed-frame");
     const coverOverlay = document.getElementById("video-cover-overlay");
     const spinner = document.getElementById("zoko-player-spinner");
     const overlay = document.getElementById("zoko-player-overlay");
@@ -2490,6 +2523,89 @@
     let backupFailTimer = null;
     let megaplayFailTimer = null;
     let fallbackOfferVisible = false;
+
+    /* ------------------------------------------------------------------
+       SWITCH HARDENING — teardown + idempotency + settle watchdog.
+       A server switch used to flip `activeServer` and assign a new iframe
+       src with NO teardown of the dying document: its backstops, its
+       reachability probe and its per-load flags survived into the new
+       load, a still-in-flight loadEpisode from the old server could resume
+       after the swap and touch the player again, and if the new document
+       never reported ready/play/time the page just sat on the spinner
+       forever. Everything player-side is now cleared in ONE place before
+       every switch, stale loads are invalidated by token, and a watchdog
+       rebuilds the iframe on the target server if nothing settles in time.
+       ------------------------------------------------------------------ */
+    const SWITCH_SETTLE_TIMEOUT_MS = 20000;
+    let settleWatchdog = null;   // watchdog timer for the current switch
+    let settleAttempt = 0;       // 0 = first load, 1 = after one rebuild
+    let playerSettled = false;   // became true on ready/play/time/error/offer
+    let probeController = null;  // AbortController of the live Zoko probe
+    let switchBusy = false;      // one accepted switch at a time
+    let pendingSwitchWatchdog = false; // consumed by the switch's load
+
+    function clearPlayerTimersAndProbes() {
+      if (zokoFailTimer) { clearTimeout(zokoFailTimer); zokoFailTimer = null; }
+      if (backupFailTimer) { clearTimeout(backupFailTimer); backupFailTimer = null; }
+      if (megaplayFailTimer) { clearTimeout(megaplayFailTimer); megaplayFailTimer = null; }
+      if (settleWatchdog) { clearTimeout(settleWatchdog); settleWatchdog = null; }
+      if (probeController) {
+        try { probeController.abort(); } catch {}
+        probeController = null;
+      }
+    }
+
+    function markPlayerSettled() {
+      playerSettled = true;
+      switchBusy = false;
+      if (settleWatchdog) { clearTimeout(settleWatchdog); settleWatchdog = null; }
+    }
+
+    /* Rebuild the iframe element itself: replacing the node guarantees the
+       stuck document (TVplus/Uqload, a half-dead Zoko load) is gone, not
+       merely re-navigated. Listener re-binding happens in
+       bindIframeListeners; the focus poller reads `iframe` dynamically. */
+    function rebuildIframe() {
+      if (!iframe || !iframe.parentNode) return;
+      const fresh = document.createElement("iframe");
+      fresh.id = iframe.id;
+      fresh.className = iframe.className;
+      fresh.title = iframe.title;
+      fresh.setAttribute("allow", iframe.getAttribute("allow") || "fullscreen; autoplay");
+      fresh.setAttribute("allowfullscreen", "");
+      fresh.src = "about:blank";
+      iframe.parentNode.replaceChild(fresh, iframe);
+      iframe = fresh;
+      bindIframeListeners();
+    }
+
+    function armSettleWatchdog(token, server, attempt) {
+      if (settleWatchdog) { clearTimeout(settleWatchdog); settleWatchdog = null; }
+      playerSettled = false;
+      settleWatchdog = setTimeout(() => {
+        settleWatchdog = null;
+        if (token !== loadToken || playerSettled) return;
+        if (attempt === 0) {
+          /* First strike: tear the player area down and rebuild the iframe
+             on the target server, then reload the episode once. */
+          settleAttempt = 1;
+          switchBusy = false;
+          rebuildIframe();
+          loadEpisode(currentEp, null, false, Math.floor(currentPosition || 0));
+          armSettleWatchdog(loadToken, server, 1);
+          return;
+        }
+        /* Second strike: stop recovering and surface the honest state. */
+        settleAttempt = 0;
+        switchBusy = false;
+        if (spinner) spinner.hidden = true;
+        if (coverOverlay) coverOverlay.style.display = "none";
+        if (server === "backup") showBackupNote("TVplus player isn't responding.");
+        else if (server === "megaplay") showMegaPlayFailureOffer("MegaPlay isn't responding.");
+        else showFallbackOffer();
+      }, SWITCH_SETTLE_TIMEOUT_MS);
+    }
+
     /* When the last Zoko error event arrived. Recovery (offer/overlay hide)
        requires playback evidence MORE than 2s after the error: the old
        document keeps emitting in-flight time events for ~0.5s after a fatal
@@ -2566,13 +2682,23 @@
         if (token !== loadToken || activeServer !== "zoko" || playerReady) return;
         showFallbackOffer();
       }, ZOKO_NO_READY_TIMEOUT_MS);
-      /* Reachability probe of the exact embed URL (see detection notes). */
+      /* Reachability probe of the exact embed URL (see detection notes).
+         The previous switch's probe is aborted first: probes must never
+         stack up across switches. */
+      if (probeController) {
+        try { probeController.abort(); } catch {}
+      }
       const ctl = new AbortController();
+      probeController = ctl;
       const abortTimer = setTimeout(() => ctl.abort(), ZOKO_PROBE_ABORT_MS);
       fetch(streamUrl, { mode: "no-cors", credentials: "omit", cache: "no-store", signal: ctl.signal })
-        .then(() => { clearTimeout(abortTimer); })
+        .then(() => {
+          clearTimeout(abortTimer);
+          if (probeController === ctl) probeController = null;
+        })
         .catch((err) => {
           clearTimeout(abortTimer);
+          if (probeController === ctl) probeController = null;
           if (err && err.name === "AbortError") return; // slow != failed
           if (token !== loadToken || activeServer !== "zoko" || playerReady) return;
           showFallbackOffer();
@@ -2608,19 +2734,39 @@
     /* Swap the iframe in place — no page reload, no lost comment draft, no
        lost resume notice. The last observable position travels with the
        switch (Zoko and MegaPlay report time events; TVplus exposes none, so
-       this captured position is also what a later switch BACK resumes from). */
+       this captured position is also what a later switch BACK resumes from).
+
+       Idempotent + teardown-first: a second click while a switch is still
+       settling is ignored, every player-side timer/probe from the dying
+       document is cleared before the new load, per-load flags are reset
+       (playerEp is nulled so stale events can't be attributed to the new
+       document), server toasts are dropped, and a settle watchdog arms for
+       the new load. */
     function switchServer(server) {
       if (server !== "zoko" && server !== "backup" && server !== "megaplay") return;
       if (server === activeServer) return;
+      if (switchBusy) return;
+      switchBusy = true;
+      settleAttempt = 0;
       const pos = Math.floor(currentPosition || 0);
       activeServer = server;
       try { sessionStorage.setItem(SS_SERVER_KEY, server); } catch {}
+      clearPlayerTimersAndProbes();
+      hideResumeNote();
+      playerReady = false;
+      playerEp = null;
+      megaPlayFrameLoaded = false;
+      lastZokoErrorAt = 0;
+      lastMegaPlayErrorAt = 0;
+      playerSettled = false;
+      clearPlayerToasts();
       applyServerUI();
       if (server === "backup") {
         showBackupNote("TVplus player active — audio depends on the source file. Press Play inside the player.");
       } else {
         hideFallbackNote();
       }
+      pendingSwitchWatchdog = true;
       loadEpisode(currentEp, null, false, pos);
     }
 
@@ -2921,11 +3067,27 @@
     async function loadTitleData() {
       if (isLive) return loadLiveTitleData();
       hideDataError();
+      /* Missing/unknown slug: an honest not-found state. The watch page must
+         never invent a title (the old default silently played Jujutsu Kaisen
+         for any ?id= garbage). */
+      if (!currentSlug) {
+        showPlaceholder("Title not found");
+        if (animeTitle) animeTitle.textContent = "Title not found";
+        if (animeTitleH1) animeTitleH1.textContent = "Title not found";
+        if (animeDesc) animeDesc.textContent = "";
+        showDataError(
+          "No title specified. Browse the catalog to pick an anime.",
+          startWatch
+        );
+        return false;
+      }
       const titleRes = await api(`/api/titles/${encodeURIComponent(currentSlug)}`);
       if (!titleRes.ok || !titleRes.data || !titleRes.data.title) {
         showPlaceholder("Could not load episode data");
         showDataError(
-          titleRes.error === "Request timed out"
+          titleRes.status === 404
+            ? `We couldn't find a title for "${currentSlug}". Browse the catalog to pick an anime.`
+            : titleRes.error === "Request timed out"
             ? "The server took too long to respond. Check your connection and retry."
             : "This title could not be loaded from the server.",
           startWatch
@@ -3200,9 +3362,7 @@
       /* New load: retire any previous failure-detection timers and (on Zoko
          or MegaPlay) the previous failure offer. A backup-status note stays
          — the viewer is still on the backup player. */
-      if (zokoFailTimer) { clearTimeout(zokoFailTimer); zokoFailTimer = null; }
-      if (backupFailTimer) { clearTimeout(backupFailTimer); backupFailTimer = null; }
-      if (megaplayFailTimer) { clearTimeout(megaplayFailTimer); megaplayFailTimer = null; }
+      clearPlayerTimersAndProbes();
       if (activeServer !== "backup") hideFallbackNote();
       /* New load: retire any previous resume notice and its timers. */
       hideResumeNote();
@@ -3216,6 +3376,7 @@
       megaPlayFrameLoaded = false;
       durationIsReal = false;
       playerReady = false;
+      playerSettled = false;
 
       /* ------------------------------------------------------------------
          TRACK RESET — IMMEDIATELY, BEFORE ANY AWAIT.
@@ -3246,10 +3407,15 @@
            differs from Zoko's probe data, so there is NO dub_checks gate
            here (a missing dub surfaces as a player error → failure notice).
            An explicit MegaPlay choice (megaPlayTrack) carries across
-           episodes; otherwise the stored preference maps over (hsub → sub:
-           MegaPlay has no hard-sub track). preferredTrack / av_zoko_track
-           are deliberately untouched. */
-        currentTrack = megaPlayTrack || (preferredTrack === "dub" ? "dub" : "sub");
+           episodes; otherwise the STORED preference maps over (hsub → sub:
+           MegaPlay has no hard-sub track). The stored value is read here on
+           purpose: `preferredTrack` also changes when the viewer picks a
+           track on a LIVE title, and those clicks deliberately do NOT touch
+           av_zoko_track. Mapping the volatile variable made MegaPlay open
+           Dub while the stored preference was still Sub (live-title click
+           leak). av_zoko_track remains never written from MegaPlay. */
+        const storedTrack = readPreferredTrack();
+        currentTrack = megaPlayTrack || (storedTrack === "dub" ? "dub" : "sub");
         applyTrackPill(currentTrack);
         updateTrackLabel();
       } else if (isLive) {
@@ -3323,8 +3489,12 @@
 
       // Check saved position for resume
       const epData = await updateEpisodeSubtitle(epNum, prefetched);
-      /* A newer episode switch started while this one was fetching: this
-         load is stale and must not touch the player, the URL or the pills. */
+      /* A newer episode/server load started while this one was fetching: this
+         load is stale and must not touch the player, the URL or the pills.
+         The old check only compared the episode number, so a SERVER switch
+         (same episode) let the previous load resume after the swap and
+         re-assign the iframe src — the src-swap race behind the switch hang. */
+      if (token !== loadToken) return;
       if (currentEp !== epNum) return;
       if (!epData) {
         // Episode metadata could not be loaded: show a retry state instead of
@@ -3427,7 +3597,7 @@
              visit OR the seed from the title payload — IS that proof, so it is
              used immediately (no cold-load Sub→Dub flicker, no needless wait). */
           const avail = typeof knownAvail === "boolean" ? knownAvail : await probePromise;
-          if (currentEp !== epNum) return; // viewer switched again while probing
+          if (token !== loadToken || currentEp !== epNum) return; // superseded while probing
           currentTrack = avail === true ? "dub" : "sub";
           applyTrackPill(currentTrack);
         } else {
@@ -3498,6 +3668,13 @@
         armMegaPlayFailureDetection(token);
       } else {
         armBackupFailureDetection(token);
+      }
+      /* Switch settle watchdog: a switch that produces no ready/play/time,
+         no error and no failure offer within N seconds is recovered by
+         rebuilding the iframe on the target server. */
+      if (pendingSwitchWatchdog) {
+        pendingSwitchWatchdog = false;
+        armSettleWatchdog(token, activeServer, 0);
       }
       if (spinner) {
         spinner.hidden = false;
@@ -3894,6 +4071,7 @@
 
         // Events: time / watching-log → position tracking (same store as Zoko)
         if (mev === "time" || isWatchingLog) {
+          markPlayerSettled();
           if (playerEp == null) return;
           const cur = typeof mdata.time === "number" ? mdata.time
                     : typeof mdata.currentTime === "number" ? mdata.currentTime : 0;
@@ -3970,6 +4148,7 @@
 
         // Event: complete → auto-next (parent-driven, same as Zoko's ended)
         if (mev === "complete") {
+          markPlayerSettled();
           if (playerEp == null || playerEp !== currentEp) return;
           /* totalEpisodes() is the AIRED count for live titles — auto-next
              must never jump to an episode that has not aired yet. */
@@ -3985,6 +4164,7 @@
 
         // Event: error → failure notice offering the way back to Zoko
         if (mev === "error") {
+          markPlayerSettled();
           lastMegaPlayErrorAt = Date.now();
           if (megaplayFailTimer) { clearTimeout(megaplayFailTimer); megaplayFailTimer = null; }
           /* The embed shows its own error UI inside the frame — retire the
@@ -4016,6 +4196,7 @@
           if (bdata.episode != null && Number(bdata.episode) !== Number(currentEp)) return;
           playerEp = currentEp;
           playerReady = true;
+          markPlayerSettled();
           if (backupFailTimer) { clearTimeout(backupFailTimer); backupFailTimer = null; }
           /* No autoplay on the backup: reveal the player so the viewer can
              press Play INSIDE it. Our overlays must never block that click. */
@@ -4023,6 +4204,7 @@
           if (coverOverlay) coverOverlay.style.display = "none";
           showToast("TVplus player ready — press Play inside the player", "▶", 4000);
         } else if (bdata.type === "error") {
+          markPlayerSettled();
           if (backupFailTimer) { clearTimeout(backupFailTimer); backupFailTimer = null; }
           if (spinner) spinner.hidden = true;
           if (coverOverlay) coverOverlay.style.display = "none";
@@ -4079,6 +4261,7 @@
            previous document are still attributed to the previous episode.) */
         playerEp = currentEp;
         playerReady = true;
+        markPlayerSettled();
         /* The player is demonstrably alive: retire the no-ready backstop and
            any failure offer (a slow load is NOT a failure). */
         if (zokoFailTimer) { clearTimeout(zokoFailTimer); zokoFailTimer = null; }
@@ -4097,6 +4280,7 @@
       // Event: play
       if (data.type === "play") {
         if (!eventIsForCurrentLoad) return;
+        markPlayerSettled();
         isPaused = false;
         if (playPauseBtn) playPauseBtn.textContent = "❚❚";
         /* Playback has actually started: the stream (and its real duration)
@@ -4182,6 +4366,7 @@
         /* Everything below is UI for the episode the page is showing — stale
            events from the previous episode must not touch it. */
         if (playerEp !== currentEp) return;
+        markPlayerSettled();
         currentPosition = cur;
         /* Only the PLAYER's own duration is real. The seeded runtime is a
            resume-math fallback, never a displayed value — showing it first
@@ -4237,6 +4422,7 @@
 
       // Event: error
       if (data.type === "error") {
+        markPlayerSettled();
         /* Errors are always surfaced — including failures while the new
            player is still initialising (before `ready` flips playerEp). */
         if (spinner) spinner.hidden = true;
@@ -4262,6 +4448,7 @@
       // Event: ended (auto-next is parent-driven)
       if (data.type === "ended") {
         if (!eventIsForCurrentLoad) return;
+        markPlayerSettled();
         /* totalEpisodes() is the AIRED count for live titles — auto-next must
            never jump to an episode that has not aired yet. */
         const totalEps = totalEpisodes() || 12;
@@ -4283,19 +4470,6 @@
       }
     });
 
-    /* MegaPlay attribution boundary: the iframe load commit means the OLD
-       document is gone — from here, player events belong to the episode
-       being shown. MegaPlay's PLAYER_READY is NOT used for this: on a
-       resumed load it arrives AFTER the first time events (live-verified).
-       Zoko/TVplus keep their own ready-event attribution. */
-    if (iframe) {
-      iframe.addEventListener("load", () => {
-        if (activeServer !== "megaplay") return;
-        megaPlayFrameLoaded = true;
-        playerEp = currentEp;
-      });
-    }
-
     /* Keyboard focus containment: shortcuts (F / Space / arrows) are handled
        by THIS page, but clicking inside the cross-origin embed moves focus
        into it and the parent never sees the keys (the embed's player does not
@@ -4305,21 +4479,38 @@
        keyboard focus on the player wrapper. Mouse clicks inside the embed
        still work normally; Space/arrows/F are served by this page's handler
        via the embed's postMessage control bridge. */
-    if (playerWrap) playerWrap.setAttribute("tabindex", "-1");
-    if (iframe && playerWrap) {
-      const containFocus = () => {
-        /* Zoko-only: the site serves Space/arrows/F via the postMessage
-           bridge, so focus must stay on the wrapper. On the backup there
-           are no site shortcuts — let focus stay INSIDE Uqload's player so
-           its own keyboard controls work. */
-        if (activeServer !== "zoko") return;
-        if (document.activeElement === iframe) {
-          playerWrap.focus({ preventScroll: true });
-        }
-      };
+    const containFocus = () => {
+      /* Zoko-only: the site serves Space/arrows/F via the postMessage
+         bridge, so focus must stay on the wrapper. On the backup there
+         are no site shortcuts — let focus stay INSIDE Uqload's player so
+         its own keyboard controls work. */
+      if (activeServer !== "zoko" || !playerWrap) return;
+      if (document.activeElement === iframe) {
+        playerWrap.focus({ preventScroll: true });
+      }
+    };
+
+    /* Iframe-scoped listeners, re-bound whenever the watchdog rebuilds the
+       iframe element (a replaced node carries no listeners). The MegaPlay
+       attribution boundary is the iframe load commit: from here player
+       events belong to the episode being shown. PLAYER_READY is NOT used
+       for this because on a resumed load it arrives AFTER the first time
+       events (live-verified). Zoko/TVplus keep their ready-event
+       attribution. */
+    function bindIframeListeners() {
+      if (!iframe) return;
+      iframe.addEventListener("load", () => {
+        if (activeServer !== "megaplay") return;
+        megaPlayFrameLoaded = true;
+        playerEp = currentEp;
+      });
       iframe.addEventListener("focus", containFocus);
-      setInterval(containFocus, 100);
     }
+    bindIframeListeners();
+    if (playerWrap) playerWrap.setAttribute("tabindex", "-1");
+    /* The poller reads `iframe` dynamically, so it survives a rebuild. It is
+       started ONCE — never per switch. */
+    setInterval(containFocus, 100);
 
     // Keyboard Shortcuts (only when activeElement is not an input/textarea)
     window.addEventListener("keydown", (e) => {
@@ -4431,9 +4622,9 @@
       }
     })();
 
-    // Initialize comments for current episode
+    /* Initialize comments for current episode */
     /* Live titles have no catalog slug — comments are a catalog feature. */
-    if (!isLive) initComments(currentSlug, currentEp);
+    if (!isLive && currentSlug) initComments(currentSlug, currentEp);
     else {
       const discussion = document.getElementById("watch-discussion");
       if (discussion) discussion.hidden = true;
@@ -4591,6 +4782,13 @@
     if (cover) {
       cover.src = coverOf(t);
       cover.alt = t.name;
+      /* Live posters come from AniList's CDN, which 403s hotlinked requests
+         carrying a Referer; a failed poster falls back instead of collapsing. */
+      cover.referrerPolicy = "no-referrer";
+      cover.onerror = function () {
+        cover.onerror = null;
+        cover.src = LIVE_POSTER_FALLBACK;
+      };
     }
     const titleEl = document.getElementById("detail-title");
     if (titleEl) titleEl.textContent = t.name;
