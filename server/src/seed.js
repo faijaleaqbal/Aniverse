@@ -140,14 +140,25 @@ export async function seed() {
       VALUES (?, ?, ?, ?, ?, ?)
     `).run(userId, "kagerou-protocol", 7, 521, 1440, now);
 
+    console.log("Seeded demo user watchlist and progress.");
+  } else {
+    userId = existingUser.id;
+    console.log("Demo user already exists.");
+  }
+
+  /* Demo comment seeding is IDEMPOTENT: insert only when this exact
+     comment (user + episode + content) is absent, so re-running the seed
+     never stacks duplicates. (It used to live inside the new-user branch,
+     which meant an existing DB never got the demo comment at all.) */
+  const demoComment = "The ZokoAnime stream loads instantly — great player!";
+  const hasDemoComment = db.prepare(
+    "SELECT id FROM comments WHERE user_id = ? AND title_slug = ? AND episode_num = ? AND content = ?"
+  ).get(userId, "kagerou-protocol", 7, demoComment);
+  if (!hasDemoComment) {
     db.prepare(
       `INSERT INTO comments (user_id, title_slug, episode_num, content, created_at)
       VALUES (?, ?, ?, ?, ?)`
-    ).run(userId, "kagerou-protocol", 7, "The ZokoAnime stream loads instantly — great player!", now);
-
-    console.log("Seeded demo user watchlist, progress, and comments.");
-  } else {
-    console.log("Demo user already exists.");
+    ).run(userId, "kagerou-protocol", 7, demoComment, now);
   }
 
   /* Idempotent cleanup: the original demo comment claimed "1080p", a
@@ -156,9 +167,22 @@ export async function seed() {
   db.prepare(
     `UPDATE comments SET content = ? WHERE content = ?`
   ).run(
-    "The ZokoAnime stream loads instantly — great player!",
+    demoComment,
     "The ZokoAnime streaming stream loads instantly with 1080p!"
   );
+
+  /* Dedupe cleanup: identical comments on the same episode (e.g. six
+     copies of "Amazing episode! Visuals are stunning." posted through the
+     API on JJK ep7) are collapsed to the EARLIEST copy per (user, episode,
+     content) group. Runs on every seed, so a re-seed both removes existing
+     duplicates and can never create new ones. */
+  const dedup = db.prepare(`
+    DELETE FROM comments WHERE id NOT IN (
+      SELECT MIN(id) FROM comments GROUP BY user_id, title_slug, episode_num, content
+    )
+  `);
+  const removed = dedup.run().changes;
+  if (removed) console.log(`Removed ${removed} duplicate comment(s).`);
 
   console.log("Database seed completed successfully.");
 }

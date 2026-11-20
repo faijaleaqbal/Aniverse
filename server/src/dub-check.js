@@ -45,6 +45,13 @@ async function fetchWithTimeout(url, as = "text") {
       signal: controller.signal,
       headers: {
         Referer: `${ZOKO_EMBED_ORIGIN}/`,
+        /* The HLS segment CDN (hls1.drama1.cfd) answers 403 to requests
+           WITHOUT an Origin header on some files (verified 2026-11-20:
+           ERASED eps 1-6/9-12 dub segments 403 with Referer alone, 200
+           with Origin — the browser's embed sends Origin on every media
+           XHR). Without it those dubs stayed "unknown" and the DUB badge
+           under-counted a fully dubbed title. */
+        Origin: ZOKO_EMBED_ORIGIN,
         "User-Agent": "Mozilla/5.0 (AniVerse dub-check)",
         Accept: as === "text" ? "text/html,*/*" : "*/*",
       },

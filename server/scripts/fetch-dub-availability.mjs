@@ -89,7 +89,11 @@ async function main() {
         (todo.length === 0 ? " (all confirmed)" : "")
     );
 
-    let dub = alreadyDub;
+    /* With --force EVERY episode is re-probed, so the count must start at 0
+       — seeding it with the old confirmed dubs double-counted them (the
+       summary printed "DUB 54/28"). Without --force only unknown/missing
+       episodes are probed, so the old confirmed dubs carry over. */
+    let dub = FORCE ? 0 : alreadyDub;
     let unknown = 0;
     let done = 0;
     /* Small worker pool with a stagger so the provider is never hit by a

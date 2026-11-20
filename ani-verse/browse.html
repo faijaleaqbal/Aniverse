@@ -10,8 +10,8 @@
   <!-- Loaded async: a slow Google Fonts response must never block the app script or render. -->
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
   <noscript><link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet"></noscript>
-  <link rel="preload" href="css/zoro-aizen.css?v=9" as="style">
-  <link rel="preload" href="js/zoro-aizen.js?v=9" as="script">
+  <link rel="preload" href="css/zoro-aizen.css?v=10" as="style">
+  <link rel="preload" href="js/zoro-aizen.js?v=10" as="script">
   <script>
     /* Warm the API while the app script is still downloading: this removes a
        full round trip from the critical path. The app script adopts these
@@ -33,7 +33,7 @@
           });
       });
     })();
-  </script>  <link rel="stylesheet" href="css/zoro-aizen.css?v=9">
+  </script>  <link rel="stylesheet" href="css/zoro-aizen.css?v=10">
 </head>
 <body>
 
@@ -57,7 +57,7 @@
         <a class="nav-link" href="genres.html">Genres</a>
         <a class="nav-link" href="schedule.html">Schedule</a>
         <a class="nav-link" href="browse.html?kind=film">Movies</a>
-        <a class="nav-link" href="browse.html?sort=newest">Top Airing</a>
+        <a class="nav-link" href="browse.html?view=top-airing&sort=newest">Top Airing</a>
       </nav>
 
       <div class="search-wrapper">
@@ -107,13 +107,42 @@
           <option value="az">A–Z</option>
         </select>
         <script>
-          /* Set the sort select from the URL at PARSE time (before first
-             paint) so ?sort=newest never flashes "Popularity" while the app
-             script waits on the catalog API. */
+          /* Set the sort select, heading and nav highlight from the URL at
+             PARSE time (before first paint) so ?sort=newest never flashes
+             "Popularity" and ?view=top-airing / ?kind=film / ?q= never flash
+             "Explore Anime Shelf" while the app script waits on the catalog
+             API. The app re-renders the heading with the live result count
+             once the catalog answers. */
           (function () {
-            var s = new URLSearchParams(location.search).get("sort");
+            var p = new URLSearchParams(location.search);
+            var s = p.get("sort");
             var el = document.getElementById("catalog-sort-select");
             if (el && (s === "newest" || s === "az" || s === "popularity")) el.value = s;
+            var h = document.getElementById("browse-heading");
+            var sub = document.getElementById("browse-subheading");
+            var q = (p.get("q") || "").trim();
+            var view = (p.get("view") || "").toLowerCase();
+            var kind = (p.get("kind") || "").toLowerCase();
+            var mode = q ? "search" : kind === "film" ? "movies" : view === "top-airing" ? "topairing" : "browse";
+            if (h) {
+              if (mode === "search") {
+                h.innerHTML = "<span>Results for '<span class=\"accent\"></span>'</span>";
+                h.querySelector(".accent").textContent = q;
+                if (sub) sub.textContent = "Refine with the genre filters below, or clear the search to see the full shelf.";
+              } else if (mode === "movies") {
+                h.innerHTML = "Movies";
+                if (sub) sub.textContent = "Every film in the catalog — feature-length titles ready to stream.";
+              } else if (mode === "topairing") {
+                h.innerHTML = "Top <span class=\"accent\">Airing</span>";
+                if (sub) sub.textContent = "The currently airing shelf — newest releases first by default; sort however you like.";
+              }
+            }
+            var wantHref = mode === "movies" ? "browse.html?kind=film"
+              : mode === "topairing" ? "browse.html?view=top-airing&sort=newest"
+              : "browse.html";
+            document.querySelectorAll(".header-nav .nav-link").forEach(function (a) {
+              a.classList.toggle("active", a.getAttribute("href") === wantHref);
+            });
           })();
         </script>
       </div>
@@ -142,7 +171,7 @@
           <a href="browse.html">Catalog</a>
           <a href="schedule.html">Schedule</a>
           <a href="genres.html">Genres</a>
-          <a href="watch.html?slug=kagerou-protocol&ep=7">Watch</a>
+          <a href="browse.html">Watch</a>
         </div>
       </div>
       <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; margin-top: 1.5rem; font-size: 0.75rem; color: var(--text-muted);">
@@ -153,6 +182,6 @@
     </div>
   </footer>
 
-  <script src="js/zoro-aizen.js?v=9"></script>
+  <script src="js/zoro-aizen.js?v=10"></script>
 </body>
 </html>

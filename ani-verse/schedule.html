@@ -10,8 +10,8 @@
   <!-- Loaded async: a slow Google Fonts response must never block the app script or render. -->
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
   <noscript><link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet"></noscript>
-  <link rel="preload" href="css/zoro-aizen.css?v=9" as="style">
-  <link rel="preload" href="js/zoro-aizen.js?v=9" as="script">
+  <link rel="preload" href="css/zoro-aizen.css?v=10" as="style">
+  <link rel="preload" href="js/zoro-aizen.js?v=10" as="script">
   <script>
     /* Warm the API while the app script is still downloading: this removes a
        full round trip from the critical path. The app script adopts these
@@ -33,7 +33,7 @@
           });
       });
     })();
-  </script>  <link rel="stylesheet" href="css/zoro-aizen.css?v=9">
+  </script>  <link rel="stylesheet" href="css/zoro-aizen.css?v=10">
 </head>
 <body>
 
@@ -57,7 +57,7 @@
         <a class="nav-link" href="genres.html">Genres</a>
         <a class="nav-link active" href="schedule.html">Schedule</a>
         <a class="nav-link" href="browse.html?kind=film">Movies</a>
-        <a class="nav-link" href="browse.html?sort=newest">Top Airing</a>
+        <a class="nav-link" href="browse.html?view=top-airing&sort=newest">Top Airing</a>
       </nav>
 
       <div class="search-wrapper">
@@ -173,7 +173,7 @@
           <a href="browse.html">Catalog</a>
           <a href="schedule.html">Schedule</a>
           <a href="genres.html">Genres</a>
-          <a href="watch.html?slug=kagerou-protocol&ep=7">Watch</a>
+          <a href="browse.html">Watch</a>
         </div>
       </div>
       <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; margin-top: 1.5rem; font-size: 0.75rem; color: var(--text-muted);">
@@ -184,6 +184,6 @@
     </div>
   </footer>
 
-  <script src="js/zoro-aizen.js?v=9"></script>
+  <script src="js/zoro-aizen.js?v=10"></script>
 </body>
 </html>
