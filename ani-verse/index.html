@@ -10,8 +10,8 @@
   <!-- Loaded async: a slow Google Fonts response must never block the app script or render. -->
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
   <noscript><link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet"></noscript>
-  <link rel="preload" href="css/zoro-aizen.css?v=9" as="style">
-  <link rel="preload" href="js/zoro-aizen.js?v=9" as="script">
+  <link rel="preload" href="css/zoro-aizen.css?v=10" as="style">
+  <link rel="preload" href="js/zoro-aizen.js?v=10" as="script">
   <script>
     /* Warm the API while the app script is still downloading: this removes a
        full round trip from the critical path. The app script adopts these
@@ -33,7 +33,7 @@
           });
       });
     })();
-  </script>  <link rel="stylesheet" href="css/zoro-aizen.css?v=9">
+  </script>  <link rel="stylesheet" href="css/zoro-aizen.css?v=10">
 </head>
 <body>
 
@@ -57,7 +57,7 @@
         <a class="nav-link" href="genres.html">Genres</a>
         <a class="nav-link" href="schedule.html">Schedule</a>
         <a class="nav-link" href="browse.html?kind=film">Movies</a>
-        <a class="nav-link" href="browse.html?sort=newest">Top Airing</a>
+        <a class="nav-link" href="browse.html?view=top-airing&sort=newest">Top Airing</a>
       </nav>
 
       <div class="search-wrapper">
@@ -99,7 +99,7 @@
               <span class="badge badge-sub">SUB 12</span>
               <span class="badge badge-type">Series</span>
               <span class="badge badge-hd">HD</span>
-              <span style="font-size: 0.8rem; color: var(--text-sub); margin-left: 6px;">2020 • 24m</span>
+              <span id="spotlight-static-runtime" style="font-size: 0.8rem; color: var(--text-sub); margin-left: 6px;">2020 • 24m</span>
             </div>
             <p class="spotlight-desc">A boy swallows a cursed talisman and becomes host to a powerful curse, enrolling in a secret school of jujutsu sorcerers.</p>
             <div class="spotlight-actions">
@@ -135,6 +135,11 @@
                 var staticSlide = document.getElementById("spotlight-static-slide");
                 var badges = staticSlide ? staticSlide.querySelector(".spotlight-badges") : null;
                 if (t && badges) {
+                  /* Runtime/year come from the SAME catalog source the
+                     rendered slides use — never a hardcoded number that
+                     drifts from the live value. */
+                  var rt = document.getElementById("spotlight-static-runtime");
+                  if (rt && t.runtimeMin) rt.textContent = (t.year ? t.year + " • " : "") + t.runtimeMin + "m";
                   var sub = badges.querySelector(".badge-sub");
                   if (sub) sub.textContent = "SUB " + (t.episodes || 1);
                   var dub = badges.querySelector(".badge-dub");
@@ -249,7 +254,7 @@
           <a href="browse.html">Catalog</a>
           <a href="schedule.html">Schedule</a>
           <a href="genres.html">Genres</a>
-          <a href="detail.html?slug=kagerou-protocol">Watch</a>
+          <a href="browse.html">Watch</a>
         </div>
       </div>
       <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; margin-top: 1.5rem; font-size: 0.75rem; color: var(--text-muted);">
@@ -260,6 +265,6 @@
     </div>
   </footer>
 
-  <script src="js/zoro-aizen.js?v=9"></script>
+  <script src="js/zoro-aizen.js?v=10"></script>
 </body>
 </html>

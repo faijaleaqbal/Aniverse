@@ -285,7 +285,7 @@
             <a class="mobile-drawer-link" href="schedule.html">📅 Broadcast Schedule</a>
             <a class="mobile-drawer-link" href="browse.html?genre=action">🔥 Action Anime</a>
             <a class="mobile-drawer-link" href="browse.html?genre=fantasy">✨ Fantasy & Isekai</a>
-            <a class="mobile-drawer-link" href="browse.html?sort=newest">⭐ Top Airing</a>
+            <a class="mobile-drawer-link" href="browse.html?view=top-airing&sort=newest">⭐ Top Airing</a>
           </nav>
         </div>
       `;
@@ -1070,6 +1070,11 @@
     const initialQ = urlParams.get("q");
     const initialSort = urlParams.get("sort");
     const initialKind = (urlParams.get("kind") || "").toLowerCase();
+    /* Top Airing is a VIEW, not a sort: ?view=top-airing keeps the heading
+       and nav highlight on "Top Airing" no matter which sort the viewer
+       picks. Plain Browse sorted by Release date stays "Explore Anime
+       Shelf" (the old sort-keyed heading renamed the page on every sort). */
+    const initialView = (urlParams.get("view") || "").toLowerCase();
 
     const chipsWrap = document.getElementById("genre-chips-container");
     const sortSelect = document.getElementById("catalog-sort-select");
@@ -1081,6 +1086,7 @@
     let currentSearch = (initialQ || "").trim();
     let currentSort = ["popularity", "newest", "az"].includes(initialSort) ? initialSort : "popularity";
     let currentKind = initialKind === "film" ? "film" : "";
+    let currentView = initialView === "top-airing" ? "top-airing" : "";
     let currentPage = 1;
 
     if (sortSelect) sortSelect.value = currentSort;
@@ -1089,13 +1095,12 @@
     if (searchInput && initialQ) searchInput.value = initialQ;
 
     /* Browse page modes: search results (?q=), Movies (?kind=film), Top
-       Airing (?sort=newest) or the plain shelf. Heading AND header nav
-       highlight follow the mode — Movies/Top Airing used to show "Explore
-       Anime Shelf" with Browse highlighted. */
+       Airing (?view=top-airing) or the plain shelf. Heading AND header nav
+       highlight follow the mode — never the sort order. */
     function browseMode() {
       if (currentSearch) return "search";
       if (currentKind === "film") return "movies";
-      if (currentSort === "newest") return "topairing";
+      if (currentView === "top-airing") return "topairing";
       return "browse";
     }
 
@@ -1104,7 +1109,7 @@
       const mode = browseMode();
       const wantHref =
         mode === "movies" ? "browse.html?kind=film" :
-        mode === "topairing" ? "browse.html?sort=newest" :
+        mode === "topairing" ? "browse.html?view=top-airing&sort=newest" :
         "browse.html";
       document.querySelectorAll(".header-nav .nav-link").forEach((a) => {
         a.classList.toggle("active", a.getAttribute("href") === wantHref);
@@ -1114,16 +1119,28 @@
     function updateHeading(count) {
       if (!headingEl) return;
       const mode = browseMode();
+      /* A genre filter names the shelf and shows the result count, like
+         search does ("Action (7 titles)") — in every non-search mode. */
+      const genreFiltered = currentGenre && currentGenre !== "all";
       if (mode === "search") {
         const countPart = count == null ? "" : ` (${count} ${count === 1 ? "result" : "results"})`;
-        headingEl.innerHTML = `Results for '<span class="accent">${escapeHtml(currentSearch)}</span>'${countPart}`;
+        /* One outer span = one flex item: .section-title is display:flex
+           with a gap, so bare text nodes + the accent span became separate
+           flex items and the gap rendered as stray spaces inside the
+           quotes ("Results for ' Naruto '"). */
+        headingEl.innerHTML = `<span>Results for '<span class="accent">${escapeHtml(currentSearch)}</span>'${countPart}</span>`;
         if (subheadingEl) subheadingEl.textContent = "Refine with the genre filters below, or clear the search to see the full shelf.";
+      } else if (genreFiltered) {
+        const label = genreLabel(currentGenre);
+        const countPart = count == null ? "" : ` (${count} ${count === 1 ? "title" : "titles"})`;
+        headingEl.innerHTML = `<span>${escapeHtml(label)}<span class="accent">${countPart}</span></span>`;
+        if (subheadingEl) subheadingEl.textContent = "Filtered by genre — pick another chip or All to see the full shelf.";
       } else if (mode === "movies") {
         headingEl.innerHTML = "Movies";
         if (subheadingEl) subheadingEl.textContent = "Every film in the catalog — feature-length titles ready to stream.";
       } else if (mode === "topairing") {
         headingEl.innerHTML = `Top <span class="accent">Airing</span>`;
-        if (subheadingEl) subheadingEl.textContent = "The newest releases first — sorted by release date.";
+        if (subheadingEl) subheadingEl.textContent = "The currently airing shelf — newest releases first by default; sort however you like.";
       } else {
         headingEl.innerHTML = `Explore <span class="accent">Anime Shelf</span>`;
         if (subheadingEl) subheadingEl.textContent = "Filter by genre, sort by popularity or release date.";
@@ -1259,9 +1276,14 @@
       const pageItems = isBrowse
         ? list.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
         : list;
-      grid.innerHTML = pageItems.map((t, i) => `
+      grid.innerHTML = pageItems.map((t, i) => {
+        /* Home's "Latest Episodes" shelf jumps STRAIGHT into the latest
+           episode (watch.html?slug=X&ep=N); Browse cards keep opening the
+           detail page. */
+        const cardHref = isBrowse ? detailHref(t.slug) : watchHref(t.slug, t.episodes || 1);
+        return `
         <div class="zoro-card" data-slug="${t.slug}" data-genres="${t.genres ? t.genres.join(" ") : ""}" data-title="${escapeHtml(t.name)}">
-          <a class="zoro-card-poster" href="${detailHref(t.slug)}">
+          <a class="zoro-card-poster" href="${cardHref}">
             <img src="${coverOf(t)}" alt="${escapeHtml(t.name)}" loading="${i < 6 ? "eager" : "lazy"}" decoding="async" fetchpriority="${i < 6 ? "high" : "low"}">
             <div class="zoro-play-overlay">
               <div class="zoro-play-circle">▶</div>
@@ -1275,13 +1297,14 @@
             </div>
           </a>
           <div class="zoro-card-info">
-            <a class="zoro-card-title" href="${detailHref(t.slug)}">${escapeHtml(t.name)}</a>
+            <a class="zoro-card-title" href="${cardHref}">${escapeHtml(t.name)}</a>
             <div class="zoro-card-submeta">
               <span>${t.kind}</span> • <span>${t.runtimeMin}m</span>
             </div>
           </div>
         </div>
-      `).join("");
+      `;
+      }).join("");
 
       attachTooltipListeners();
       renderPagination(list.length);
@@ -1815,7 +1838,7 @@
       try { sessionStorage.setItem(SS_SERVER_KEY, server); } catch {}
       applyServerUI();
       if (server === "backup") {
-        showBackupNote("TVplus player active — Sub only. Press Play inside the player.");
+        showBackupNote("TVplus player active — audio depends on the source file. Press Play inside the player.");
       } else {
         hideFallbackNote();
       }
@@ -1837,12 +1860,16 @@
         trackSwitcher.querySelectorAll(".server-pill").forEach((p) => {
           const t = p.dataset.track || "sub";
           if (onBackup) {
-            /* The backup serves Sub only and exposes no track control. */
+            /* The backup exposes no track control: the audio/subtitle track
+               is whatever the source file carries, and the site cannot
+               choose or switch it. Pills stay disabled (honest — no site
+               track switch exists here); the wording no longer claims the
+               file is "Sub only", which the site cannot know. */
             p.classList.toggle("active", t === "sub");
             p.disabled = t !== "sub";
             p.classList.toggle("is-disabled", t !== "sub");
-            p.title = t === "dub" ? "Dub isn't available on the TVplus player"
-                    : t === "hsub" ? "Hard-sub isn't available on the TVplus player"
+            p.title = t === "dub" ? "Track switching isn't available on TVplus — audio depends on the source file"
+                    : t === "hsub" ? "Track switching isn't available on TVplus — subs depend on the source file"
                     : "";
           } else {
             p.disabled = false;
@@ -1865,7 +1892,7 @@
       const coverBadge = document.getElementById("player-cover-badge");
       if (coverBadge) {
         coverBadge.innerHTML = onBackup
-          ? '<span style="color: var(--zoro-lime);">⚡</span> Stream with TVplus (Sub · press Play)'
+          ? '<span style="color: var(--zoro-lime);">⚡</span> Stream with TVplus (press Play)'
           : '<span style="color: var(--zoro-lime);">⚡</span> Stream with ZokoAnime (Auto-Skip)';
       }
       updateTrackLabel();
@@ -2038,7 +2065,11 @@
       setText("watch-detail-year", titleData.year || "—");
       setText("watch-detail-score", scoreLabel(titleData) ? `★ ${scoreLabel(titleData)} / 10` : "—");
       setText("watch-detail-episodes", titleData.episodes || episodesList.length || "—");
-      setText("watch-detail-duration", `${titleData.runtimeMin || 24}m per ep`);
+      /* Runtime has ONE source of truth: the catalog's runtimeMin (same
+         value the spotlight/cards show). Never fabricate a 24m fallback —
+         a missing runtime renders as "—", not a number that later
+         "corrects" itself. */
+      setText("watch-detail-duration", titleData.runtimeMin ? `${titleData.runtimeMin}m per ep` : "—");
       const detailLink = document.getElementById("watch-detail-link");
       if (detailLink) detailLink.href = detailHref(currentSlug);
       if (coverOverlay) coverOverlay.style.backgroundImage = `url('${bannerOf(titleData)}')`;
@@ -2264,9 +2295,11 @@
          ------------------------------------------------------------------ */
       const knownAvail = dubAvailability.get(Number(epNum));
       if (activeServer === "backup") {
-        /* The backup serves Sub only. currentTrack mirrors the loaded
-           stream; preferredTrack / av_zoko_track are deliberately untouched
-           so the viewer's Dub choice returns when they go back to Zoko. */
+        /* The backup exposes no track choice — the source file decides the
+           audio. currentTrack stays "sub" as internal state only (the site
+           cannot know the file's track); preferredTrack / av_zoko_track are
+           deliberately untouched so the viewer's Dub choice returns when
+           they go back to Zoko. */
         currentTrack = "sub";
         applyTrackPill("sub");
         updateTrackLabel();
@@ -2372,7 +2405,11 @@
         }
       }
       resumeTimeForLoad = resumeTime;
-      if (resumeTime > 0) showResumeNote(resumeTime);
+      /* The notice is for a MEANINGFUL resume only (>=5s — the same floor
+         the resumable window uses). A server switch carrying a 1-4s
+         position still resumes there, but re-showing "Resumed from 00:03"
+         on every switch was noise. */
+      if (resumeTime >= 5) showResumeNote(resumeTime);
 
       // Reflect the resumed position in the UI before the player reports back
       currentPosition = resumeTime;
@@ -2561,9 +2598,10 @@
     function updateTrackLabel() {
       const label = document.getElementById("track-label");
       if (!label) return;
-      /* The backup player serves Sub only — never advertise DUB there. */
+      /* On the backup the site cannot know the file's audio track — never
+         advertise a specific track (SUB or DUB) there. */
       if (activeServer === "backup") {
-        label.textContent = "SUB";
+        label.textContent = "—";
         return;
       }
       const avail = dubAvailability.get(Number(currentEp));
@@ -2822,6 +2860,24 @@
         } catch {}
       }
       if (!data || data.channel !== "zokoanime") return;
+
+      /* Same-episode swap (Restart / track switch / switch-back to Zoko):
+         the OLD document keeps emitting time/state events for ~0.5s after
+         the src swap. Those in-flight events belong to the dying player —
+         acting on them re-showed the stale "Resumed from …" notice right
+         after Restart (playback at 0:00, notice still at the old position)
+         and could re-save the just-cleared position. Ignore same-episode
+         events until the NEW player reports ready. `ready` and `error` stay
+         ungated (ready flips the gate; pre-ready failures must surface).
+         Cross-episode attribution is untouched: while a NEW episode loads,
+         playerEp !== currentEp, so the old episode's final events still
+         save progress under the old episode. */
+      if (
+        data.type !== "ready" &&
+        data.type !== "error" &&
+        !playerReady &&
+        playerEp === currentEp
+      ) return;
 
       /* Ignore player events until the first episode is actually loaded, and
          ignore events from the PREVIOUS episode while a new one is loading
@@ -3148,7 +3204,7 @@
            honest from the first frame. */
         applyServerUI();
         if (activeServer === "backup") {
-          showBackupNote("TVplus player active — Sub only. Press Play inside the player.");
+          showBackupNote("TVplus player active — audio depends on the source file. Press Play inside the player.");
         }
         await startWatch();
       } catch (err) {
@@ -3368,7 +3424,7 @@
         <span><strong>Status:</strong> ${statusLabel(t.status)}</span>
         <span><strong>Episodes:</strong> ${epCount}</span>
         <span><strong>Studios:</strong> ${escapeHtml(t.studios || t.studio || "—")}</span>
-        <span><strong>Duration:</strong> ${t.runtimeMin || 24}m</span>
+        <span><strong>Duration:</strong> ${t.runtimeMin ? t.runtimeMin + "m" : "—"}</span>
       `;
     }
     const genresEl = document.getElementById("detail-genres");
@@ -3429,7 +3485,7 @@
               <a class="detail-episode-row" href="${watchHref(slug, n)}">
                 <span class="detail-episode-num">${padded}</span>
                 <span class="detail-episode-title">${escapeHtml(e.title || `Episode ${n}`)}</span>
-                <span class="detail-episode-duration">${Math.round((e.duration_sec || 1440) / 60)}m</span>
+                <span class="detail-episode-duration">${t.runtimeMin ? t.runtimeMin + "m" : "—"}</span>
                 <span class="detail-episode-play">▶</span>
               </a>
             `;
@@ -3590,7 +3646,7 @@
         const dHref = detailHref(real.slug);
         const wHref = watchHref(real.slug, watchEp);
         const epBadge = isFilm
-          ? `<span class="badge-mini-ep">Film • ${real.runtimeMin || 130}m</span>`
+          ? `<span class="badge-mini-ep">Film${real.runtimeMin ? " • " + real.runtimeMin + "m" : ""}</span>`
           : `<span class="badge-mini-ep">Ep ${epCount}</span>`;
         const watchLabel = isFilm ? "▶ Watch Film" : `▶ Watch Ep ${watchEp}`;
         return `
