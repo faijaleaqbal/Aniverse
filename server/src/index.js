@@ -27,6 +27,7 @@ import {
   searchAniList,
   SEARCH_PAGE_SIZE,
   browseAniList,
+  withRealYearTotal,
   getLiveTitle,
   getAiringSchedule,
 } from "./anilist.js";
@@ -632,19 +633,26 @@ app.get("/api/search", async (req, res, next) => {
 app.get("/api/browse", async (req, res, next) => {
   try {
     const index = catalogIndex();
-    const live = await browseAniList({
+    const browseArgs = {
       sort: req.query.sort,
       genre: req.query.genre,
       format: req.query.format,
       status: req.query.status,
       year: req.query.year,
       page: req.query.page,
-    });
+    };
+    const live = await browseAniList(browseArgs);
+    /* AniList caps a multi-page total at 5,000 for ANY filter, so a year view
+       would show "5,000+ titles" / "Page 1 of 416+" no matter how small the
+       year. Count the year's titles server-side and replace pageInfo. The grid
+       results, sort and page size are untouched; a non-year view or a failed
+       count keeps AniList's own pageInfo. */
+    const pageInfo = await withRealYearTotal(live.pageInfo, browseArgs);
     res.json({
       ok: true,
       page: Math.max(toInt(req.query.page, 1), 1),
       results: live.results.map((item) => withCatalogSlug(item, index)),
-      pageInfo: live.pageInfo,
+      pageInfo,
     });
   } catch (err) {
     if (err instanceof AniListBusyError) return busyResponse(res);

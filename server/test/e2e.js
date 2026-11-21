@@ -81,9 +81,13 @@ function fakeMedia(overrides = {}) {
 
 const MOCK_PAGE_INFO = { total: 42, currentPage: 1, lastPage: 4, hasNextPage: true };
 
-/* Install a responder. `mediaList` answers Page.media queries, `mediaById`
-   answers single-title Media queries, `airing` answers airingSchedules. */
-function mockAniList({ mediaList = [], mediaById = {}, airing = [], fail = false } = {}) {
+/* How the Page query answers. Default: always hand back `mediaList` with a
+   fixed pageInfo (the old deterministic shape). `paged` emulates a real year:
+   slice `allMedia` by page/perPage AND report AniList's 5,000 / 416 cap once
+   the set is multi-page — the exact behavior that hides a small year's total.
+   `alwaysFull` answers every page with `perPage` rows (no short page), so a
+   count runs into the 40-page cap. */
+function mockAniList({ mediaList = [], allMedia = null, alwaysFull = false, mediaById = {}, airing = [], fail = false } = {}) {
   clearAniListCache();
   anilistRequests.length = 0;
   anilistResponder = async (body) => {
@@ -104,9 +108,34 @@ function mockAniList({ mediaList = [], mediaById = {}, airing = [], fail = false
       }
       return jsonResponse({ data: { Media: media } });
     }
-    return jsonResponse({
-      data: { Page: { pageInfo: MOCK_PAGE_INFO, media: mediaList } },
-    });
+
+    const variables = (body && body.variables) || {};
+    const perPage = Number(variables.perPage) || 12;
+    const page = Number(variables.page) || 1;
+    let media;
+    let pageInfo;
+    if (allMedia) {
+      const total = allMedia.length;
+      media = allMedia.slice((page - 1) * perPage, page * perPage);
+      /* AniList caps the reported total/lastPage for any multi-page set. */
+      const countPages = Math.ceil(total / perPage);
+      pageInfo = {
+        total: countPages > 1 ? 5000 : total,
+        currentPage: page,
+        lastPage: countPages > 1 ? 416 : Math.max(1, countPages),
+        hasNextPage: page < countPages,
+      };
+    } else if (alwaysFull) {
+      const base = 900000 + (page - 1) * perPage;
+      media = Array.from({ length: perPage }, (_, i) =>
+        fakeMedia({ id: base + i, idMal: base + i })
+      );
+      pageInfo = { total: 5000, currentPage: page, lastPage: 416, hasNextPage: true };
+    } else {
+      media = mediaList;
+      pageInfo = MOCK_PAGE_INFO;
+    }
+    return jsonResponse({ data: { Page: { pageInfo, media } } });
   };
 }
 
@@ -648,6 +677,214 @@ async function runTests() {
       const bounded = browsePaginationBounds(true, unfilteredCapped, 1);
       assert.equal(bounded.bounded, true);
       assert.equal(bounded.last, 2, "a capped filtered view windows around the current page");
+    });
+
+    /* ======================================================================
+       SERVER-SIDE YEAR COUNTING (the fix for capped totals)
+       AniList caps pageInfo.total at 5,000 / lastPage 416 for ANY multi-page
+       browse query, so a small year showed "5,000+ titles" / "Page 1 of 416+".
+       The server now counts the year's titles itself and returns the real
+       pageInfo. These tests mock AniList to reproduce the cap.
+       ====================================================================== */
+
+    // 27. A year with a known count: 3 full pages of 50 + 7 = 157 titles ->
+    //     exact total, real last page, real hasNextPage. The count pages use
+    //     perPage 50, no sort, isAdult: false; the grid keeps its own page.
+    await test("GET /api/browse?year=1998 counts the year server-side (157 titles)", async () => {
+      const all = Array.from({ length: 157 }, (_, i) =>
+        fakeMedia({
+          id: 400000 + i,
+          idMal: 400000 + i,
+          seasonYear: 1998,
+          startDate: { year: 1998, month: 1, day: 1 },
+        })
+      );
+      mockAniList({ allMedia: all });
+      const res = await fetch(`${baseUrl}/api/browse?year=1998`);
+      assert.equal(res.status, 200);
+      const data = await res.json();
+      assert.equal(data.ok, true);
+      assert.deepEqual(
+        data.pageInfo,
+        { total: 157, currentPage: 1, lastPage: 14, hasNextPage: true },
+        "year view must show the real count and a real last page"
+      );
+
+      /* Count queries: perPage 50, no sort, adult screen still on, same year. */
+      const countQueries = anilistRequests.filter((r) => r.variables.perPage === 50);
+      assert.equal(countQueries.length, 4, "157 titles = 4 count pages (50 x 3 + 7)");
+      for (const q of countQueries) {
+        assert.ok(q.query.includes("seasonYear: $year"), "count keeps the year filter");
+        assert.ok(q.query.includes("isAdult: false"), "count keeps the adult filter");
+        assert.ok(!/sort:/.test(q.query), "count does not need a sort");
+        assert.equal(q.variables.year, 1998);
+      }
+      resetAniListMock();
+    });
+
+    // 28. Non-year views keep AniList's capped pageInfo verbatim — the fix
+    //     must not count (or change anything) outside year views.
+    await test("non-year browse keeps the capped pageInfo (no counting)", async () => {
+      mockAniList({ mediaList: [fakeMedia()] });
+      const res = await fetch(`${baseUrl}/api/browse?sort=trending&genre=action`);
+      assert.equal(res.status, 200);
+      const data = await res.json();
+      assert.deepEqual(data.pageInfo, MOCK_PAGE_INFO, "unfiltered/genre browse is unchanged");
+      assert.ok(
+        anilistRequests.every((r) => r.variables.perPage === 12),
+        "no count query may run for a non-year view"
+      );
+      resetAniListMock();
+    });
+
+    // 28b. Counts are keyed by the whole filter set — a year with a genre is a
+    //      DIFFERENT cache entry from the bare year, so counts never cross
+    //      between filter combinations. The key is also order-insensitive.
+    await test("year-count cache keys on year + genre + format + status", async () => {
+      const { yearCountKey } = await import("../src/anilist.js");
+      assert.notEqual(
+        yearCountKey(1998, ["Action"], [], []),
+        yearCountKey(1998, [], [], []),
+        "a genre filter must change the count key"
+      );
+      assert.notEqual(
+        yearCountKey(1998, [], [], []),
+        yearCountKey(1999, [], [], []),
+        "a different year must change the count key"
+      );
+      assert.equal(
+        yearCountKey(1998, ["Action", "Comedy"], [], []),
+        yearCountKey(1998, ["Comedy", "Action"], [], []),
+        "genre order must not change the count key"
+      );
+
+      /* Two different years must not share a cached count: each counts its
+         own set (2 vs 50), proving the key isolates them end to end. */
+      mockAniList({ allMedia: Array.from({ length: 2 }, (_, i) => fakeMedia({ id: 550000 + i, idMal: 550000 + i })) });
+      const resA = await (await fetch(`${baseUrl}/api/browse?year=1960`)).json();
+      assert.equal(resA.pageInfo.total, 2);
+      resetAniListMock();
+      mockAniList({ allMedia: Array.from({ length: 50 }, (_, i) => fakeMedia({ id: 560000 + i, idMal: 560000 + i })) });
+      const resB = await (await fetch(`${baseUrl}/api/browse?year=1961`)).json();
+      assert.equal(resB.pageInfo.total, 50);
+      resetAniListMock();
+    });
+
+    // 29. A year whose reported total is under the cap needs no counting: the
+    //     real pageInfo passes through untouched.
+    await test("a single-page year keeps its real pageInfo without counting", async () => {
+      mockAniList({
+        allMedia: Array.from({ length: 2 }, (_, i) => fakeMedia({ id: 500000 + i, idMal: 500000 + i })),
+      });
+      const res = await fetch(`${baseUrl}/api/browse?year=1960`);
+      const data = await res.json();
+      assert.deepEqual(
+        data.pageInfo,
+        { total: 2, currentPage: 1, lastPage: 1, hasNextPage: false },
+        "a single-page year already had a real total"
+      );
+      assert.ok(
+        anilistRequests.every((r) => r.variables.perPage === 12),
+        "no count query when AniList's total is not capped"
+      );
+      resetAniListMock();
+    });
+
+    // 30. Paging cap: a count that never sees a short page stops after 40
+    //     pages and falls back to the capped pageInfo (5,000 / 416).
+    await test("a count hitting the paging cap falls back to the capped pageInfo", async () => {
+      mockAniList({ alwaysFull: true });
+      const res = await fetch(`${baseUrl}/api/browse?year=2025`);
+      assert.equal(res.status, 200);
+      const data = await res.json();
+      assert.deepEqual(
+        data.pageInfo,
+        { total: 5000, currentPage: 1, lastPage: 416, hasNextPage: true },
+        "cap hit -> capped pageInfo, never a partial count"
+      );
+      const countPages = anilistRequests.filter((r) => r.variables.perPage === 50);
+      assert.equal(countPages.length, 40, "count must stop after 40 pages");
+      resetAniListMock();
+    });
+
+    // 31. Cache: a second identical year request makes NO new AniList calls.
+    await test("the year count is cached (second identical request makes no AniList calls)", async () => {
+      const all = Array.from({ length: 80 }, (_, i) => fakeMedia({ id: 600000 + i, idMal: 600000 + i }));
+      mockAniList({ allMedia: all });
+      const first = await fetch(`${baseUrl}/api/browse?year=1999`);
+      assert.equal(first.status, 200);
+      const afterFirst = anilistRequests.length;
+      assert.ok(afterFirst > 0);
+      const second = await fetch(`${baseUrl}/api/browse?year=1999`);
+      assert.equal(second.status, 200);
+      const data2 = await second.json();
+      assert.equal(data2.pageInfo.total, 80);
+      assert.equal(anilistRequests.length, afterFirst, "cache hit must not re-fetch");
+      resetAniListMock();
+    });
+
+    // 32. In-flight dedup: concurrent cold-cache year requests share ONE
+    //     count (assert the number of AniList fetches).
+    await test("concurrent year-count requests share one count (in-flight dedup)", async () => {
+      const all = Array.from({ length: 120 }, (_, i) => fakeMedia({ id: 700000 + i, idMal: 700000 + i }));
+      mockAniList({ allMedia: all });
+      /* Delay count pages so the 5 builds genuinely overlap — without dedup
+         each of the 5 callers would run its OWN count (5 builds x N pages). */
+      const originalResponder = anilistResponder;
+      anilistResponder = async (body) => {
+        if (Number((body && body.variables || {}).perPage) === 50) {
+          await new Promise((r) => setTimeout(r, 80));
+        }
+        return originalResponder(body);
+      };
+      const results = await Promise.all(
+        Array.from({ length: 5 }, () => fetch(`${baseUrl}/api/browse?year=1997`).then((r) => r.json()))
+      );
+      for (const data of results) {
+        assert.equal(data.pageInfo.total, 120, "every caller gets the same real count");
+        assert.equal(data.pageInfo.lastPage, 10);
+      }
+      /* The 5 requests share ONE identical grid query, so anilistQuery's own
+         cache serves it once; only the count paging (perPage 50) is shared by
+         the year-count dedup — 3 pages for 120 titles, once. */
+      const countFetches = anilistRequests.filter((r) => r.variables.perPage === 50);
+      assert.equal(countFetches.length, 3, "one shared count = 3 count fetches, not 5 builds x 3");
+      assert.equal(anilistRequests.length, 4, "1 shared grid fetch + 3 shared count fetches");
+      resetAniListMock();
+    });
+
+    // 33. An AniList failure mid-count must NOT fail the browse request and
+    //     must NOT cache a failed/partial count: the grid still renders and
+    //     pageInfo falls back to the capped values.
+    await test("a count failure falls back to the capped pageInfo and caches nothing", async () => {
+      const all = Array.from({ length: 120 }, (_, i) => fakeMedia({ id: 800000 + i, idMal: 800000 + i }));
+      mockAniList({ allMedia: all });
+      const originalResponder = anilistResponder;
+      /* Fail ONLY the count paging (perPage 50) after its first page; the
+         grid query (perPage 12) keeps answering so results still render. */
+      anilistResponder = async (body) => {
+        const variables = (body && body.variables) || {};
+        if (variables.perPage === 50 && variables.page >= 2) {
+          return jsonResponse({ errors: [{ message: "Upstream boom", status: 500 }] }, 500);
+        }
+        return originalResponder(body);
+      };
+      const res = await fetch(`${baseUrl}/api/browse?year=1996`);
+      assert.equal(res.status, 200, "a mid-count failure must not 502 the browse request");
+      const data = await res.json();
+      assert.ok(data.results.length > 0, "grid results still render");
+      assert.equal(data.pageInfo.total, 5000, "falls back to the capped total");
+      assert.equal(data.pageInfo.lastPage, 416);
+      resetAniListMock();
+
+      /* AniList recovers: the same year must now count normally — proof the
+         failed count was not cached as a value. */
+      mockAniList({ allMedia: all });
+      const res2 = await fetch(`${baseUrl}/api/browse?year=1996`);
+      assert.equal(res2.status, 200);
+      const data2 = await res2.json();
+      assert.equal(data2.pageInfo.total, 120, "a recovered count is computed, not served from a bad cache");
+      resetAniListMock();
     });
 
     console.log(`\nAll ${passed} E2E integration tests passed successfully!\n`);

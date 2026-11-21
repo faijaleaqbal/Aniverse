@@ -64,6 +64,10 @@ function cacheSet(key, value, ttl) {
 
 export function clearAniListCache() {
   cache.clear();
+  /* Counts live in their own store, but they are just cached AniList data:
+     a test/ops clear must reset them too or a stale count outlives the rest. */
+  yearCountCache.clear();
+  yearCountInFlight.clear();
 }
 
 /* Shared media fields for every query (spec). isAdult: false is added to
@@ -321,6 +325,153 @@ async function searchSnapshot(q) {
 export async function searchAniList(q) {
   const items = await searchSnapshot(q);
   return { items, total: items.length };
+}
+
+/* AniList CAPS the `pageInfo.total` it reports for a multi-page query at
+   5,000 and `lastPage` at 416 — for ANY filter, even a single year with ~40
+   titles (live probes: year=1975 / 1998 / 2025 all reported total 5,000;
+   only a genuinely single-page result set gets a real total). A year view
+   therefore cannot show its exact total from pageInfo alone.
+
+   Fix: count the year's titles ourselves. Page through AniList with the SAME
+   filters (year + genre + format + status, isAdult: false, perPage 50, no
+   sort — a count is sort-independent) until a page comes back short (<50) or
+   empty, counting post-screen titles deduped by AniList id. The grid results
+   are untouched; only pageInfo is replaced.
+
+   This runs ONLY for year views (a year param present) and ONLY when AniList's
+   reported total is capped (>= 5,000). Unfiltered Browse and genre/format/
+   status-only views keep the current capped behavior. */
+export const YEAR_COUNT_CAP_TOTAL = 5000;
+const YEAR_COUNT_PAGE_SIZE = 50;
+const YEAR_COUNT_MAX_PAGES = 40;
+const YEAR_COUNT_PAST_TTL_MS = 24 * 60 * 60 * 1000;
+const YEAR_COUNT_LIVE_TTL_MS = 60 * 60 * 1000;
+
+/* Counts, keyed by the normalised filter set. Past years never change -> 24 h;
+   the current year and next year keep gaining titles -> 1 h. */
+const yearCountCache = new Map();
+
+function yearCountGet(key) {
+  const hit = yearCountCache.get(key);
+  if (!hit) return null;
+  if (Date.now() - hit.at > hit.ttl) {
+    yearCountCache.delete(key);
+    return null;
+  }
+  return hit.value;
+}
+
+function yearCountSet(key, value, ttl) {
+  yearCountCache.set(key, { at: Date.now(), ttl, value });
+}
+
+/* In-flight counts, keyed like the cache. The browse page fires concurrent
+   /api/browse calls; without dedup two cold-cache callers would each page
+   through AniList for the same year. Callers arriving while a count runs
+   await the SAME promise; the entry is removed when it settles. */
+const yearCountInFlight = new Map();
+
+/* Cache key for a filter set: year + genre + format + status (canonicalised),
+   order-insensitive so "action,comedy" and "comedy,action" share one count. */
+export function yearCountKey(year, genres, formats, statuses) {
+  const norm = (list) => (Array.isArray(list) ? list.slice().sort().join(",") : "");
+  return JSON.stringify([Number(year), norm(genres), norm(formats), norm(statuses)]);
+}
+
+function yearCountTtl(year) {
+  const nowYear = new Date().getFullYear();
+  return (Number(year) >= nowYear ? YEAR_COUNT_LIVE_TTL_MS : YEAR_COUNT_PAST_TTL_MS);
+}
+
+async function buildYearCount(year, genres, formats, statuses) {
+  const args = ["type: ANIME", "isAdult: false"];
+  const vars = { page: 1, perPage: YEAR_COUNT_PAGE_SIZE };
+  if (genres.length) { args.push("genre_in: $genre"); vars.genre = genres; }
+  if (formats.length) { args.push("format_in: $format"); vars.format = formats; }
+  if (statuses.length) { args.push("status_in: $status"); vars.status = statuses; }
+  if (year) { args.push("seasonYear: $year"); vars.year = year; }
+  const varDecls = ["$page: Int", "$perPage: Int"];
+  if (vars.genre) varDecls.push("$genre: [String]");
+  if (vars.format) varDecls.push("$format: [MediaFormat]");
+  if (vars.status) varDecls.push("$status: [MediaStatus]");
+  if (vars.year) varDecls.push("$year: Int");
+  const query = `query (${varDecls.join(", ")}) {
+    Page(page: $page, perPage: $perPage) {
+      media(${args.join(", ")}) { ${MEDIA_FIELDS} }
+    }
+  }`;
+
+  const seen = new Set();
+  let pages = 0;
+  for (;;) {
+    if (pages >= YEAR_COUNT_MAX_PAGES) return null;
+    const data = await anilistQuery(query, { ...vars, page: pages + 1 });
+    const media = (data && data.Page && Array.isArray(data.Page.media)) ? data.Page.media : [];
+    for (const item of media) {
+      if (!item || item.id == null || seen.has(item.id)) continue;
+      if (isAdultMedia(item)) continue;
+      seen.add(item.id);
+    }
+    pages++;
+    if (media.length < YEAR_COUNT_PAGE_SIZE) break;
+  }
+  return seen.size;
+}
+
+/* The real count for a year view, or null when it could not be measured
+   (paging cap hit, or an AniList failure mid-count). Never caches a failure
+   or a capped/partial count. */
+async function yearCount(year, genres, formats, statuses) {
+  const key = yearCountKey(year, genres, formats, statuses);
+  const hit = yearCountGet(key);
+  if (hit != null) return hit;
+
+  const running = yearCountInFlight.get(key);
+  if (running) return running;
+
+  const build = buildYearCount(year, genres, formats, statuses)
+    .then((count) => {
+      if (count != null) yearCountSet(key, count, yearCountTtl(year));
+      return count;
+    })
+    .finally(() => {
+      yearCountInFlight.delete(key);
+    });
+  yearCountInFlight.set(key, build);
+  return build;
+}
+
+/* Replace AniList's capped pageInfo with one built from the real year count.
+   Returns the ORIGINAL pageInfo unchanged when there is no year filter, the
+   reported total is not capped, or the count could not be measured — so a
+   failure degrades to the current behavior instead of failing the request. */
+export async function withRealYearTotal(pageInfo, opts = {}) {
+  const { year, genres, formats, statuses } = normalizeBrowseArgs(opts);
+  if (!year) return pageInfo;
+  const reportedTotal = Number(pageInfo && pageInfo.total);
+  if (!(reportedTotal >= YEAR_COUNT_CAP_TOTAL)) return pageInfo;
+
+  /* A failure while counting must never fail the browse request: the grid is
+     already in hand, so degrade to AniList's own (capped) pageInfo. */
+  let count;
+  try {
+    count = await yearCount(year, genres, formats, statuses);
+  } catch {
+    return pageInfo;
+  }
+  if (count == null) return pageInfo;
+
+  const lastPage = Math.max(1, Math.ceil(count / SEARCH_PAGE_SIZE));
+  const currentPage = Number.isFinite(Number(pageInfo && pageInfo.currentPage))
+    ? Math.floor(Number(pageInfo.currentPage))
+    : 1;
+  return {
+    total: count,
+    currentPage,
+    lastPage,
+    hasNextPage: currentPage < lastPage,
+  };
 }
 
 /* GET /api/browse — one flexible list endpoint. Sort/filter mapping is
