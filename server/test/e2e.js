@@ -463,6 +463,81 @@ async function runTests() {
       resetAniListMock();
     });
 
+    // 21. Audit-6 B4: concurrent cold-cache searches for ONE query must all
+    //     share a single snapshot build (in-flight dedup). The mock answers
+    //     every request with a DIFFERENT id set (SEARCH_MATCH is
+    //     non-deterministic) after a delay, so without dedup each caller
+    //     would build its own snapshot and get different results.
+    await test("concurrent searchSnapshot calls share one snapshot (in-flight dedup)", async () => {
+      clearAniListCache();
+      anilistRequests.length = 0;
+      let n = 0;
+      anilistResponder = async () => {
+        n++;
+        const seq = n;
+        await new Promise((r) => setTimeout(r, 60));
+        return jsonResponse({
+          data: {
+            Page: {
+              pageInfo: MOCK_PAGE_INFO,
+              media: [
+                fakeMedia({ id: seq * 100 + 1, idMal: seq * 100 + 1, title: { romaji: `Race ${seq} A`, english: `Race ${seq} A`, native: null } }),
+                fakeMedia({ id: seq * 100 + 2, idMal: seq * 100 + 2, title: { romaji: `Race ${seq} B`, english: `Race ${seq} B`, native: null } }),
+              ],
+            },
+          },
+        });
+      };
+      const { searchAniList } = await import("../src/anilist.js");
+      const results = await Promise.all(
+        Array.from({ length: 5 }, () => searchAniList("race-unique-query"))
+      );
+      const idSets = results.map((r) => r.items.map((t) => t.anilistId).join(","));
+      assert.equal(new Set(idSets).size, 1, "every concurrent caller must get the SAME result set");
+      for (const r of results) assert.equal(r.total, r.items.length, "total is the snapshot count");
+      assert.equal(anilistRequests.length, 3, "one build = 3 page fetches, not 5 builds x 3 pages");
+      resetAniListMock();
+    });
+
+    // 22. Audit-6 B4: when ALL 3 snapshot pages fail, /api/search answers
+    //     502 search_busy and caches NOTHING — an empty set must never be
+    //     cached as a real "no results" for 30 minutes.
+    await test("GET /api/search answers 502 when all snapshot pages fail and caches nothing", async () => {
+      mockAniList({ fail: true });
+      const res = await fetch(`${baseUrl}/api/search?q=all-pages-fail`);
+      assert.equal(res.status, 502);
+      const data = await res.json();
+      assert.equal(data.ok, false);
+      assert.equal(data.error, "search_busy");
+      /* AniList recovers: the SAME query must now return real results —
+         proof the failed build did not cache an empty snapshot. */
+      mockAniList({ mediaList: [fakeMedia({ id: 987654, idMal: 987654 })] });
+      const res2 = await fetch(`${baseUrl}/api/search?q=all-pages-fail`);
+      assert.equal(res2.status, 200);
+      const data2 = await res2.json();
+      assert.equal(data2.pageInfo.total, 1);
+      assert.equal(data2.results[0].anilistId, 987654);
+      resetAniListMock();
+    });
+
+    // 23. A GENUINELY empty result (pages succeeded, zero matches) is still
+    //     cached — the dedup/busy fix must not break real "no results".
+    await test("a genuinely empty search result is still cached", async () => {
+      mockAniList({ mediaList: [] });
+      const res = await fetch(`${baseUrl}/api/search?q=definitely-no-match-xyz`);
+      assert.equal(res.status, 200);
+      const data = await res.json();
+      assert.equal(data.pageInfo.total, 0);
+      const afterFirst = anilistRequests.length;
+      assert.equal(afterFirst, 3, "one snapshot build = 3 page fetches");
+      const res2 = await fetch(`${baseUrl}/api/search?q=definitely-no-match-xyz`);
+      assert.equal(res2.status, 200);
+      const data2 = await res2.json();
+      assert.equal(data2.pageInfo.total, 0);
+      assert.equal(anilistRequests.length, afterFirst, "the empty-but-real snapshot is served from cache");
+      resetAniListMock();
+    });
+
     console.log(`\nAll ${passed} E2E integration tests passed successfully!\n`);
   } finally {
     if (server) {
