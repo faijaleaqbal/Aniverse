@@ -1,9 +1,28 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 /* Self-contained test database: a temporary seeded + enriched DB (see
    setup-db.js). `npm test` needs no manual seed/metadata steps and never
    touches the live database. */
 const { app, db } = await import("./setup-db.js");
 const { clearAniListCache } = await import("../src/anilist.js");
+
+/* The shipped frontend logic lives in a plain browser script (no module
+   exports), so these tests extract its marked pure-function blocks and
+   evaluate them directly — the exact code the page runs, without a DOM. */
+const ZORO_JS_PATH = fileURLToPath(new URL("../../ani-verse/js/zoro-aizen.js", import.meta.url));
+
+function evalZoroBlock(marker, exportNames) {
+  const source = readFileSync(ZORO_JS_PATH, "utf8");
+  const startTag = `/* __${marker}_START__ */`;
+  const endTag = `/* __${marker}_END__ */`;
+  const start = source.indexOf(startTag);
+  const end = source.indexOf(endTag);
+  assert.ok(start >= 0 && end > start, `zoro-aizen.js must contain the marked block ${marker}`);
+  const block = source.slice(start, end);
+  return new Function(`${block}\nreturn { ${exportNames.join(", ")} };`)();
+}
+
 
 /* ==========================================================================
    ANILIST MOCK
@@ -536,6 +555,99 @@ async function runTests() {
       assert.equal(data2.pageInfo.total, 0);
       assert.equal(anilistRequests.length, afterFirst, "the empty-but-real snapshot is served from cache");
       resetAniListMock();
+    });
+
+    /* ======================================================================
+       BROWSE BY YEAR (full library navigation)
+       AniList caps a single query's total at 5,000 titles, so the whole
+       catalog is reachable only one year at a time. These tests run against
+       the SHIPPED frontend logic: server/test/e2e.js extracts the marked
+       pure-function blocks out of ani-verse/js/zoro-aizen.js and evaluates
+       them directly (no DOM needed, no per-year API calls).
+       ====================================================================== */
+
+    // 24. ?year=1998 reaches AniList as seasonYear: 1998 and the route hands
+    //     back the server's own pageInfo (the exact total a year view shows).
+    await test("GET /api/browse?year=1998 filters AniList by seasonYear 1998", async () => {
+      mockAniList({
+        mediaList: [
+          fakeMedia({
+            id: 199801,
+            idMal: 199801,
+            seasonYear: 1998,
+            startDate: { year: 1998, month: 10, day: 1 },
+          }),
+        ],
+      });
+      const res = await fetch(`${baseUrl}/api/browse?year=1998`);
+      assert.equal(res.status, 200);
+      const data = await res.json();
+      assert.equal(data.ok, true);
+
+      const request = anilistRequests[0];
+      assert.ok(request.query.includes("seasonYear: $year"), "year must map to seasonYear");
+      assert.equal(request.variables.year, 1998);
+      assert.ok(request.query.includes("isAdult: false"), "every query must exclude adult titles");
+      assert.deepEqual(data.pageInfo, MOCK_PAGE_INFO, "the route returns AniList's pageInfo verbatim");
+      resetAniListMock();
+    });
+
+    // 25. The dropdown/chip year range covers 1960 (anime's TV era, AniList's
+    //     earliest titles) through current year + 1, contiguously.
+    await test("browse year range covers 1960 through current year + 1", () => {
+      const { BROWSE_YEAR_MIN, browseYearRange, browseDecadeOf } = evalZoroBlock("BROWSE_YEAR_LOGIC", [
+        "BROWSE_YEAR_MIN",
+        "browseYearRange",
+        "browseDecadeOf",
+      ]);
+      assert.equal(BROWSE_YEAR_MIN, 1960);
+      const now = new Date();
+      const years = browseYearRange(now);
+      assert.equal(years[0], now.getFullYear() + 1, "range must start at next year");
+      assert.equal(years[years.length - 1], 1960, "range must end at 1960");
+      assert.ok(years.length > 60, `range should span the whole catalog, got ${years.length} years`);
+      for (let i = 1; i < years.length; i++) {
+        assert.equal(years[i], years[i - 1] - 1, "years must be contiguous and descending");
+      }
+      assert.equal(new Set(years).size, years.length, "no duplicate years");
+      assert.equal(browseDecadeOf(1998), 1990, "decade grouping drives the chip rows");
+      assert.equal(browseDecadeOf(2027), 2020);
+    });
+
+    // 26. A year view is always under the 5,000 cap, so its heading shows the
+    //     EXACT total and its paginator a real last page — no "5,000+" and no
+    //     "+" floor mark. Unfiltered Browse keeps the capped treatment.
+    await test("year views show exact totals and a real last page", () => {
+      const { browseCountLabel, browsePaginationBounds } = evalZoroBlock("BROWSE_LABEL_LOGIC", [
+        "browseCountLabel",
+        "browsePaginationBounds",
+      ]);
+      const samples = [
+        { year: 2025, total: 312, lastPage: 26 },
+        { year: 2010, total: 587, lastPage: 49 },
+        { year: 1998, total: 143, lastPage: 12 },
+        { year: 1975, total: 41, lastPage: 4 },
+      ];
+      for (const sample of samples) {
+        const pageInfo = { total: sample.total, currentPage: 1, lastPage: sample.lastPage, hasNextPage: true };
+        const label = browseCountLabel(pageInfo, 12, false);
+        assert.equal(label, `${sample.total} titles`, `year ${sample.year} must show its exact total`);
+        assert.ok(!label.includes("+"), `year ${sample.year} must not show a capped/floor label`);
+        const bounds = browsePaginationBounds(true, pageInfo, 1);
+        assert.equal(bounds.bounded, false, `year ${sample.year} knows its own end`);
+        assert.equal(bounds.last, sample.lastPage, `year ${sample.year} last page must be exact`);
+      }
+
+      /* Unfiltered Browse: unchanged — capped total, real (floor) last page. */
+      const unfilteredCapped = { total: 5000, currentPage: 1, lastPage: 416, hasNextPage: true };
+      assert.equal(browseCountLabel(unfilteredCapped, 12, false), "5,000+ titles");
+      assert.equal(browsePaginationBounds(false, unfilteredCapped, 1).bounded, false);
+      assert.equal(browsePaginationBounds(false, unfilteredCapped, 1).last, 416);
+
+      /* The one regime that keeps the "+" floor: capped AND filtered. */
+      const bounded = browsePaginationBounds(true, unfilteredCapped, 1);
+      assert.equal(bounded.bounded, true);
+      assert.equal(bounded.last, 2, "a capped filtered view windows around the current page");
     });
 
     console.log(`\nAll ${passed} E2E integration tests passed successfully!\n`);

@@ -179,6 +179,34 @@
     newest: "Newest",
   };
 
+  /* ==========================================================================
+     BROWSE YEAR RANGE
+     AniList caps a single query's TOTAL at 5,000 titles, so unfiltered Browse
+     can only ever show the first ~5,000 of ~20,000 anime. A single year is
+     always far below that cap (hundreds at most), which is what makes the
+     whole library reachable through its year. The range therefore starts at
+     1960 — anime's TV era, and where AniList's own catalog begins — and runs
+     through NEXT year (AniList carries upcoming seasonYear ahead of release).
+     No per-year counts are fetched; the chips are navigation only.
+     Pure helpers, no DOM: server/test/e2e.js extracts this marked block and
+     evaluates it directly to test the shipped range.
+     ========================================================================== */
+  /* __BROWSE_YEAR_LOGIC_START__ */
+  const BROWSE_YEAR_MIN = 1960;
+
+  function browseYearRange(now) {
+    const ref = now || new Date();
+    const current = ref.getFullYear();
+    const years = [];
+    for (let y = current + 1; y >= BROWSE_YEAR_MIN; y--) years.push(y);
+    return years;
+  }
+
+  function browseDecadeOf(year) {
+    return Math.floor(Number(year) / 10) * 10;
+  }
+  /* __BROWSE_YEAR_LOGIC_END__ */
+
   /* The local catalog's genre names mapped onto AniList's spelling — the
      genres page and the detail pages link with the local names. */
   const GENRE_ALIASES = {
@@ -1612,6 +1640,42 @@
   }
 
   /* ==========================================================================
+     BROWSE TOTAL / PAGINATION LABEL LOGIC
+     Pure helpers shared by updateHeading() and renderPagination(). A filtered
+     browse below AniList's 5,000-title cap has a REAL total and a REAL last
+     page, so it must show exact numbers (a single year is always in this
+     regime). Only a capped total keeps the "5,000+" / "Page X of Y+" floor
+     treatment. No DOM: server/test/e2e.js extracts this marked block to test
+     the shipped logic against sample years.
+     ========================================================================== */
+  /* __BROWSE_LABEL_LOGIC_START__ */
+  const ANILIST_TOTAL_CAP = 5000;
+
+  function browseCountLabel(pageInfo, count, searchMode) {
+    const rawTotal = pageInfo && Number.isFinite(Number(pageInfo.total)) ? Number(pageInfo.total) : null;
+    if (rawTotal == null) {
+      return count != null && searchMode ? `${count} ${count === 1 ? "title" : "titles"}` : "";
+    }
+    /* AniList caps the reported total at 5,000 — say "5,000+" rather than
+       pretending that is the exact number. */
+    return rawTotal >= ANILIST_TOTAL_CAP
+      ? `5,000+ ${rawTotal === 1 ? "title" : "titles"}`
+      : `${rawTotal.toLocaleString()} ${rawTotal === 1 ? "title" : "titles"}`;
+  }
+
+  /* True only for a CAPPED FILTERED browse — the one view whose end AniList
+     will not reveal. A year view (or any filtered view under the cap) knows
+     its own last page, exactly like unfiltered Browse. */
+  function browsePaginationBounds(hasFilter, pageInfo, current) {
+    const bounded = !!(hasFilter && pageInfo && Number(pageInfo.total) >= ANILIST_TOTAL_CAP);
+    const last = bounded
+      ? (pageInfo.hasNextPage ? current + 1 : current)
+      : ((pageInfo && Number(pageInfo.lastPage)) || current);
+    return { bounded, last };
+  }
+  /* __BROWSE_LABEL_LOGIC_END__ */
+
+  /* ==========================================================================
      6C. LIVE BROWSE — the full AniList catalog on browse.html
      One grid, two modes:
        - search  (?q=…): "On Aniverse" (the curated catalog) first, then
@@ -1682,16 +1746,62 @@
         }).join("");
     }
 
-    /* ---- year select ---- */
+    /* ---- year select (the full library range) ---- */
     function renderYears() {
       if (!yearSelect) return;
-      const current = Number(new Date().getFullYear());
       let html = `<option value="">All years</option>`;
-      for (let y = current + 1; y >= current - 30; y--) {
+      for (const y of browseYearRange()) {
         html += `<option value="${y}">${y}</option>`;
       }
       yearSelect.innerHTML = html;
       yearSelect.value = state.year || "";
+    }
+
+    /* ---- "Browse by Year" chips, grouped by decade ----
+       AniList caps a single query's total at 5,000 titles, so unfiltered
+       Browse cannot reach the whole catalog. A single YEAR is always far
+       below the cap, which makes every title reachable through its year.
+       Chips are navigation only: no per-year counts are fetched (that would
+       mean ~65 AniList calls and would trip the rate limit). */
+    const yearSection = document.getElementById("browse-year-section");
+    const yearDecadesWrap = document.getElementById("browse-year-decades");
+
+    function renderYearSection() {
+      if (!yearDecadesWrap) return;
+      const decades = new Map();
+      for (const y of browseYearRange()) {
+        const decade = browseDecadeOf(y);
+        if (!decades.has(decade)) decades.set(decade, []);
+        decades.get(decade).push(y);
+      }
+      yearDecadesWrap.innerHTML = Array.from(decades.keys())
+        .sort((a, b) => b - a)
+        .map((decade) => {
+          const chips = decades
+            .get(decade)
+            .map(
+              (y) =>
+                `<button class="browse-year-chip${String(state.year) === String(y) ? " active" : ""}" type="button" data-year="${y}">${y}</button>`
+            )
+            .join("");
+          return `<div class="browse-year-decade"><span class="browse-year-decade-label">${decade}s</span>${chips}</div>`;
+        })
+        .join("");
+      const startEl = document.querySelector(".js-year-range-start");
+      if (startEl) startEl.textContent = String(BROWSE_YEAR_MIN);
+      const endEl = document.querySelector(".js-year-range-end");
+      if (endEl) endEl.textContent = String(browseYearRange()[0]);
+    }
+
+    /* The dropdown and the chips are two views of ONE filter: they must never
+       disagree about which year is active. */
+    function syncYearUI() {
+      if (yearSelect) yearSelect.value = state.year || "";
+      if (yearDecadesWrap) {
+        yearDecadesWrap.querySelectorAll(".browse-year-chip").forEach((chip) => {
+          chip.classList.toggle("active", String(chip.dataset.year) === String(state.year || ""));
+        });
+      }
     }
 
     /* ---- URL sync (so the filters survive a reload / share) ---- */
@@ -1713,21 +1823,11 @@
     /* ---- heading: active filter + result count ---- */
     function updateHeading(count, pageInfo) {
       if (!headingEl) return;
-      /* The total now comes from the server and is STABLE: the same number
-         for every page of the same query. Search uses the post-filter count
-         (the titles this site actually serves); browse uses AniList's own
-         total. A filtered browse total below the 5,000 cap is real and is
-         shown exactly; a capped total (>= 5,000) is shown as "5,000+" in
-         filtered views too — the same treatment unfiltered Browse gets. */
-      const rawTotal = pageInfo && Number.isFinite(Number(pageInfo.total)) ? Number(pageInfo.total) : null;
-      const total = rawTotal;
-      /* AniList caps the reported total at 5,000 — show it as "5,000+" rather
-         than pretending that is the exact number. */
-      const countLabel = total != null
-        ? (total >= 5000
-          ? `5,000+ ${total === 1 ? "title" : "titles"}`
-          : `${total.toLocaleString()} ${total === 1 ? "title" : "titles"}`)
-        : count != null && isSearch() ? `${count} ${count === 1 ? "title" : "titles"}` : "";
+      /* The total comes from the server and is STABLE: the same number for
+         every page of the same query. A filtered browse total below the
+         5,000 cap is real and shown exactly; a capped total (>= 5,000) is
+         shown as "5,000+". */
+      const countLabel = browseCountLabel(pageInfo, count, isSearch());
 
       if (isSearch()) {
         const countPart = countLabel ? ` (${countLabel})` : "";
@@ -1772,15 +1872,10 @@
       if (!paginationWrap) return;
       const current = (pageInfo && Number(pageInfo.currentPage)) || state.page;
       const hasFilter = !!(state.genre || state.format || state.status || state.year);
-      const isCapped = pageInfo && pageInfo.total >= 5000;
-      /* Only a CAPPED filtered browse has an unknown end, so only then are
-         the page numbers windowed to the neighbourhood. A search now has a
-         real lastPage (the snapshot has a fixed size) and a filtered browse
-         below the 5,000 cap knows its own last page too. */
-      const bounded = hasFilter && isCapped;
-      const last = bounded
-        ? (pageInfo.hasNextPage ? current + 1 : current)
-        : ((pageInfo && Number(pageInfo.lastPage)) || current);
+      /* Only a CAPPED filtered browse has an unknown end. A search has a real
+         lastPage (the snapshot is a fixed size), and any filtered browse below
+         the 5,000 cap — a single year always — knows its own last page too. */
+      const { bounded, last } = browsePaginationBounds(hasFilter, pageInfo, current);
       if (!pageInfo || !pageInfo.hasNextPage && current >= last) {
         if (current <= 1) {
           paginationWrap.hidden = true;
@@ -2014,6 +2109,20 @@
       yearSelect.addEventListener("change", () => {
         state.year = yearSelect.value || "";
         state.page = 1;
+        syncYearUI();
+        updateUrl();
+        load();
+      });
+    }
+    /* A year chip does exactly what picking that year in the dropdown does:
+       same state.year, same ?year= URL param, same /api/browse call. */
+    if (yearDecadesWrap) {
+      yearDecadesWrap.addEventListener("click", (e) => {
+        const chip = e.target.closest(".browse-year-chip");
+        if (!chip) return;
+        state.year = chip.dataset.year || "";
+        state.page = 1;
+        syncYearUI();
         updateUrl();
         load();
       });
@@ -2042,13 +2151,17 @@
       /* Search mode has no server-side sort/format/status/year filters —
          only the genre chip refines the results. */
       if (filterRow) filterRow.hidden = isSearch();
+      if (yearSection) yearSection.hidden = isSearch();
       updateUrl();
       load();
     };
 
     renderChips();
     renderYears();
+    renderYearSection();
+    syncYearUI();
     if (filterRow) filterRow.hidden = isSearch();
+    if (yearSection) yearSection.hidden = isSearch();
     updateHeading(null, null);
     await load();
   }

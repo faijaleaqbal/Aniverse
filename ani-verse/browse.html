@@ -139,6 +139,18 @@
       </div>
     </div>
 
+    <!-- Browse by Year: AniList caps one query at 5,000 titles, so a year is
+         the only way to reach every title in the catalog. Chips are rendered
+         by zoro-aizen.js, grouped by decade; clicking one applies the same
+         year filter as the dropdown above. -->
+    <div class="browse-year-section" id="browse-year-section">
+      <div class="browse-year-section-head">
+        <span class="browse-year-title">Browse by Year</span>
+        <span class="browse-year-hint">Every title in the catalog, <span class="js-year-range-start">1960</span>–<span class="js-year-range-end">…</span></span>
+      </div>
+      <div class="browse-year-decades" id="browse-year-decades"></div>
+    </div>
+
     <!-- Live catalog notice: "Service is busy — try again in a moment." or
          the library fallback notice. Rendered by zoro-aizen.js. -->
     <div id="browse-notice"></div>
