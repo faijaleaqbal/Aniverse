@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="referrer" content="no-referrer">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>A-Z Anime List - Ani Verse (Zoro UI × Aizen Motion)</title>
+  <meta name="description" content="Browse the full anime catalog alphabetically on Ani Verse. A-Z index over the live AniList catalog.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <!-- Loaded async: a slow Google Fonts response must never block the app script or render. -->
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+  <noscript><link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet"></noscript>
+  <link rel="preload" href="css/zoro-aizen.css?v=12" as="style">
+  <link rel="preload" href="js/zoro-aizen.js?v=13" as="script">
+  <script>
+    /* Warm the API while the app script is still downloading: this removes a
+       full round trip from the critical path. The app script adopts these
+       in-flight requests instead of issuing duplicates. */
+    window.__zoroPrefetch = {};
+    (function () {
+      var paths = ["/api/auth/me", "/api/titles?limit=18"];
+      paths.forEach(function (path) {
+        var ctl = new AbortController();
+        var to = setTimeout(function () { ctl.abort(); }, 10000);
+        window.__zoroPrefetch[path] = fetch(path, { credentials: "same-origin", signal: ctl.signal })
+          .then(function (r) {
+            clearTimeout(to);
+            return r.json().then(function (d) { return { ok: r.ok, status: r.status, data: d, error: null }; });
+          })
+          .catch(function (e) {
+            clearTimeout(to);
+            return { ok: false, status: 0, data: null, error: String((e && e.message) || e) };
+          });
+      });
+    })();
+  </script>  <link rel="stylesheet" href="css/zoro-aizen.css?v=12">
+</head>
+<body>
+
+  <!-- Ambient Light Backdrop -->
+  <div class="ambient-glow"></div>
+
+  <!-- Zoro Top Navigation with Aizen Glass -->
+  <header class="zoro-header">
+    <div class="header-inner">
+      <div class="header-left">
+        <button class="menu-toggle-btn" type="button" aria-label="Toggle Menu">☰</button>
+        <a class="zoro-brand" href="index.html">
+          <div class="zoro-brand-icon">Z</div>
+          <span>Ani<span class="verse">Verse</span></span>
+        </a>
+      </div>
+
+      <nav class="header-nav" aria-label="Main Navigation">
+        <a class="nav-link" href="index.html">Home</a>
+        <a class="nav-link" href="browse.html">Browse</a>
+        <a class="nav-link" href="genres.html">Genres</a>
+        <a class="nav-link" href="schedule.html">Schedule</a>
+        <a class="nav-link" href="browse.html?kind=film">Movies</a>
+        <a class="nav-link" href="browse.html?view=top-airing">Top Airing</a>
+        <a class="nav-link" href="browse.html?view=top-upcoming">Top Upcoming</a>
+        <a class="nav-link active" href="az-list.html">A-Z List</a>
+      </nav>
+
+      <div class="search-wrapper">
+        <div class="search-box">
+          <input id="zoro-search-input" type="text" placeholder="Search anime, movie, series..." autocomplete="off">
+          <button class="search-btn" type="button" aria-label="Search">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          </button>
+        </div>
+        <div class="search-dropdown" id="zoro-search-dropdown"></div>
+      </div>
+
+      <div class="header-actions">
+        <button class="icon-action-btn" id="btn-random-anime" type="button" title="Shuffle / Random Anime">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 3h5v5M4 20l7-7m9-10-7 7M4 4l16 16M16 21h5v-5"/></svg>
+        </button>
+        <button class="icon-action-btn" id="btn-replay-intro" type="button" title="Replay Aizen Shutter Intro">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 12 7-7v4c7 0 11 4 11 11-2-5-6-7-11-7v4l-7-5z"/></svg>
+        </button>
+        <div id="header-user-slot" aria-busy="true">
+          <button class="btn-zoro-primary" type="button" disabled style="opacity: 0.55;">···</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="container-main" style="padding: 2.5rem 2rem 3rem;">
+    <div class="section-header-zoro">
+      <div>
+        <h1 class="section-title" id="az-heading">A-Z <span class="accent">Anime List</span></h1>
+        <p id="az-subheading" style="color: var(--text-muted); font-size: 0.9rem; margin-top: 4px">Pick a letter to browse the full live catalog alphabetically.</p>
+      </div>
+    </div>
+
+    <!-- Letter index bar: All / 0-9 / A–Z. Rendered by zoro-aizen.js. -->
+    <div class="az-bar" id="az-bar" role="navigation" aria-label="A-Z index">
+      <!-- Populated dynamically via zoro-aizen.js -->
+    </div>
+
+    <!-- Live catalog notice: "Service is busy — try again in a moment." or
+         the library fallback notice. Rendered by zoro-aizen.js. -->
+    <div id="az-notice"></div>
+
+    <!-- Zoro Card Grid -->
+    <div id="az-results"></div>
+    <div class="cards-grid-zoro" id="az-grid">
+      <!-- Populated dynamically via zoro-aizen.js -->
+    </div>
+
+    <!-- Client-side pagination (12 per page). Rendered by zoro-aizen.js only
+         when the list spans more than one page. -->
+    <div class="catalog-pagination" id="az-pagination" hidden></div>
+  </main>
+
+  <!-- Zoro Footer with Aizen Cyber Accents -->
+  <footer style="background: var(--bg-darker); border-top: 1px solid var(--border-subtle); padding: 3.5rem 0 2rem;">
+    <div class="container-main">
+      <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 2rem; padding-bottom: 2rem; border-bottom: 1px solid rgba(255,255,255,0.06);">
+        <a class="zoro-brand" href="index.html">
+          <div class="zoro-brand-icon">Z</div>
+          <span>Ani<span class="verse">Verse</span></span>
+        </a>
+        <div style="display: flex; gap: 1.5rem; font-size: 0.875rem; color: var(--text-sub);">
+          <a href="index.html">Home</a>
+          <a href="browse.html">Catalog</a>
+          <a href="schedule.html">Schedule</a>
+          <a href="genres.html">Genres</a>
+          <a href="browse.html">Watch</a>
+        </div>
+      </div>
+      <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; margin-top: 1.5rem; font-size: 0.75rem; color: var(--text-muted);">
+        <p>Ani Verse does not store any files on its server. Combining Zoro.to UI components with Aizen-Verse cinematic animation engine.</p>
+        <p style="font-family: var(--font-mono); color: var(--zoro-lime);">ZORO × AIZEN HYBRID ENGINE 2026</p>
+      </div>
+      <p style="margin-top: 1.25rem; font-size: 0.75rem; color: var(--text-muted);">© <span class="js-footer-year">2026</span> Ani Verse. All rights reserved.</p>
+    </div>
+  </footer>
+
+  <script src="js/zoro-aizen.js?v=13"></script>
+</body>
+</html>

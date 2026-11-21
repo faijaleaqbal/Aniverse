@@ -887,6 +887,413 @@ async function runTests() {
       resetAniListMock();
     });
 
+    /* ======================================================================
+       PHASE 2 — A-Z LIST (/api/az)
+       AniList has no prefix search, so a letter is served from a
+       SEARCH_MATCH snapshot filtered server-side by title prefix. The mock
+       answers the A-Z snapshot pages with a pool whose titles straddle the
+       letter boundary, so the prefix filter is observable.
+       ====================================================================== */
+
+    // 34. /api/az letter filtering: only titles whose romaji OR english name
+    //     STARTS with the letter are returned, de-duplicated, adult-screened.
+    await test("GET /api/az filters a letter by title prefix", async () => {
+      clearAniListCache();
+      anilistRequests.length = 0;
+      anilistResponder = async (body) => {
+        const vars = body.variables || {};
+        /* Pages 1..10, 50 per page. Each page carries the SAME candidate pool
+           (the mock's "search" is the letter itself), so a title repeated
+           across pages exercises the de-dupe too. */
+        const pool = [
+          fakeMedia({ id: 900010, idMal: 900010, title: { romaji: "A Certain Magical Index", english: "A Certain Magical Index", native: null } }),
+          fakeMedia({ id: 900011, idMal: 900011, title: { romaji: "Attack on Titan", english: "Attack on Titan", native: null } }),
+          /* English title starts with A but romaji does not -> still a match. */
+          fakeMedia({ id: 900012, idMal: 900012, title: { romaji: "Shingeki no Kyojin", english: "Attack on Titan", native: null } }),
+          /* Romaji starts with A but english does not -> still a match. */
+          fakeMedia({ id: 900013, idMal: 900013, title: { romaji: "Akame ga Kill", english: null, native: null } }),
+          /* Starts with a different letter -> must be dropped. */
+          fakeMedia({ id: 900014, idMal: 900014, title: { romaji: "Naruto", english: "Naruto", native: null } }),
+          /* An "A" word, not a prefix -> must be dropped. */
+          fakeMedia({ id: 900015, idMal: 900015, title: { romaji: "My Hero Academia", english: "My Hero Academia", native: null } }),
+          /* Adult title starting with A -> must be dropped. */
+          fakeMedia({ id: 900016, idMal: 900016, isAdult: true, title: { romaji: "Adult A", english: "Adult A", native: null } }),
+        ];
+        return jsonResponse({
+          data: {
+            Page: {
+              pageInfo: { total: pool.length, lastPage: 1 },
+              media: pool,
+            },
+          },
+        });
+      };
+
+      const res = await fetch(`${baseUrl}/api/az?letter=A`);
+      assert.equal(res.status, 200);
+      const data = await res.json();
+      const ids = data.results.map((t) => t.anilistId).sort();
+      assert.deepEqual(ids, [900010, 900011, 900012, 900013], "only prefix matches, de-duplicated and adult-screened");
+      assert.equal(data.letter, "A");
+      assert.equal(data.pageInfo.total, 4, "total is the filtered snapshot count");
+      resetAniListMock();
+    });
+
+    // 35. /api/az pagination slices the ONE immutable snapshot: page 2 is the
+    //     second 12-title slice, and a page past the end clamps to the last.
+    await test("GET /api/az paginates the letter snapshot", async () => {
+      clearAniListCache();
+      anilistRequests.length = 0;
+      /* 25 titles, all "B…" -> 3 pages of 12. */
+      const pool = Array.from({ length: 25 }, (_, i) =>
+        fakeMedia({
+          id: 910000 + i,
+          idMal: 910000 + i,
+          title: { romaji: `B Title ${i}`, english: `B Title ${i}`, native: null },
+        })
+      );
+      anilistResponder = async () =>
+        jsonResponse({ data: { Page: { pageInfo: { total: pool.length, lastPage: 1 }, media: pool } } });
+
+      const page1 = await (await fetch(`${baseUrl}/api/az?letter=B&page=1`)).json();
+      assert.equal(page1.results.length, 12);
+      assert.equal(page1.pageInfo.total, 25);
+      assert.equal(page1.pageInfo.lastPage, 3);
+      assert.equal(page1.pageInfo.hasNextPage, true);
+      assert.equal(page1.results[0].anilistId, 910000);
+      assert.equal(page1.results[11].anilistId, 910011);
+
+      const page2 = await (await fetch(`${baseUrl}/api/az?letter=B&page=2`)).json();
+      assert.equal(page2.page, 2);
+      assert.equal(page2.results[0].anilistId, 910012, "page 2 continues the same snapshot");
+      assert.equal(page2.results.length, 12);
+
+      const page3 = await (await fetch(`${baseUrl}/api/az?letter=B&page=3`)).json();
+      assert.equal(page3.results.length, 1, "the last page holds the remainder");
+      assert.equal(page3.pageInfo.hasNextPage, false);
+
+      /* A page past the end clamps to the last page rather than answering
+         an empty page or an error. */
+      const page99 = await (await fetch(`${baseUrl}/api/az?letter=B&page=99`)).json();
+      assert.equal(page99.page, 3);
+      assert.equal(page99.results.length, 1);
+      resetAniListMock();
+    });
+
+    // 36. The capped flag: a snapshot that fills the 10th fetch page is
+    //     partial, so pageInfo.capped is true and the total is a floor.
+    await test("GET /api/az flags a capped snapshot and keeps the total a floor", async () => {
+      clearAniListCache();
+      anilistRequests.length = 0;
+      /* Every one of the 10 pages comes back FULL (50 rows) -> the fetch cap
+         was reached, the pool is partial. */
+      anilistResponder = async () =>
+        jsonResponse({
+          data: {
+            Page: {
+              pageInfo: { total: 5000, lastPage: 10 },
+              media: Array.from({ length: 50 }, (_, i) =>
+                fakeMedia({
+                  id: 920000 + i,
+                  idMal: 920000 + i,
+                  title: { romaji: `C Title ${i}`, english: `C Title ${i}`, native: null },
+                })
+              ),
+            },
+          },
+        });
+      const data = await (await fetch(`${baseUrl}/api/az?letter=C`)).json();
+      assert.equal(data.pageInfo.capped, true, "a full 10th page means the cap was hit");
+      /* The same 50 ids repeat on every one of the 10 pages, so the filtered,
+         de-duplicated snapshot holds 50 titles. That is the FLOOR the UI
+         labels with a "+" — the true count is larger but unreachable. */
+      assert.equal(data.pageInfo.total, 50, "the total is the de-duplicated snapshot count — a floor, not a real count");
+      assert.ok(data.results.length <= 12);
+
+      /* A SHORT last page (the snapshot's real end) is not capped. */
+      clearAniListCache();
+      anilistRequests.length = 0;
+      anilistResponder = async (body) => {
+        const page = Number((body.variables || {}).page) || 1;
+        const media = page === 1
+          ? Array.from({ length: 50 }, (_, i) => fakeMedia({ id: 930000 + i, idMal: 930000 + i, title: { romaji: `D ${i}`, english: `D ${i}`, native: null } }))
+          : [fakeMedia({ id: 930099, idMal: 930099, title: { romaji: "D last", english: "D last", native: null } })];
+        return jsonResponse({ data: { Page: { pageInfo: { total: 5000, lastPage: 10 }, media } } });
+      };
+      const data2 = await (await fetch(`${baseUrl}/api/az?letter=D`)).json();
+      assert.equal(data2.pageInfo.capped, false, "a short final page means the snapshot reached its end");
+      resetAniListMock();
+    });
+
+    // 37. letter=all is the plain TITLE_ROMAJI browse, and a bad letter is a
+    //     400 — never a silent "all".
+    await test("GET /api/az letter=all browses A-Z and rejects a bad letter", async () => {
+      mockAniList({ mediaList: [fakeMedia({ id: 940001, idMal: 940001, title: { romaji: "All", english: "All", native: null } })] });
+      const all = await (await fetch(`${baseUrl}/api/az?letter=all`)).json();
+      assert.equal(all.letter, "all");
+      assert.ok(anilistRequests[0].query.includes("sort: TITLE_ROMAJI"), "letter=all is the A-Z browse");
+      resetAniListMock();
+
+      mockAniList({ mediaList: [fakeMedia()] });
+      const bad = await fetch(`${baseUrl}/api/az?letter=AB`);
+      assert.equal(bad.status, 400);
+      assert.equal((await bad.json()).error, "bad_letter");
+      resetAniListMock();
+    });
+
+    /* ======================================================================
+       PHASE 2 — FULL BROWSE FILTERS + NEW SORT KEYS
+       ====================================================================== */
+
+    // 38. Score / season / tag / date filters reach AniList as the right
+    //     variables, and the four new sort keys map to AniList sorts.
+    await test("GET /api/browse maps the Phase 2 filters and sort keys to AniList", async () => {
+      const { normalizeBrowseArgs, BROWSE_SORTS } = await import("../src/anilist.js");
+
+      /* Sort keys. */
+      assert.equal(BROWSE_SORTS.az, "TITLE_ROMAJI");
+      assert.equal(BROWSE_SORTS.name, "TITLE_ROMAJI");
+      assert.equal(BROWSE_SORTS.episodes, "EPISODES_DESC");
+      assert.equal(BROWSE_SORTS.updated, "UPDATED_ON_DESC");
+      assert.equal(BROWSE_SORTS.favourites, "FAVOURITES_DESC");
+
+      /* Normalisation. */
+      const args = normalizeBrowseArgs({
+        sort: "az",
+        tags: "isekai, cgdct ,CGDCT",
+        season: "winter",
+        minScore: "80",
+        maxScore: "95",
+        startAfter: "2024-01",
+        startBefore: "2024-12-31",
+      });
+      /* Trimmed and canonicalised (isekai -> Isekai, cgdct -> CGDCT). */
+      assert.deepEqual(args.tags, ["Isekai", "CGDCT", "CGDCT"], "tags are trimmed and canonicalised");
+      assert.equal(args.season, "WINTER");
+      assert.equal(args.minScore, 80);
+      assert.equal(args.maxScore, 95);
+      assert.equal(args.startAfter, 20240101, "YYYY-MM becomes a FuzzyDateInt");
+      assert.equal(args.startBefore, 20241231, "YYYY-MM-DD becomes a FuzzyDateInt");
+
+      /* An inverted score range is swapped, and a bare YYYY bound works. */
+      const inverted = normalizeBrowseArgs({ minScore: "90", maxScore: "70" });
+      assert.equal(inverted.minScore, 70);
+      assert.equal(inverted.maxScore, 90);
+      assert.equal(normalizeBrowseArgs({ startAfter: "2020" }).startAfter, 20200101);
+
+      /* The wire query carries every filter. */
+      mockAniList({ mediaList: [fakeMedia()] });
+      await fetch(`${baseUrl}/api/browse?sort=episodes&tags=Isekai&season=WINTER&minScore=80&maxScore=95&startAfter=2024-01-01&startBefore=2024-12-31`);
+      const request = anilistRequests[0];
+      assert.ok(request.query.includes("sort: EPISODES_DESC"), "sort=episodes must map to EPISODES_DESC");
+      assert.ok(request.query.includes("tag_in: $tag"), "tags must map to tag_in");
+      assert.ok(request.query.includes("season: $season"), "season must map to season");
+      assert.ok(request.query.includes("averageScore_greater: $minScore"), "minScore must map to averageScore_greater");
+      assert.ok(request.query.includes("averageScore_lesser: $maxScore"), "maxScore must map to averageScore_lesser");
+      assert.ok(request.query.includes("startDate_greater: $startAfter"), "startAfter must map to startDate_greater");
+      assert.ok(request.query.includes("startDate_lesser: $startBefore"), "startBefore must map to startDate_lesser");
+      assert.ok(request.query.includes("isAdult: false"), "every query must exclude adult titles");
+      assert.deepEqual(request.variables.tag, ["Isekai"]);
+      assert.equal(request.variables.season, "WINTER");
+      assert.equal(request.variables.minScore, 80);
+      assert.equal(request.variables.maxScore, 95);
+      assert.equal(request.variables.startAfter, 20240101);
+      assert.equal(request.variables.startBefore, 20241231);
+      resetAniListMock();
+    });
+
+    /* ======================================================================
+       PHASE 2 — LIVE DETAIL METADATA
+       ====================================================================== */
+
+    // 39. getLiveTitle carries studios, characters, relations and tags from
+    //     ONE detail request, and adult relations are screened out.
+    await test("GET /api/live/:id returns studios, characters, relations and tags", async () => {
+      const detail = fakeMedia({
+        id: 159042,
+        idMal: 540000,
+        title: { romaji: "Reincarnated as a Sword", english: "Reincarnated as a Sword", native: null },
+        studios: {
+          nodes: [
+            { name: "Studio A", isAnimationStudio: true },
+            { name: "Studio B", isAnimationStudio: true },
+            /* A production (non-animation) studio must be dropped. */
+            { name: "Production IG", isAnimationStudio: false },
+          ],
+        },
+        season: "FALL",
+        startDate: { year: 2022, month: 10, day: 5 },
+        endDate: { year: 2022, month: 12, day: 21 },
+        bannerImage: "https://s4.anilist.co/banner.jpg",
+        characters: {
+          edges: [
+            {
+              role: "MAIN",
+              node: { name: { full: "Fran" }, image: { large: "https://s4.anilist.co/char1.jpg" } },
+              voiceActors: [{ name: { full: "Ai Kayano" }, image: { large: "https://s4.anilist.co/va1.jpg" } }],
+            },
+            {
+              role: "SUPPORTING",
+              node: { name: { full: "Teacher" }, image: { large: "https://s4.anilist.co/char2.jpg" } },
+              voiceActors: [],
+            },
+          ],
+        },
+        relations: {
+          edges: [
+            { relationType: "SEQUEL", node: { id: 540001, idMal: 540001, type: "ANIME", title: { romaji: "Sequel", english: "Sequel" }, coverImage: { large: "https://s4.anilist.co/rel1.jpg" }, format: "TV", status: "NOT_YET_RELEASED" } },
+            { relationType: "SIDE_STORY", node: { id: 540002, idMal: 540002, type: "ANIME", title: { romaji: "Side", english: "Side" }, coverImage: { large: "https://s4.anilist.co/rel2.jpg" }, format: "OVA", status: "FINISHED" } },
+            /* A manga relation must be dropped. */
+            { relationType: "ADAPTATION", node: { id: 540003, idMal: 540003, type: "MANGA", title: { romaji: "Manga", english: "Manga" }, coverImage: { large: "https://s4.anilist.co/rel3.jpg" } } },
+            /* An adult relation must be dropped. */
+            { relationType: "CHARACTER", node: { id: 540004, idMal: 540004, isAdult: true, type: "ANIME", title: { romaji: "Adult Rel", english: "Adult Rel" }, coverImage: { large: "https://s4.anilist.co/rel4.jpg" } } },
+          ],
+        },
+        tags: [
+          { name: "Isekai", rank: 90, isMediaSpoiler: false },
+          { name: "Reincarnation", rank: 80, isMediaSpoiler: false },
+        ],
+      });
+      mockAniList({ mediaById: { 159042: detail } });
+
+      const res = await fetch(`${baseUrl}/api/live/159042`);
+      assert.equal(res.status, 200);
+      const data = await res.json();
+      const t = data.title;
+      assert.deepEqual(t.studios, ["Studio A", "Studio B"], "animation studios only");
+      assert.equal(t.characters.length, 2, "only named characters are kept");
+      assert.equal(t.characters[0].name, "Fran");
+      assert.equal(t.characters[0].voiceActor.name, "Ai Kayano");
+      assert.equal(t.characters[1].voiceActor, null, "no Japanese VA -> null");
+      assert.equal(t.season, "FALL");
+      assert.deepEqual(t.startDate, { year: 2022, month: 10, day: 5 });
+      assert.deepEqual(t.endDate, { year: 2022, month: 12, day: 21 });
+      assert.equal(t.banner, "/api/cover?url=https%3A%2F%2Fs4.anilist.co%2Fbanner.jpg", "AniList banner is served same-origin");
+      assert.equal(t.tags.length, 2);
+      assert.equal(t.tags[0].name, "Isekai");
+
+      const relationIds = t.relations.map((r) => r.anilistId);
+      assert.deepEqual(relationIds, [540001, 540002], "only ANIME, non-adult relations");
+      assert.equal(t.relations[0].relationType, "SEQUEL");
+      assert.equal(t.relations[0].name, "Sequel");
+      /* ONE request carries both the shared and the detail-only fields. */
+      assert.equal(anilistRequests.length, 1, "studios/characters/relations/tags ride ONE Media query");
+      assert.ok(anilistRequests[0].query.includes("characters("));
+      assert.ok(anilistRequests[0].query.includes("voiceActors(language: JAPANESE)"));
+      assert.ok(anilistRequests[0].query.includes("relations {"));
+      assert.ok(anilistRequests[0].query.includes("bannerImage"));
+      resetAniListMock();
+    });
+
+    // 40. The frontend live-detail helpers format exactly what the page shows.
+    await test("live detail helpers format aired ranges, seasons and relations", () => {
+      const {
+        liveAiredRange,
+        liveSeasonLabel,
+        liveMoreSeasons,
+        liveRelatedAnime,
+        liveCharacters,
+      } = evalZoroBlock("LIVE_DETAIL_LOGIC", [
+        "liveAiredRange",
+        "liveSeasonLabel",
+        "liveMoreSeasons",
+        "liveRelatedAnime",
+        "liveCharacters",
+      ]);
+
+      assert.equal(liveAiredRange({ year: 2024, month: 1, day: 7 }, { year: 2024, month: 3, day: 31 }), "Jan 7 – Mar 31, 2024");
+      assert.equal(liveAiredRange({ year: 2022, month: 10, day: 5 }, null), "Oct 5, 2022 –", "an airing title is open-ended");
+      assert.equal(liveAiredRange({ year: 2022, month: 10, day: 5 }, { year: 2022, month: 12, day: 5 }), "Oct 5 – Dec 5, 2022");
+      assert.equal(liveAiredRange({ year: 2020, month: 1, day: 1 }, { year: 2021, month: 1, day: 1 }), "Jan 1, 2020 – Jan 1, 2021");
+      assert.equal(liveAiredRange(null, null), "");
+      assert.equal(liveAiredRange({ year: 2024, month: 13, day: 1 }, null), "", "an invalid date is not rendered");
+
+      assert.equal(liveSeasonLabel("WINTER"), "Winter");
+      assert.equal(liveSeasonLabel("fall"), "Fall");
+      assert.equal(liveSeasonLabel(null), null);
+
+      const relations = [
+        { relationType: "SEQUEL", anilistId: 1 },
+        { relationType: "PREQUEL", anilistId: 2 },
+        { relationType: "SIDE_STORY", anilistId: 3 },
+        { relationType: "ADAPTATION", anilistId: 4 },
+        { relationType: "SPIN_OFF", anilistId: 5 },
+        { relationType: "SUMMARY", anilistId: 6 },
+        { relationType: "CHARACTER", anilistId: 7 },
+        { relationType: "OTHER", anilistId: 8 },
+        { relationType: "PARENT", anilistId: 9 },
+      ];
+      assert.deepEqual(liveMoreSeasons(relations).map((r) => r.anilistId), [1, 2], "More Seasons = SEQUEL/PREQUEL only");
+      assert.deepEqual(
+        liveRelatedAnime(relations).map((r) => r.anilistId),
+        [3, 4, 5, 6, 7, 8],
+        "Related Anime excludes SEQUEL/PREQUEL and PARENT"
+      );
+      assert.equal(liveCharacters([1, 2, 3, 4, 5, 6, 7, 8]).length, 6, "the cast grid caps at 6");
+    });
+
+    /* ======================================================================
+       PHASE 2 — TOP UPCOMING VIEW
+       ====================================================================== */
+
+    // 41. The Top Upcoming view (frontend) resolves to status NOT_YET_RELEASED
+    //     + sort popular — the Top Airing pattern. The server's /api/browse
+    //     view-agnostic filters are covered above; this asserts the view's
+    //     own preset logic and the rail URL it drives.
+    await test("Top Upcoming view resolves to NOT_YET_RELEASED + popular", async () => {
+      /* The rail (index.html) requests exactly this; the browse view's own
+         state is asserted from the shipped source, and the nav links are
+         asserted across EVERY html page (not just the one JS file). */
+      const src = readFileSync(
+        fileURLToPath(new URL("../../ani-verse/js/zoro-aizen.js", import.meta.url)),
+        "utf8"
+      );
+      assert.ok(
+        src.includes('id: "live-top-upcoming-grid", path: "/api/browse?sort=popular&status=NOT_YET_RELEASED&page=1"'),
+        "the home rail must request the Top Upcoming set"
+      );
+      assert.ok(
+        src.includes('viewIsTopAiring ? "RELEASING" : viewIsTopUpcoming ? "NOT_YET_RELEASED" : ""'),
+        "the view's status preset must be NOT_YET_RELEASED"
+      );
+      assert.ok(
+        src.includes('viewIsTopAiring || viewIsTopUpcoming ? "popular"'),
+        "the view's default sort must be popular"
+      );
+      assert.ok(
+        src.includes('href="browse.html?view=top-upcoming&sort=popular"'),
+        "the mobile drawer must link Top Upcoming"
+      );
+
+      /* Every page's header nav links Top Upcoming, and the home page carries
+         the rail element itself. */
+      const pagesDir = fileURLToPath(new URL("../../ani-verse", import.meta.url));
+      const pages = ["index.html", "browse.html", "detail.html", "genres.html", "schedule.html", "watch.html", "az-list.html"];
+      for (const page of pages) {
+        const html = readFileSync(`${pagesDir}/${page}`, "utf8");
+        assert.ok(
+          html.includes('href="browse.html?view=top-upcoming">Top Upcoming</a>'),
+          `${page} must link Top Upcoming in the header nav`
+        );
+        assert.ok(
+          html.includes('href="az-list.html">A-Z List</a>'),
+          `${page} must link the A-Z List in the header nav`
+        );
+      }
+      const indexHtml = readFileSync(`${pagesDir}/index.html`, "utf8");
+      assert.ok(indexHtml.includes('id="live-top-upcoming-grid"'), "index.html must carry the Top Upcoming rail");
+
+      /* The rail's own request reaches the server as the status filter. */
+      mockAniList({ mediaList: [fakeMedia({ id: 950001, idMal: 950001, status: "NOT_YET_RELEASED" })] });
+      const res = await fetch(`${baseUrl}/api/browse?sort=popular&status=NOT_YET_RELEASED&page=1`);
+      assert.equal(res.status, 200);
+      const request = anilistRequests[0];
+      assert.ok(request.query.includes("status_in: $status"), "the rail's request sends a status filter");
+      assert.ok(request.query.includes("sort: POPULARITY_DESC"), "the rail's request sorts by popularity");
+      assert.deepEqual(request.variables.status, ["NOT_YET_RELEASED"]);
+      resetAniListMock();
+    });
+
     console.log(`\nAll ${passed} E2E integration tests passed successfully!\n`);
   } finally {
     if (server) {

@@ -68,6 +68,7 @@ export function clearAniListCache() {
      a test/ops clear must reset them too or a stale count outlives the rest. */
   yearCountCache.clear();
   yearCountInFlight.clear();
+  azSnapshotInFlight.clear();
 }
 
 /* Shared media fields for every query (spec). isAdult: false is added to
@@ -225,6 +226,112 @@ export function mediaView(media) {
   };
 }
 
+/* Detail-only fields. These are HEAVY (characters/relations/tags) and are
+   fetched by /api/live only — the list endpoints (search/browse/airing) keep
+   MEDIA_FIELDS so a grid page never pays for them. */
+export const LIVE_DETAIL_FIELDS = `
+  ${MEDIA_FIELDS}
+  endDate { year month day }
+  season
+  studios { nodes { name isAnimationStudio } }
+  characters(perPage: 12, sort: [ROLE, RELEVANCE]) {
+    edges {
+      role
+      node { name { full } image { large } }
+      voiceActors(language: JAPANESE) { name { full } image { large } }
+    }
+  }
+  relations {
+    edges {
+      relationType
+      node { id idMal isAdult type title { romaji english } coverImage { large } format status }
+    }
+  }
+  tags { name rank isMediaSpoiler }
+  bannerImage
+`;
+
+/* Map a detail response onto the site shape: everything mediaView exposes,
+   plus the live-detail metadata. Studios are animation studios only;
+   characters are the top 6 by AniList's ROLE/RELEVANCE sort; relations are
+   ANIME only and adult-screened (a relation can point at an adult title even
+   when the parent query is isAdult: false). */
+export function liveDetailView(media) {
+  const base = mediaView(media);
+  if (!base) return null;
+
+  const studios = (media.studios && Array.isArray(media.studios.nodes))
+    ? media.studios.nodes
+        .filter((n) => n && n.isAnimationStudio && n.name)
+        .map((n) => n.name)
+    : [];
+
+  const characterEdges = (media.characters && Array.isArray(media.characters.edges))
+    ? media.characters.edges
+    : [];
+  const characters = characterEdges.slice(0, 6)
+    .map((edge) => {
+      const node = (edge && edge.node) || {};
+      const va = edge && Array.isArray(edge.voiceActors) ? edge.voiceActors[0] : null;
+      return {
+        name: (node.name && node.name.full) || null,
+        image: localCoverUrl(node.image && node.image.large),
+        role: (edge && edge.role) || null,
+        voiceActor: va
+          ? {
+              name: (va.name && va.name.full) || null,
+              image: localCoverUrl(va.image && va.image.large),
+            }
+          : null,
+      };
+    })
+    .filter((c) => c.name);
+
+  const relationEdges = (media.relations && Array.isArray(media.relations.edges))
+    ? media.relations.edges
+    : [];
+  const relations = relationEdges
+    .map((edge) => {
+      const node = edge && edge.node;
+      if (!node) return null;
+      if (node.type && node.type !== "ANIME") return null;
+      if (isAdultMedia(node)) return null;
+      const title = node.title || {};
+      return {
+        relationType: edge.relationType || null,
+        anilistId: node.id != null ? Number(node.id) : null,
+        malId: node.idMal != null ? Number(node.idMal) : null,
+        name: title.english || title.romaji || "Unknown title",
+        cover: localCoverUrl(node.coverImage && node.coverImage.large),
+        format: node.format || null,
+        status: node.status || null,
+      };
+    })
+    .filter(Boolean);
+
+  const tags = Array.isArray(media.tags)
+    ? media.tags
+        .map((t) => ({
+          name: t.name || null,
+          rank: t.rank != null ? Number(t.rank) : null,
+          isMediaSpoiler: !!t.isMediaSpoiler,
+        }))
+        .filter((t) => t.name)
+    : [];
+
+  return {
+    ...base,
+    startDate: media.startDate || null,
+    endDate: media.endDate || null,
+    season: media.season || null,
+    studios,
+    characters,
+    relations,
+    tags,
+    banner: localCoverUrl(media.bannerImage) || base.banner,
+  };
+}
+
 const PAGE_INFO_FIELDS = `pageInfo { total currentPage lastPage hasNextPage }`;
 
 function pageResult(pageData) {
@@ -327,6 +434,114 @@ export async function searchAniList(q) {
   return { items, total: items.length };
 }
 
+/* GET /api/az — A-Z list. AniList has NO prefix search, so a letter is served
+   from a SNAPSHOT exactly like a search: one fixed candidate pool is fetched
+   (10 AniList pages x 50, SEARCH_MATCH on the letter itself), then filtered
+   server-side to titles whose romaji OR english title STARTS with the letter
+   (0-9 = starts with a digit), de-duplicated by id and adult-screened. Every
+   page of a letter is a slice of that one immutable set.
+
+   The pool is a best-effort candidate set, not the whole catalog: if the
+   10-page fetch cap is reached the snapshot is partial, so the total is a
+   FLOOR. `capped` is returned and the UI must label it with a "+" — a partial
+   snapshot is never presented as a complete list. */
+export const AZ_PAGE_SIZE = SEARCH_PAGE_SIZE;
+const AZ_SNAPSHOT_PAGES = 10;
+const AZ_SNAPSHOT_PER_PAGE = 50;
+const AZ_SNAPSHOT_TTL_MS = 30 * 60 * 1000;
+
+const azSnapshotInFlight = new Map();
+
+/* True when the title's romaji OR english name starts with the letter. */
+function azPrefixMatch(media, letter) {
+  const title = (media && media.title) || {};
+  const names = [title.romaji, title.english].filter(Boolean).map((s) => String(s).trim());
+  if (letter === "0-9") return names.some((s) => /^[0-9]/.test(s));
+  const ch = String(letter).toLowerCase();
+  return names.some((s) => s.toLowerCase().startsWith(ch));
+}
+
+async function buildAzSnapshot(letter) {
+  /* The letter itself is the only search term AniList can take — there is no
+     prefix match. "0-9" searches "0" (digit-led titles are rare and the
+     capped flag keeps the result honest either way). */
+  const search = letter === "0-9" ? "0" : letter;
+  const query = `query ($search: String, $page: Int, $perPage: Int) {
+    Page(page: $page, perPage: $perPage) {
+      pageInfo { total lastPage }
+      media(search: $search, type: ANIME, sort: SEARCH_MATCH, isAdult: false) { ${MEDIA_FIELDS} }
+    }
+  }`;
+  /* Pages in parallel; a failing page contributes fewer candidates. Only an
+     all-pages failure is "busy" (the route answers 502, nothing is cached). */
+  const pages = await Promise.all(
+    Array.from({ length: AZ_SNAPSHOT_PAGES }, (_, i) =>
+      anilistQuery(query, { search, page: i + 1, perPage: AZ_SNAPSHOT_PER_PAGE })
+        .then((data) => ({
+          ok: true,
+          media: data && data.Page && Array.isArray(data.Page.media) ? data.Page.media : [],
+          lastPage: data && data.Page && data.Page.pageInfo ? Number(data.Page.pageInfo.lastPage) : null,
+        }))
+        .catch(() => ({ ok: false, media: [], lastPage: null }))
+    )
+  );
+  if (pages.every((p) => !p.ok)) {
+    throw new AniListBusyError("AniList A-Z search failed on every page");
+  }
+
+  const last = pages[pages.length - 1];
+  const lastPageFull = !!(last && last.ok && last.media.length >= AZ_SNAPSHOT_PER_PAGE);
+  const reportedMore = pages.some((p) => p.ok && Number.isFinite(p.lastPage) && p.lastPage > AZ_SNAPSHOT_PAGES);
+  const capped = lastPageFull || reportedMore;
+
+  const seen = new Set();
+  const items = [];
+  for (const media of pages.flatMap((p) => p.media)) {
+    if (!media || media.id == null || seen.has(media.id)) continue;
+    if (!azPrefixMatch(media, letter)) continue;
+    if (isAdultMedia(media)) continue;
+    seen.add(media.id);
+    items.push(mediaView(media));
+  }
+  return { items, capped };
+}
+
+async function azSnapshot(letter) {
+  const key = `az-snapshot:${letter}`;
+  const hit = cacheGet(key);
+  if (hit) return hit;
+
+  const running = azSnapshotInFlight.get(key);
+  if (running) return running;
+
+  const build = buildAzSnapshot(letter)
+    .then((value) => {
+      cacheSet(key, value, AZ_SNAPSHOT_TTL_MS);
+      return value;
+    })
+    .finally(() => {
+      azSnapshotInFlight.delete(key);
+    });
+  azSnapshotInFlight.set(key, build);
+  return build;
+}
+
+/* One snapshot of a letter: the filtered, de-duplicated, adult-screened list
+   plus the capped flag. Cached by letter so all pages share one result set. */
+export async function azAniList(letter) {
+  const snap = await azSnapshot(letter);
+  return { items: snap.items, total: snap.items.length, capped: !!snap.capped };
+}
+
+/* Normalize an A-Z letter param: "all" | "0-9" | a single A-Z letter. */
+export function normalizeAzLetter(value) {
+  const raw = String(value || "all").trim().toLowerCase();
+  if (raw === "all") return "all";
+  if (raw === "0-9" || raw === "09" || raw === "digit" || raw === "digits") return "0-9";
+  if (/^[a-z]$/.test(raw)) return raw.toUpperCase();
+  return null;
+}
+
 /* AniList CAPS the `pageInfo.total` it reports for a multi-page query at
    5,000 and `lastPage` at 416 — for ANY filter, even a single year with ~40
    titles (live probes: year=1975 / 1998 / 2025 all reported total 5,000;
@@ -372,11 +587,25 @@ function yearCountSet(key, value, ttl) {
    await the SAME promise; the entry is removed when it settles. */
 const yearCountInFlight = new Map();
 
-/* Cache key for a filter set: year + genre + format + status (canonicalised),
-   order-insensitive so "action,comedy" and "comedy,action" share one count. */
-export function yearCountKey(year, genres, formats, statuses) {
+/* Cache key for a filter set: year + genre + format + status + the Phase 2
+   filters (tags / season / score / date range), canonicalised and
+   order-insensitive so "action,comedy" and "comedy,action" share one count.
+   The extra args keep the signature backwards compatible: the original four
+   still work and still isolate a bare year from a year+genre view. */
+export function yearCountKey(year, genres, formats, statuses, tags = [], season = null, minScore = null, maxScore = null, startAfter = null, startBefore = null) {
   const norm = (list) => (Array.isArray(list) ? list.slice().sort().join(",") : "");
-  return JSON.stringify([Number(year), norm(genres), norm(formats), norm(statuses)]);
+  return JSON.stringify([
+    Number(year),
+    norm(genres),
+    norm(formats),
+    norm(statuses),
+    norm(tags),
+    season || "",
+    minScore == null ? "" : minScore,
+    maxScore == null ? "" : maxScore,
+    startAfter == null ? "" : startAfter,
+    startBefore == null ? "" : startBefore,
+  ]);
 }
 
 function yearCountTtl(year) {
@@ -384,18 +613,30 @@ function yearCountTtl(year) {
   return (Number(year) >= nowYear ? YEAR_COUNT_LIVE_TTL_MS : YEAR_COUNT_PAST_TTL_MS);
 }
 
-async function buildYearCount(year, genres, formats, statuses) {
+async function buildYearCount(year, genres, formats, statuses, tags = [], season = null, minScore = null, maxScore = null, startAfter = null, startBefore = null) {
   const args = ["type: ANIME", "isAdult: false"];
   const vars = { page: 1, perPage: YEAR_COUNT_PAGE_SIZE };
   if (genres.length) { args.push("genre_in: $genre"); vars.genre = genres; }
   if (formats.length) { args.push("format_in: $format"); vars.format = formats; }
   if (statuses.length) { args.push("status_in: $status"); vars.status = statuses; }
+  if (tags.length) { args.push("tag_in: $tag"); vars.tag = tags; }
+  if (season) { args.push("season: $season"); vars.season = season; }
   if (year) { args.push("seasonYear: $year"); vars.year = year; }
+  if (minScore != null) { args.push("averageScore_greater: $minScore"); vars.minScore = minScore; }
+  if (maxScore != null) { args.push("averageScore_lesser: $maxScore"); vars.maxScore = maxScore; }
+  if (startAfter != null) { args.push("startDate_greater: $startAfter"); vars.startAfter = startAfter; }
+  if (startBefore != null) { args.push("startDate_lesser: $startBefore"); vars.startBefore = startBefore; }
   const varDecls = ["$page: Int", "$perPage: Int"];
   if (vars.genre) varDecls.push("$genre: [String]");
   if (vars.format) varDecls.push("$format: [MediaFormat]");
   if (vars.status) varDecls.push("$status: [MediaStatus]");
+  if (vars.tag) varDecls.push("$tag: [String]");
+  if (vars.season) varDecls.push("$season: MediaSeason");
   if (vars.year) varDecls.push("$year: Int");
+  if (vars.minScore != null) varDecls.push("$minScore: Int");
+  if (vars.maxScore != null) varDecls.push("$maxScore: Int");
+  if (vars.startAfter != null) varDecls.push("$startAfter: FuzzyDateInt");
+  if (vars.startBefore != null) varDecls.push("$startBefore: FuzzyDateInt");
   const query = `query (${varDecls.join(", ")}) {
     Page(page: $page, perPage: $perPage) {
       media(${args.join(", ")}) { ${MEDIA_FIELDS} }
@@ -422,15 +663,15 @@ async function buildYearCount(year, genres, formats, statuses) {
 /* The real count for a year view, or null when it could not be measured
    (paging cap hit, or an AniList failure mid-count). Never caches a failure
    or a capped/partial count. */
-async function yearCount(year, genres, formats, statuses) {
-  const key = yearCountKey(year, genres, formats, statuses);
+async function yearCount(year, genres, formats, statuses, tags = [], season = null, minScore = null, maxScore = null, startAfter = null, startBefore = null) {
+  const key = yearCountKey(year, genres, formats, statuses, tags, season, minScore, maxScore, startAfter, startBefore);
   const hit = yearCountGet(key);
   if (hit != null) return hit;
 
   const running = yearCountInFlight.get(key);
   if (running) return running;
 
-  const build = buildYearCount(year, genres, formats, statuses)
+  const build = buildYearCount(year, genres, formats, statuses, tags, season, minScore, maxScore, startAfter, startBefore)
     .then((count) => {
       if (count != null) yearCountSet(key, count, yearCountTtl(year));
       return count;
@@ -445,9 +686,15 @@ async function yearCount(year, genres, formats, statuses) {
 /* Replace AniList's capped pageInfo with one built from the real year count.
    Returns the ORIGINAL pageInfo unchanged when there is no year filter, the
    reported total is not capped, or the count could not be measured — so a
-   failure degrades to the current behavior instead of failing the request. */
+   failure degrades to the current behavior instead of failing the request.
+   The Phase 2 filters are passed into the count's filter set too: AniList
+   supports score/season/tag/date args, so a year view with any of them still
+   gets a real total (and a filter it could not count falls back to capped). */
 export async function withRealYearTotal(pageInfo, opts = {}) {
-  const { year, genres, formats, statuses } = normalizeBrowseArgs(opts);
+  const {
+    year, genres, formats, statuses, tags, season,
+    minScore, maxScore, startAfter, startBefore,
+  } = normalizeBrowseArgs(opts);
   if (!year) return pageInfo;
   const reportedTotal = Number(pageInfo && pageInfo.total);
   if (!(reportedTotal >= YEAR_COUNT_CAP_TOTAL)) return pageInfo;
@@ -456,7 +703,7 @@ export async function withRealYearTotal(pageInfo, opts = {}) {
      already in hand, so degrade to AniList's own (capped) pageInfo. */
   let count;
   try {
-    count = await yearCount(year, genres, formats, statuses);
+    count = await yearCount(year, genres, formats, statuses, tags, season, minScore, maxScore, startAfter, startBefore);
   } catch {
     return pageInfo;
   }
@@ -481,6 +728,12 @@ export const BROWSE_SORTS = {
   popular: "POPULARITY_DESC",
   top: "SCORE_DESC",
   newest: "START_DATE_DESC",
+  /* Phase 2: full-filter browse sorts. */
+  az: "TITLE_ROMAJI",
+  name: "TITLE_ROMAJI",
+  episodes: "EPISODES_DESC",
+  updated: "UPDATED_ON_DESC",
+  favourites: "FAVOURITES_DESC",
 };
 
 /* AniList genre names are case-sensitive (genre_in: ["Action"]). The site
@@ -517,6 +770,66 @@ export function canonicalGenre(value) {
   /* Unknown genre: pass it through title-cased so a valid AniList genre the
      map does not know still works. */
   return raw.charAt(0).toUpperCase() + raw.slice(1);
+}
+
+/* AniList TAGS are case-sensitive too (tag_in: ["Isekai"]). The browse filter
+   panel sends the site's curated tag list; this map canonicalises the popular
+   ones so a lowercased "isekai" still matches. Unknown tags pass through
+   trimmed — the panel only offers known AniList tags, so this is a safety
+   net, not a guess. */
+const TAG_CANONICAL = {
+  isekai: "Isekai",
+  cgdct: "CGDCT",
+  "mahou shoujo": "Mahou Shoujo",
+  military: "Military",
+  school: "School",
+  "time travel": "Time Travel",
+  "super power": "Super Power",
+  "strategy game": "Strategy Game",
+  "team sports": "Team Sports",
+  travel: "Travel",
+  "urban fantasy": "Urban Fantasy",
+  workplace: "Workplace",
+  villainess: "Villainess",
+  magic: "Magic",
+  "martial arts": "Martial Arts",
+  demons: "Demons",
+  dragon: "Dragon",
+  cyberpunk: "Cyberpunk",
+  "post-apocalyptic": "Post-Apocalyptic",
+  detective: "Detective",
+};
+
+export function canonicalTag(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  return TAG_CANONICAL[raw.toLowerCase()] || raw;
+}
+
+/* YYYY / YYYY-MM / YYYY-MM-DD -> AniList FuzzyDateInt (YYYYMMDD). Returns null
+   for anything unparseable, so a bad date filter is ignored rather than sent
+   to AniList as 0. */
+export function fuzzyDateInt(value) {
+  const raw = String(value || "").trim();
+  const full = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const month = raw.match(/^(\d{4})-(\d{2})$/);
+  const year = raw.match(/^(\d{4})$/);
+  if (full) {
+    const [, y, m, d] = full;
+    if (+m < 1 || +m > 12 || +d < 1 || +d > 31) return null;
+    return Number(`${y}${m}${d}`);
+  }
+  if (month) {
+    const [, y, m] = month;
+    if (+m < 1 || +m > 12) return null;
+    return Number(`${y}${m}01`);
+  }
+  if (year) {
+    const y = Number(year[1]);
+    if (y < 1900 || y > 2200) return null;
+    return Number(`${year[1]}0101`);
+  }
+  return null;
 }
 
 const FORMAT_CANONICAL = {
@@ -568,29 +881,72 @@ export function normalizeBrowseArgs(query = {}) {
   const genres = asList(query.genre).map(canonicalGenre).filter(Boolean);
   const formats = asList(query.format).map(canonicalFormat).filter(Boolean);
   const statuses = asList(query.status).map(canonicalStatus).filter(Boolean);
+  const tags = asList(query.tags).map(canonicalTag).filter(Boolean);
+
+  const seasonRaw = String(query.season || "").trim().toUpperCase();
+  const season = ["WINTER", "SPRING", "SUMMER", "FALL"].includes(seasonRaw) ? seasonRaw : null;
 
   const yearRaw = Number(query.year);
   const year = Number.isFinite(yearRaw) && yearRaw > 1800 && yearRaw < 2200 ? Math.floor(yearRaw) : null;
 
+  /* Score is AniList's 0-100 averageScore. A range is only sent when it is
+     real and ordered; an inverted range is swapped rather than silently
+     dropped, so ?minScore=90&maxScore=70 still means "70 to 90". */
+  const score = (value) => {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return null;
+    return Math.min(100, Math.max(0, Math.floor(n)));
+  };
+  let minScore = score(query.minScore);
+  let maxScore = score(query.maxScore);
+  if (minScore != null && maxScore != null && minScore > maxScore) {
+    [minScore, maxScore] = [maxScore, minScore];
+  }
+  /* 0 is "no floor" and 100 is "no ceiling" — sending them is harmless but
+     noise; drop the ones that cannot constrain anything. */
+  if (minScore === 0) minScore = null;
+  if (maxScore === 100) maxScore = null;
+
+  const startAfter = fuzzyDateInt(query.startAfter);
+  const startBefore = fuzzyDateInt(query.startBefore);
+
   const pageRaw = Number(query.page);
   const page = Number.isFinite(pageRaw) && pageRaw > 0 ? Math.floor(pageRaw) : 1;
 
-  return { sort, genres, formats, statuses, year, page };
+  return {
+    sort, genres, formats, statuses, tags, season, year,
+    minScore, maxScore, startAfter, startBefore, page,
+  };
 }
 
 export async function browseAniList(opts = {}) {
-  const { sort, genres, formats, statuses, year, page } = normalizeBrowseArgs(opts);
+  const {
+    sort, genres, formats, statuses, tags, season, year,
+    minScore, maxScore, startAfter, startBefore, page,
+  } = normalizeBrowseArgs(opts);
   const args = ["type: ANIME", "sort: " + sort, "isAdult: false"];
   const vars = { page, perPage: 12 };
   if (genres.length) { args.push("genre_in: $genre"); vars.genre = genres; }
   if (formats.length) { args.push("format_in: $format"); vars.format = formats; }
   if (statuses.length) { args.push("status_in: $status"); vars.status = statuses; }
+  if (tags.length) { args.push("tag_in: $tag"); vars.tag = tags; }
+  if (season) { args.push("season: $season"); vars.season = season; }
   if (year) { args.push("seasonYear: $year"); vars.year = year; }
+  if (minScore != null) { args.push("averageScore_greater: $minScore"); vars.minScore = minScore; }
+  if (maxScore != null) { args.push("averageScore_lesser: $maxScore"); vars.maxScore = maxScore; }
+  if (startAfter != null) { args.push("startDate_greater: $startAfter"); vars.startAfter = startAfter; }
+  if (startBefore != null) { args.push("startDate_lesser: $startBefore"); vars.startBefore = startBefore; }
   const varDecls = ["$page: Int", "$perPage: Int"];
   if (vars.genre) varDecls.push("$genre: [String]");
   if (vars.format) varDecls.push("$format: [MediaFormat]");
   if (vars.status) varDecls.push("$status: [MediaStatus]");
+  if (vars.tag) varDecls.push("$tag: [String]");
+  if (vars.season) varDecls.push("$season: MediaSeason");
   if (vars.year) varDecls.push("$year: Int");
+  if (vars.minScore != null) varDecls.push("$minScore: Int");
+  if (vars.maxScore != null) varDecls.push("$maxScore: Int");
+  if (vars.startAfter != null) varDecls.push("$startAfter: FuzzyDateInt");
+  if (vars.startBefore != null) varDecls.push("$startBefore: FuzzyDateInt");
   const query = `query (${varDecls.join(", ")}) {
     Page(page: $page, perPage: $perPage) {
       ${PAGE_INFO_FIELDS}
@@ -613,8 +969,11 @@ export async function getLiveTitle(anilistId) {
   let id = Number(anilistId);
   if (!Number.isFinite(id) || id <= 0) return null;
   id = LIVE_ID_ALIASES[id] || id;
+  /* ONE request carries both the shared fields and the detail-only fields
+     (studios / characters / relations / tags / banner). List endpoints never
+     request these. */
   const query = `query ($id: Int) {
-    Media(id: $id, type: ANIME, isAdult: false) { ${MEDIA_FIELDS} }
+    Media(id: $id, type: ANIME, isAdult: false) { ${LIVE_DETAIL_FIELDS} }
   }`;
   let data;
   try {
@@ -627,7 +986,7 @@ export async function getLiveTitle(anilistId) {
   const media = data && data.Media;
   /* Not an anime (a manga id, for example) -> not available. */
   if (!media || (media.type && media.type !== "ANIME") || isAdultMedia(media)) return null;
-  return mediaView(media);
+  return liveDetailView(media);
 }
 
 /* GET /api/airing — episodes aired in the last 7 days, newest first.

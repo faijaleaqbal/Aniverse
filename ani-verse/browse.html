@@ -11,8 +11,8 @@
   <!-- Loaded async: a slow Google Fonts response must never block the app script or render. -->
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
   <noscript><link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet"></noscript>
-  <link rel="preload" href="css/zoro-aizen.css?v=11" as="style">
-  <link rel="preload" href="js/zoro-aizen.js?v=12" as="script">
+  <link rel="preload" href="css/zoro-aizen.css?v=12" as="style">
+  <link rel="preload" href="js/zoro-aizen.js?v=13" as="script">
   <script>
     /* Warm the API while the app script is still downloading: this removes a
        full round trip from the critical path. The app script adopts these
@@ -34,7 +34,7 @@
           });
       });
     })();
-  </script>  <link rel="stylesheet" href="css/zoro-aizen.css?v=11">
+  </script>  <link rel="stylesheet" href="css/zoro-aizen.css?v=12">
 </head>
 <body>
 
@@ -59,6 +59,8 @@
         <a class="nav-link" href="schedule.html">Schedule</a>
         <a class="nav-link" href="browse.html?kind=film">Movies</a>
         <a class="nav-link" href="browse.html?view=top-airing">Top Airing</a>
+        <a class="nav-link" href="browse.html?view=top-upcoming">Top Upcoming</a>
+        <a class="nav-link" href="az-list.html">A-Z List</a>
       </nav>
 
       <div class="search-wrapper">
@@ -108,6 +110,10 @@
             <option value="popular">Most Popular</option>
             <option value="top">Top Rated</option>
             <option value="newest">Newest</option>
+            <option value="az">Name A-Z</option>
+            <option value="episodes">Most Episodes</option>
+            <option value="updated">Recently Updated</option>
+            <option value="favourites">Most Favourited</option>
           </select>
         </div>
         <div class="live-filter-group">
@@ -139,6 +145,63 @@
       </div>
     </div>
 
+    <!-- FULL FILTERS (Phase 2): score range, season, curated tags and a start
+         end date range. Collapsible; every control composes with the genre /
+         format / status / year filters above and updates the URL. -->
+    <div class="filters-panel" id="filters-panel">
+      <button class="filters-panel-head" id="filters-toggle" type="button" aria-expanded="false" aria-controls="filters-panel-body">
+        <span>⚙ Filters</span>
+        <span class="filters-toggle-icon" aria-hidden="true">▾</span>
+      </button>
+      <div class="filters-panel-body" id="filters-panel-body" hidden>
+        <div class="filters-grid">
+          <div class="filters-field">
+            <label for="browse-score-select">Score</label>
+            <select id="browse-score-select" class="sort-select-zoro" aria-label="Filter by score">
+              <option value="">Any score</option>
+              <option value="90">90+</option>
+              <option value="80">80+</option>
+              <option value="70">70+</option>
+              <option value="60">60+</option>
+              <option value="50">50+</option>
+            </select>
+          </div>
+          <div class="filters-field">
+            <label for="browse-season-select">Season</label>
+            <select id="browse-season-select" class="sort-select-zoro" aria-label="Filter by season">
+              <option value="">All seasons</option>
+              <option value="WINTER">Winter</option>
+              <option value="SPRING">Spring</option>
+              <option value="SUMMER">Summer</option>
+              <option value="FALL">Fall</option>
+            </select>
+          </div>
+          <div class="filters-field">
+            <label for="browse-start-year">Start year</label>
+            <select id="browse-start-year" class="sort-select-zoro" aria-label="Start year">
+              <option value="">Any start</option>
+            </select>
+          </div>
+          <div class="filters-field">
+            <label for="browse-end-year">End year</label>
+            <select id="browse-end-year" class="sort-select-zoro" aria-label="End year">
+              <option value="">Any end</option>
+            </select>
+          </div>
+        </div>
+        <div class="filters-field" style="margin-top: 1rem;">
+          <label>Tags</label>
+          <div class="filters-tags" id="browse-tag-chips">
+            <!-- Tag chips rendered by zoro-aizen.js (curated AniList tags). -->
+          </div>
+        </div>
+        <div class="filters-actions">
+          <button class="btn-zoro-primary" id="filters-apply" type="button" style="padding: 0.5rem 1.25rem;">Apply Filters</button>
+          <button class="genre-chip-zoro" id="filters-reset" type="button">Clear Filters</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Browse by Year: AniList caps one query at 5,000 titles, so a year is
          the only way to reach every title in the catalog. Chips are rendered
          by zoro-aizen.js, grouped by decade; clicking one applies the same
@@ -166,17 +229,28 @@
         var p = new URLSearchParams(location.search);
         var s = p.get("sort");
         var el = document.getElementById("catalog-sort-select");
-        if (el && ["trending", "popular", "top", "newest"].indexOf(s) >= 0) el.value = s;
+        if (el && ["trending", "popular", "top", "newest", "az", "name", "episodes", "updated", "favourites"].indexOf(s) >= 0) el.value = s;
         var fmt = document.getElementById("browse-format-select");
         if (fmt && p.get("format")) fmt.value = p.get("format").toUpperCase();
         var st = document.getElementById("browse-status-select");
         if (st && p.get("status")) st.value = p.get("status").toUpperCase();
+        /* Phase 2 filters: reflect the URL in the panel controls before first
+           paint so a shared ?minScore=80&season=WINTER view never flashes
+           "Any score / All seasons". */
+        var score = document.getElementById("browse-score-select");
+        if (score && p.get("minScore")) score.value = p.get("minScore");
+        var season = document.getElementById("browse-season-select");
+        if (season && p.get("season")) season.value = p.get("season").toUpperCase();
+        var startYear = document.getElementById("browse-start-year");
+        if (startYear && p.get("startAfter")) startYear.value = p.get("startAfter");
+        var endYear = document.getElementById("browse-end-year");
+        if (endYear && p.get("startBefore")) endYear.value = p.get("startBefore");
         var h = document.getElementById("browse-heading");
         var sub = document.getElementById("browse-subheading");
         var q = (p.get("q") || "").trim();
         var view = (p.get("view") || "").toLowerCase();
         var kind = (p.get("kind") || "").toLowerCase();
-        var mode = q ? "search" : kind === "film" ? "movies" : view === "top-airing" ? "topairing" : "browse";
+        var mode = q ? "search" : kind === "film" ? "movies" : view === "top-airing" ? "topairing" : view === "top-upcoming" ? "topupcoming" : "browse";
         if (h) {
           if (mode === "search") {
             h.innerHTML = "<span>Results for '<span class=\"accent\"></span>'</span>";
@@ -188,10 +262,14 @@
           } else if (mode === "topairing") {
             h.innerHTML = "Top <span class=\"accent\">Airing</span>";
             if (sub) sub.textContent = "Currently airing anime, ranked by popularity.";
+          } else if (mode === "topupcoming") {
+            h.innerHTML = "Top <span class=\"accent\">Upcoming</span>";
+            if (sub) sub.textContent = "The most anticipated unreleased anime, ranked by popularity.";
           }
         }
         var wantHref = mode === "movies" ? "browse.html?kind=film"
           : mode === "topairing" ? "browse.html?view=top-airing"
+          : mode === "topupcoming" ? "browse.html?view=top-upcoming"
           : "browse.html";
         document.querySelectorAll(".header-nav .nav-link").forEach(function (a) {
           a.classList.toggle("active", a.getAttribute("href") === wantHref);
@@ -234,6 +312,6 @@
     </div>
   </footer>
 
-  <script src="js/zoro-aizen.js?v=12"></script>
+  <script src="js/zoro-aizen.js?v=13"></script>
 </body>
 </html>

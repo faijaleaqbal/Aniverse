@@ -3146,3 +3146,254 @@ body.drawer-open .zoro-header {
 .comment-input-area.is-signed-out .user-comment-avatar {
   opacity: 0.6;
 }
+
+/* ==========================================================================
+   PHASE 2 — FULL FILTERS PANEL (browse.html)
+   A collapsible panel under the genre chips: score range, season, curated
+   tags and a start/end date range. Shares the existing .sort-select-zoro /
+   .live-filter-group look so it reads as one filter system.
+   ========================================================================== */
+.filters-panel {
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: var(--bg-surface);
+  margin-bottom: 1.5rem;
+  overflow: hidden;
+}
+
+.filters-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  width: 100%;
+  padding: 0.85rem 1.1rem;
+  background: transparent;
+  border: 0;
+  color: var(--text-main);
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+  text-align: left;
+}
+
+.filters-panel-head:hover { background: var(--bg-card-hover); }
+
+.filters-panel-head .filters-toggle-icon {
+  color: var(--zoro-lime);
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  transition: transform 0.2s var(--ease-spring);
+}
+
+/* Rotate the caret while open — the state is visible without reading text. */
+.filters-panel.is-open .filters-panel-head .filters-toggle-icon { transform: rotate(180deg); }
+
+.filters-panel-body {
+  padding: 0 1.1rem 1.1rem;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.filters-panel[hidden] { display: none; }
+
+.filters-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 1rem;
+  padding-top: 1rem;
+}
+
+.filters-field { display: flex; flex-direction: column; gap: 0.35rem; }
+
+.filters-field > label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.filters-field .sort-select-zoro { width: 100%; }
+
+/* Tag chips: same pill language as the genre chips, smaller and denser. */
+.filters-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.35rem;
+}
+
+.filter-tag-chip {
+  padding: 0.28rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: var(--bg-card);
+  color: var(--text-sub);
+  border: 1px solid var(--border-subtle);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.filter-tag-chip:hover { border-color: var(--border-active); color: #fff; }
+.filter-tag-chip.active {
+  background: var(--zoro-lime);
+  color: #0c0d12;
+  border-color: var(--zoro-lime);
+}
+
+.filters-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-top: 1.1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* ==========================================================================
+   PHASE 2 — A-Z INDEX BAR (az-list.html)
+   ========================================================================== */
+.az-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.75rem 0 1rem;
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: 1.5rem;
+}
+
+.az-chip {
+  min-width: 2rem;
+  height: 2rem;
+  padding: 0 0.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-sub);
+  font-size: 0.8rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.az-chip:hover { border-color: var(--border-active); color: #fff; }
+.az-chip.active {
+  background: var(--zoro-lime);
+  color: #0c0d12;
+  border-color: var(--zoro-lime);
+  box-shadow: 0 0 12px var(--zoro-lime-glow);
+}
+
+.az-chip.is-empty {
+  opacity: 0.45;
+  cursor: default;
+  pointer-events: none;
+}
+
+.az-bar-sep {
+  width: 1px;
+  height: 1.25rem;
+  background: var(--border-subtle);
+  margin: 0 0.35rem;
+}
+
+/* ==========================================================================
+   PHASE 2 — LIVE DETAIL SECTIONS (detail.html?live=<id>, watch.html?live=<id>)
+   ========================================================================== */
+.live-cast-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 0.85rem;
+}
+
+.live-cast-card {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.6rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+}
+
+.live-cast-card img {
+  width: 44px;
+  height: 58px;
+  object-fit: cover;
+  border-radius: 6px;
+  flex: 0 0 auto;
+  background: var(--bg-card);
+}
+
+.live-cast-name {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-main);
+  line-height: 1.25;
+}
+
+.live-cast-va {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  line-height: 1.25;
+  margin-top: 2px;
+}
+
+.live-cast-va strong { color: var(--text-sub); font-weight: 600; }
+
+.live-relation-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 0.85rem;
+}
+
+.live-relation-card {
+  display: block;
+  text-decoration: none;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  overflow: hidden;
+  transition: border-color 0.2s ease, transform 0.2s ease;
+}
+
+.live-relation-card:hover { border-color: var(--border-active); transform: translateY(-2px); }
+
+.live-relation-card img {
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  display: block;
+  background: var(--bg-card);
+}
+
+.live-relation-name {
+  padding: 0.55rem 0.65rem 0.2rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-main);
+  line-height: 1.25;
+}
+
+.live-relation-type {
+  padding: 0 0.65rem 0.6rem;
+  font-size: 0.68rem;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--zoro-lime);
+}
+
+.live-detail-section { padding-top: 2rem; }
+
+@media (max-width: 700px) {
+  .filters-grid { grid-template-columns: 1fr 1fr; }
+  .live-cast-grid, .live-relation-grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
+}

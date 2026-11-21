@@ -74,6 +74,17 @@
   function watchHref(slug, ep) {
     return `watch.html?slug=${encodeURIComponent(slug)}&ep=${encodeURIComponent(ep == null ? 1 : ep)}`;
   }
+  /* A comma-separated ?tags= list -> array, trimmed, de-duplicated. Kept
+     case-sensitive (AniList tags are); the server canonicalises the known
+     ones, so the panel can send the display spelling. */
+  function parseTagList(value) {
+    const parts = String(value == null ? "" : value)
+      .split(",")
+      .map((t) => t.trim())
+      .filter(Boolean);
+    return Array.from(new Set(parts));
+  }
+
   function scoreLabel(t) {
     return t && t.score != null ? (t.score / 10).toFixed(1) : null;
   }
@@ -177,7 +188,23 @@
     popular: "Most Popular",
     top: "Top Rated",
     newest: "Newest",
+    /* Phase 2: full-filter browse sorts. az/name both mean TITLE_ROMAJI. */
+    az: "Name A-Z",
+    name: "Name A-Z",
+    episodes: "Most Episodes",
+    updated: "Recently Updated",
+    favourites: "Most Favourited",
   };
+
+  /* Phase 2 curated tag list for the browse filter panel. These are real
+     AniList TAGS (case-sensitive upstream; canonicalTag maps them). No
+     age-rating or SUB/DUB tag exists here — AniList has no such data. */
+  const BROWSE_TAGS = [
+    "Isekai", "CGDCT", "Mahou Shoujo", "Mecha", "Sports", "Supernatural",
+    "Thriller", "Vampire", "Military", "Parody", "Space", "Josei",
+    "Seinen", "Shounen", "Shoujo", "Time Travel", "Super Power",
+    "Strategy Game", "Team Sports", "Urban Fantasy",
+  ];
 
   /* ==========================================================================
      BROWSE YEAR RANGE
@@ -522,6 +549,8 @@
             <a class="mobile-drawer-link" href="browse.html?genre=action">🔥 Action Anime</a>
             <a class="mobile-drawer-link" href="browse.html?genre=fantasy">✨ Fantasy & Isekai</a>
             <a class="mobile-drawer-link" href="browse.html?view=top-airing&sort=newest">⭐ Top Airing</a>
+            <a class="mobile-drawer-link" href="browse.html?view=top-upcoming&sort=popular">📅 Top Upcoming</a>
+            <a class="mobile-drawer-link" href="az-list.html">🔤 A-Z List</a>
           </nav>
         </div>
       `;
@@ -1701,23 +1730,50 @@
     const paginationWrap = document.getElementById("catalog-pagination");
     const searchInput = document.getElementById("zoro-search-input");
 
+    /* Phase 2 full-filter controls. */
+    const filtersPanel = document.getElementById("filters-panel");
+    const filtersToggle = document.getElementById("filters-toggle");
+    const filtersBody = document.getElementById("filters-panel-body");
+    const scoreSelect = document.getElementById("browse-score-select");
+    const seasonSelect = document.getElementById("browse-season-select");
+    const startYearSelect = document.getElementById("browse-start-year");
+    const endYearSelect = document.getElementById("browse-end-year");
+    const tagChipsWrap = document.getElementById("browse-tag-chips");
+    const filtersApply = document.getElementById("filters-apply");
+    const filtersReset = document.getElementById("filters-reset");
+
     const params = new URLSearchParams(window.location.search);
     const view = (params.get("view") || "").toLowerCase();
     const kind = (params.get("kind") || "").toLowerCase();
+    /* Top Airing and Top Upcoming are VIEWS with a fixed status preset (a
+       view's status comes from the URL only as an override; the preset wins
+       so ?view=top-upcoming can never silently mean "finished"). */
+    const viewIsTopAiring = view === "top-airing";
+    const viewIsTopUpcoming = view === "top-upcoming";
 
     const state = {
       q: (params.get("q") || "").trim(),
-      sort: params.get("sort") || (view === "top-airing" ? "popular" : "trending"),
+      sort: params.get("sort") || (viewIsTopAiring || viewIsTopUpcoming ? "popular" : "trending"),
       genre: canonicalGenreName(params.get("genre") || ""),
       format: params.get("format") || (kind === "film" ? "MOVIE" : ""),
-      status: params.get("status") || (view === "top-airing" ? "RELEASING" : ""),
+      status: params.get("status") || (viewIsTopAiring ? "RELEASING" : viewIsTopUpcoming ? "NOT_YET_RELEASED" : ""),
       year: params.get("year") || "",
+      /* Phase 2 filters. minScore is the AniList 0-100 floor; maxScore the
+         ceiling. startAfter/startBefore are YYYY (or YYYY-MM / YYYY-MM-DD)
+         and reach AniList as startDate_greater / startDate_lesser. */
+      minScore: params.get("minScore") || "",
+      maxScore: params.get("maxScore") || "",
+      season: (params.get("season") || "").toUpperCase(),
+      tags: parseTagList(params.get("tags")),
+      startAfter: params.get("startAfter") || "",
+      startBefore: params.get("startBefore") || "",
       page: (() => {
         const p = Number(params.get("page"));
         return Number.isFinite(p) && p > 0 ? Math.floor(p) : 1;
       })(),
     };
     if (!SORT_LABELS[state.sort]) state.sort = "trending";
+    if (!["WINTER", "SPRING", "SUMMER", "FALL"].includes(state.season)) state.season = "";
 
     function isSearch() { return !!state.q; }
     if (searchInput && state.q) searchInput.value = state.q;
@@ -1755,6 +1811,78 @@
       }
       yearSelect.innerHTML = html;
       yearSelect.value = state.year || "";
+    }
+
+    /* ---- Phase 2 full filters ----
+       The panel is populated from the SAME year range as the year dropdown
+       (start/end year are date-range bounds, not the seasonYear filter) and
+       the curated AniList tag list. Every control writes state and the URL on
+       Apply, so a filtered view is shareable and survives a reload. */
+    function renderFilterOptions() {
+      const years = browseYearRange();
+      const yearOptions = (sel, current) => {
+        if (!sel) return;
+        sel.innerHTML = `<option value="">${sel === startYearSelect ? "Any start" : "Any end"}</option>` +
+          years.map((y) => `<option value="${y}">${y}</option>`).join("");
+        sel.value = current || "";
+      };
+      yearOptions(startYearSelect, state.startAfter);
+      yearOptions(endYearSelect, state.startBefore);
+      if (scoreSelect) scoreSelect.value = state.minScore || "";
+      if (seasonSelect) seasonSelect.value = state.season || "";
+    }
+
+    function renderTagChips() {
+      if (!tagChipsWrap) return;
+      tagChipsWrap.innerHTML = BROWSE_TAGS.map((tag) => {
+        const active = state.tags.some((t) => t.toLowerCase() === tag.toLowerCase());
+        return `<button class="filter-tag-chip${active ? " active" : ""}" type="button" data-tag="${escapeHtml(tag)}">${escapeHtml(tag)}</button>`;
+      }).join("");
+    }
+
+    function syncFilterUI() {
+      renderFilterOptions();
+      renderTagChips();
+    }
+
+    /* The panel is open when it carries any filter (so a shared filtered URL
+       never hides its own controls), and starts closed otherwise. */
+    function setFiltersOpen(open) {
+      if (!filtersPanel || !filtersBody || !filtersToggle) return;
+      filtersPanel.classList.toggle("is-open", open);
+      filtersBody.hidden = !open;
+      filtersToggle.setAttribute("aria-expanded", open ? "true" : "false");
+    }
+
+    function hasPhase2Filters() {
+      return !!(state.minScore || state.maxScore || state.season || state.tags.length || state.startAfter || state.startBefore);
+    }
+
+    function applyFilters() {
+      if (scoreSelect) state.minScore = scoreSelect.value || "";
+      if (seasonSelect) state.season = seasonSelect.value || "";
+      if (startYearSelect) state.startAfter = startYearSelect.value || "";
+      if (endYearSelect) state.startBefore = endYearSelect.value || "";
+      state.page = 1;
+      updateUrl();
+      load();
+    }
+
+    function resetFilters() {
+      state.minScore = "";
+      state.maxScore = "";
+      state.season = "";
+      state.tags = [];
+      state.startAfter = "";
+      state.startBefore = "";
+      if (scoreSelect) scoreSelect.value = "";
+      if (seasonSelect) seasonSelect.value = "";
+      if (startYearSelect) startYearSelect.value = "";
+      if (endYearSelect) endYearSelect.value = "";
+      renderTagChips();
+      state.page = 1;
+      updateUrl();
+      load();
     }
 
     /* ---- "Browse by Year" chips, grouped by decade ----
@@ -1813,6 +1941,13 @@
       if (state.format) p.set("format", state.format);
       if (state.status) p.set("status", state.status);
       if (state.year) p.set("year", state.year);
+      /* Phase 2 filters: tags is a comma list, the rest single values. */
+      if (state.minScore) p.set("minScore", state.minScore);
+      if (state.maxScore) p.set("maxScore", state.maxScore);
+      if (state.season) p.set("season", state.season);
+      if (state.tags.length) p.set("tags", state.tags.join(","));
+      if (state.startAfter) p.set("startAfter", state.startAfter);
+      if (state.startBefore) p.set("startBefore", state.startBefore);
       if (state.page > 1) p.set("page", String(state.page));
       if (view) p.set("view", view);
       if (kind) p.set("kind", kind);
@@ -1833,9 +1968,7 @@
         const countPart = countLabel ? ` (${countLabel})` : "";
         headingEl.innerHTML = `<span>Results for '<span class="accent">${escapeHtml(state.q)}</span>'${countPart}</span>`;
         if (subheadingEl) {
-          subheadingEl.textContent = countLabel
-            ? "Searching the full catalog — your curated shelf comes first."
-            : "Searching the full catalog — your curated shelf comes first.";
+          subheadingEl.textContent = "Searching the full catalog — your curated shelf comes first.";
         }
         return;
       }
@@ -1845,10 +1978,20 @@
       if (state.format) chips.push(state.format === "MOVIE" ? "Movies" : state.format);
       if (state.status) chips.push(state.status === "RELEASING" ? "Airing" : state.status === "FINISHED" ? "Finished" : state.status);
       if (state.year) chips.push(state.year);
+      /* Phase 2 filters read as human labels in the heading. */
+      if (state.minScore) chips.push(`${state.minScore}+ score`);
+      if (state.maxScore) chips.push(`≤ ${state.maxScore} score`);
+      if (state.season) chips.push(state.season.charAt(0) + state.season.slice(1).toLowerCase());
+      if (state.tags.length) chips.push(state.tags.join(", "));
+      if (state.startAfter || state.startBefore) {
+        chips.push(`${state.startAfter || "…"} – ${state.startBefore || "…"}`);
+      }
 
       let title;
-      if (view === "top-airing") {
+      if (viewIsTopAiring) {
         title = `Top <span class="accent">Airing</span>`;
+      } else if (viewIsTopUpcoming) {
+        title = `Top <span class="accent">Upcoming</span>`;
       } else if (kind === "film") {
         title = `Movies <span class="accent">${escapeHtml(SORT_LABELS[state.sort] || "")}</span>`;
       } else if (chips.length) {
@@ -1871,7 +2014,7 @@
     function renderPagination(pageInfo) {
       if (!paginationWrap) return;
       const current = (pageInfo && Number(pageInfo.currentPage)) || state.page;
-      const hasFilter = !!(state.genre || state.format || state.status || state.year);
+      const hasFilter = !!(state.genre || state.format || state.status || state.year || hasPhase2Filters());
       /* Only a CAPPED filtered browse has an unknown end. A search has a real
          lastPage (the snapshot is a fixed size), and any filtered browse below
          the 5,000 cap — a single year always — knows its own last page too. */
@@ -1986,6 +2129,13 @@
         if (state.format) qs.set("format", state.format);
         if (state.status) qs.set("status", state.status);
         if (state.year) qs.set("year", state.year);
+        /* Phase 2 filters ride the same /api/browse call. */
+        if (state.minScore) qs.set("minScore", state.minScore);
+        if (state.maxScore) qs.set("maxScore", state.maxScore);
+        if (state.season) qs.set("season", state.season);
+        if (state.tags.length) qs.set("tags", state.tags.join(","));
+        if (state.startAfter) qs.set("startAfter", state.startAfter);
+        if (state.startBefore) qs.set("startBefore", state.startBefore);
         qs.set("page", String(state.page));
         path = `/api/browse?${qs.toString()}`;
       }
@@ -2143,6 +2293,28 @@
       });
     }
 
+    /* ---- Phase 2 filter panel ---- */
+    if (filtersToggle) {
+      filtersToggle.addEventListener("click", () => {
+        setFiltersOpen(filtersBody ? filtersBody.hidden : false);
+      });
+    }
+    if (tagChipsWrap) {
+      /* Toggle a tag: the chip is a filter, not a single-select, so a tag can
+         be added and removed without losing the others. */
+      tagChipsWrap.addEventListener("click", (e) => {
+        const chip = e.target.closest(".filter-tag-chip");
+        if (!chip) return;
+        const tag = chip.dataset.tag;
+        const idx = state.tags.findIndex((t) => t.toLowerCase() === tag.toLowerCase());
+        if (idx >= 0) state.tags.splice(idx, 1);
+        else state.tags.push(tag);
+        chip.classList.toggle("active", idx < 0);
+      });
+    }
+    if (filtersApply) filtersApply.addEventListener("click", applyFilters);
+    if (filtersReset) filtersReset.addEventListener("click", resetFilters);
+
     /* The header search drives this page live. */
     window.__onSearchLiveFilter = (q) => {
       state.q = (q || "").trim();
@@ -2152,6 +2324,7 @@
          only the genre chip refines the results. */
       if (filterRow) filterRow.hidden = isSearch();
       if (yearSection) yearSection.hidden = isSearch();
+      if (filtersPanel) filtersPanel.hidden = isSearch();
       updateUrl();
       load();
     };
@@ -2159,10 +2332,316 @@
     renderChips();
     renderYears();
     renderYearSection();
+    syncFilterUI();
+    setFiltersOpen(hasPhase2Filters());
     syncYearUI();
     if (filterRow) filterRow.hidden = isSearch();
     if (yearSection) yearSection.hidden = isSearch();
+    if (filtersPanel) filtersPanel.hidden = isSearch();
     updateHeading(null, null);
+    await load();
+  }
+
+  /* ==========================================================================
+     PHASE 2 — LIVE DETAIL METADATA HELPERS
+     Pure functions (no DOM) so server/test/e2e.js can extract and test the
+     exact formatting the page renders: date ranges, season labels, relation
+     grouping and section visibility.
+     ========================================================================== */
+  /* __LIVE_DETAIL_LOGIC_START__ */
+  const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+  function liveDateParts(date) {
+    if (!date) return null;
+    const y = Number(date.year);
+    const m = Number(date.month);
+    const d = Number(date.day);
+    if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) return null;
+    if (m < 1 || m > 12 || d < 1 || d > 31) return null;
+    return { y, m, d };
+  }
+
+  /* "Jan 7 – Mar 31, 2024"; "Jan 7, 2024 –" when the end date is unknown
+     (an airing title); a single date when both ends match. */
+  function liveAiredRange(start, end) {
+    const s = liveDateParts(start);
+    const e = liveDateParts(end);
+    if (!s && !e) return "";
+    const fmt = (p) => `${MONTH_SHORT[p.m - 1]} ${p.d}`;
+    if (s && e) {
+      if (s.y === e.y) {
+        if (s.m === e.m && s.d === e.d) return `${fmt(s)}, ${s.y}`;
+        return `${fmt(s)} – ${fmt(e)}, ${s.y}`;
+      }
+      return `${fmt(s)}, ${s.y} – ${fmt(e)}, ${e.y}`;
+    }
+    if (s) return `${fmt(s)}, ${s.y} –`;
+    return `– ${fmt(e)}, ${e.y}`;
+  }
+
+  function liveSeasonLabel(season) {
+    const map = { WINTER: "Winter", SPRING: "Spring", SUMMER: "Summer", FALL: "Fall" };
+    return map[String(season || "").toUpperCase()] || null;
+  }
+
+  const MORE_SEASONS_TYPES = new Set(["SEQUEL", "PREQUEL"]);
+  const RELATED_ANIME_TYPES = new Set(["ADAPTATION", "SIDE_STORY", "SPIN_OFF", "SUMMARY", "CHARACTER", "OTHER"]);
+
+  function liveRelationLabel(type) {
+    return String(type || "").toLowerCase().replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  }
+
+  function liveMoreSeasons(relations) {
+    return (Array.isArray(relations) ? relations : [])
+      .filter((r) => r && MORE_SEASONS_TYPES.has(String(r.relationType || "").toUpperCase()));
+  }
+
+  function liveRelatedAnime(relations) {
+    return (Array.isArray(relations) ? relations : [])
+      .filter((r) => r && RELATED_ANIME_TYPES.has(String(r.relationType || "").toUpperCase()));
+  }
+
+  /* The top 6 characters, already sliced server-side. */
+  function liveCharacters(characters) {
+    return (Array.isArray(characters) ? characters : []).slice(0, 6);
+  }
+  /* __LIVE_DETAIL_LOGIC_END__ */
+
+  /* ==========================================================================
+     6E. A-Z LIST — az-list.html
+     One letter = one immutable snapshot from /api/az (AniList has no prefix
+     search, so the server filters a SEARCH_MATCH candidate pool by title
+     prefix). "All" is the plain TITLE_ROMAJI browse. A snapshot that hit the
+     server's fetch cap reports pageInfo.capped, and the total is a FLOOR —
+     the heading shows "N+ titles" and never presents the partial set as the
+     whole letter.
+     ========================================================================== */
+
+  async function initAzList() {
+    const grid = document.getElementById("az-grid");
+    if (!grid) return;
+
+    const bar = document.getElementById("az-bar");
+    const headingEl = document.getElementById("az-heading");
+    const subheadingEl = document.getElementById("az-subheading");
+    const paginationWrap = document.getElementById("az-pagination");
+
+    const LETTERS = ["0-9", ...Array.from({ length: 26 }, (_, i) => String.fromCharCode(65 + i))];
+
+    const params = new URLSearchParams(window.location.search);
+    const state = {
+      letter: normalizeAzLetterParam(params.get("letter")),
+      page: (() => {
+        const p = Number(params.get("page"));
+        return Number.isFinite(p) && p > 0 ? Math.floor(p) : 1;
+      })(),
+    };
+
+    /* ---- letter bar ---- */
+    function renderBar() {
+      if (!bar) return;
+      const chips = [`<button class="az-chip${state.letter === "all" ? " active" : ""}" type="button" data-letter="all">All</button>`];
+      for (const letter of LETTERS) {
+        chips.push(`<button class="az-chip${state.letter === letter ? " active" : ""}" type="button" data-letter="${letter}">${letter}</button>`);
+      }
+      bar.innerHTML = chips.join("");
+    }
+
+    function normalizeAzLetterParam(value) {
+      const raw = String(value == null ? "all" : value).trim().toLowerCase();
+      if (!raw || raw === "all") return "all";
+      if (raw === "0-9" || raw === "09" || raw === "digit" || raw === "digits") return "0-9";
+      if (/^[a-z]$/.test(raw)) return raw.toUpperCase();
+      return null;
+    }
+
+    function updateUrl() {
+      const p = new URLSearchParams();
+      if (state.letter !== "all") p.set("letter", state.letter);
+      if (state.page > 1) p.set("page", String(state.page));
+      const qs = p.toString();
+      window.history.replaceState({}, "", `az-list.html${qs ? `?${qs}` : ""}`);
+    }
+
+    function renderSkeleton() {
+      grid.innerHTML = Array.from({ length: LIVE_PAGE_SIZE }, () => `
+        <div class="zoro-card zoro-card-skeleton" aria-hidden="true">
+          <div class="zoro-card-poster skeleton-shimmer"></div>
+          <div class="zoro-card-info">
+            <div class="skeleton-line skeleton-shimmer" style="width: 85%;"></div>
+            <div class="skeleton-line skeleton-shimmer" style="width: 55%;"></div>
+          </div>
+        </div>`).join("");
+    }
+
+    /* The heading shows the letter and the REAL total. A capped snapshot
+       reports a floor, so it gets a "+" (the same convention browse uses for
+       its 5,000 cap). */
+    function updateHeading(pageInfo) {
+      if (!headingEl) return;
+      const total = pageInfo && Number.isFinite(Number(pageInfo.total)) ? Number(pageInfo.total) : null;
+      const capped = !!(pageInfo && pageInfo.capped);
+      const countPart = total == null ? "" : ` <span class="accent">(${total.toLocaleString()}${capped ? "+" : ""} ${total === 1 && !capped ? "title" : "titles"})</span>`;
+      const label = state.letter === "all" ? "A-Z <span class=\"accent\">Anime List</span>"
+        : `${escapeHtml(state.letter)} <span class=\"accent\">Anime</span>`;
+      headingEl.innerHTML = `<span>${label}${countPart}</span>`;
+      if (subheadingEl) {
+        subheadingEl.textContent = state.letter === "all"
+          ? "The whole live catalog, sorted by title."
+          : `Titles whose name starts with “${state.letter}”.`;
+      }
+    }
+
+    /* Pagination: same windowed controls as browse. A letter's last page is
+       always known (the snapshot is a fixed set), so no "+" floor mark here —
+       the capped "+" belongs to the TOTAL only. */
+    function renderPagination(pageInfo) {
+      if (!paginationWrap) return;
+      const current = (pageInfo && Number(pageInfo.currentPage)) || state.page;
+      const last = (pageInfo && Number(pageInfo.lastPage)) || 1;
+      if (last <= 1 && !(pageInfo && pageInfo.hasNextPage)) {
+        paginationWrap.hidden = true;
+        paginationWrap.innerHTML = "";
+        return;
+      }
+      const pages = [];
+      pages.push(1);
+      const from = Math.max(2, current - 2);
+      const to = Math.min(last - 1, current + 2);
+      if (from > 2) pages.push("…");
+      for (let p = from; p <= to; p++) pages.push(p);
+      if (to < last - 1) pages.push("…");
+      if (last > 1) pages.push(last);
+
+      let html = `<button class="page-btn" type="button" data-page="${current - 1}"${current === 1 ? " disabled" : ""} aria-label="Previous page">‹ Prev</button>`;
+      for (const p of pages) {
+        if (p === "…") {
+          html += `<span class="page-btn" style="border:none; background:none; cursor:default;">…</span>`;
+        } else {
+          html += `<button class="page-btn${p === current ? " active" : ""}" type="button" data-page="${p}"${p === current ? ' aria-current="page"' : ""}>${p}</button>`;
+        }
+      }
+      html += `<button class="page-btn" type="button" data-page="${current + 1}"${current >= last ? " disabled" : ""} aria-label="Next page">Next ›</button>`;
+      if (last > 1) {
+        html += `<span class="page-btn" style="border:none; background:none; cursor:default;" aria-live="polite">Page ${current} of ${last}</span>`;
+      }
+      paginationWrap.innerHTML = html;
+      paginationWrap.hidden = false;
+    }
+
+    function renderEmpty() {
+      grid.innerHTML = `
+        <div class="zoro-empty-state">
+          <div class="zoro-empty-state-icon">
+            <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+          </div>
+          <h3 class="zoro-empty-state-title">No Anime Found</h3>
+          <p class="zoro-empty-state-msg">We couldn't find any titles for “${escapeHtml(state.letter)}”. Try another letter.</p>
+          <a href="az-list.html" class="empty-state-browse-link">Back to A-Z List</a>
+        </div>`;
+      if (paginationWrap) {
+        paginationWrap.hidden = true;
+        paginationWrap.innerHTML = "";
+      }
+    }
+
+    async function renderLibraryFallback() {
+      renderLiveNotice(LIVE_LIBRARY_MESSAGE, "library");
+      const res = await api("/api/titles?limit=18");
+      const titles = (res.ok && res.data && Array.isArray(res.data.titles)) ? res.data.titles : [];
+      if (!titles.length) {
+        grid.innerHTML = `<div class="zoro-empty-state"><h3 class="zoro-empty-state-title">Nothing to show</h3><p class="zoro-empty-state-msg">The catalog could not be reached right now. Please try again in a moment.</p></div>`;
+        return;
+      }
+      grid.innerHTML = titles.map((t) => `
+        <div class="zoro-card" data-slug="${escapeHtml(t.slug)}" data-title="${escapeHtml(t.name)}">
+          <a class="zoro-card-poster" href="${detailHref(t.slug)}">
+            <img src="${coverOf(t)}" alt="${escapeHtml(t.name)}" loading="lazy" decoding="async">
+            <div class="zoro-play-overlay"><div class="zoro-play-circle">▶</div></div>
+            <div class="zoro-poster-badges">
+              <div class="badges-left">${subBadge(t)}${dubBadge(t)}</div>
+            </div>
+          </a>
+          <div class="zoro-card-info">
+            <a class="zoro-card-title" href="${detailHref(t.slug)}">${escapeHtml(t.name)}</a>
+            <div class="zoro-card-submeta"><span>${escapeHtml(t.kind || "Series")}</span> • <span>${escapeHtml(String(t.year || "—"))}</span></div>
+          </div>
+        </div>`).join("");
+      if (paginationWrap) {
+        paginationWrap.hidden = true;
+        paginationWrap.innerHTML = "";
+      }
+      markContentReady();
+    }
+
+    let loadToken = 0;
+    async function load() {
+      const token = ++loadToken;
+      renderSkeleton();
+      updateHeading(null);
+      /* "All" is the plain A-Z browse; a letter is served by /api/az. */
+      const path = state.letter === "all"
+        ? `/api/browse?sort=az&page=${state.page}`
+        : `/api/az?letter=${encodeURIComponent(state.letter)}&page=${state.page}`;
+      const res = await api(path);
+      if (token !== loadToken) return;
+
+      if (!res.ok) {
+        await renderLibraryFallback();
+        updateHeading(null);
+        return;
+      }
+
+      renderLiveNotice(null);
+      const data = res.data || {};
+      const pageInfo = data.pageInfo || {};
+      const results = Array.isArray(data.results) ? data.results : [];
+
+      if (!results.length) {
+        renderEmpty();
+        updateHeading(pageInfo);
+        return;
+      }
+
+      grid.innerHTML = results.map((t) => renderLiveCard(t)).join("");
+      updateHeading(pageInfo);
+      renderPagination(pageInfo);
+      markContentReady();
+    }
+
+    if (bar) {
+      bar.addEventListener("click", (e) => {
+        const chip = e.target.closest(".az-chip");
+        if (!chip) return;
+        const letter = normalizeAzLetterParam(chip.dataset.letter);
+        if (!letter || letter === state.letter) return;
+        state.letter = letter;
+        state.page = 1;
+        renderBar();
+        updateUrl();
+        load();
+      });
+    }
+
+    if (paginationWrap) {
+      paginationWrap.addEventListener("click", (e) => {
+        const btn = e.target.closest(".page-btn");
+        if (!btn || btn.disabled) return;
+        const p = Number(btn.dataset.page);
+        if (!Number.isFinite(p) || p === state.page) return;
+        state.page = p;
+        updateUrl();
+        load();
+        const top = grid.getBoundingClientRect().top + window.scrollY - 90;
+        window.scrollTo({ top: Math.max(0, top), behavior: "instant" });
+      });
+    }
+
+    renderBar();
+    updateHeading(null);
     await load();
   }
 
@@ -2175,6 +2654,7 @@
   async function initLiveRails() {
     const rails = [
       { id: "live-top-airing-grid", path: "/api/browse?sort=popular&status=RELEASING&page=1", mode: "browse" },
+      { id: "live-top-upcoming-grid", path: "/api/browse?sort=popular&status=NOT_YET_RELEASED&page=1", mode: "browse" },
       { id: "live-trending-grid", path: "/api/browse?sort=trending&page=1", mode: "browse" },
       { id: "live-top-rated-grid", path: "/api/browse?sort=top&page=1", mode: "browse" },
       { id: "live-latest-episodes-grid", path: "/api/airing?page=1", mode: "airing" },
@@ -3241,7 +3721,12 @@
         if (el) el.textContent = val;
       };
       setText("watch-detail-status", liveStatusLabel(titleData));
-      setText("watch-detail-studios", "—");
+      setText("watch-detail-studios", (titleData.studios || []).join(", ") || "—");
+      setText("watch-detail-aired", liveAiredRange(titleData.startDate, titleData.endDate) || "—");
+      const liveSeason = liveSeasonLabel(titleData.season);
+      setText("watch-detail-season", liveSeason || "—");
+      const seasonRow = document.getElementById("watch-detail-season-row");
+      if (seasonRow) seasonRow.hidden = !liveSeason;
       setText("watch-detail-year", titleData.year || "—");
       setText("watch-detail-score", scoreLabel(titleData) ? `★ ${scoreLabel(titleData)} / 10` : "—");
       setText("watch-detail-episodes", titleData.episodes != null ? titleData.episodes : "—");
@@ -5043,15 +5528,22 @@
       `;
     }
     const trackLabel = document.getElementById("detail-track-label");
-    if (trackLabel) trackLabel.textContent = "SUB / DUB";
+    /* A live title has no dub data (AniList knows nothing about dubs), so the
+       track label must never claim SUB / DUB. */
+    if (trackLabel) trackLabel.textContent = "SUB";
 
     const meta = document.getElementById("detail-meta");
     if (meta) {
+      const aired = liveAiredRange(t.startDate, t.endDate);
+      const season = liveSeasonLabel(t.season);
       meta.innerHTML = `
         <span><strong>Year:</strong> ${t.year || "—"}</span>
+        <span><strong>Aired:</strong> ${escapeHtml(aired || "—")}</span>
+        ${season ? `<span><strong>Season:</strong> ${escapeHtml(season)}</span>` : ""}
         <span><strong>Status:</strong> ${escapeHtml(liveStatusLabel(t))}</span>
         <span><strong>Episodes:</strong> ${t.episodes != null ? t.episodes : (airedCount || "—")}</span>
         <span><strong>Format:</strong> ${escapeHtml(liveFormatLabel(t))}</span>
+        <span><strong>Studios:</strong> ${escapeHtml((t.studios || []).join(", ") || "—")}</span>
         <span><strong>Duration:</strong> ${t.runtimeMin ? t.runtimeMin + "m" : "—"}</span>
         ${next ? `<span><strong>Next episode:</strong> Ep ${next.episode} on ${escapeHtml(formatAiringDate(next.airingAt))}</span>` : ""}
       `;
@@ -5061,6 +5553,13 @@
       genresEl.innerHTML = (t.genres || [])
         .map((g) => `<a class="genre-chip-zoro" href="browse.html?genre=${encodeURIComponent(g)}">${escapeHtml(genreLabel(g))}</a>`)
         .join("");
+      /* AniList TAGS (not genres) are a separate list; they link to the same
+         tag filter the browse panel uses. No tags -> nothing is appended. */
+      const tagChips = (t.tags || [])
+        .filter((tag) => tag && tag.name)
+        .map((tag) => `<a class="genre-chip-zoro" href="browse.html?tags=${encodeURIComponent(tag.name)}">${escapeHtml(tag.name)}</a>`)
+        .join("");
+      if (tagChips) genresEl.innerHTML += tagChips;
     }
     const syn = document.getElementById("detail-synopsis");
     if (syn) syn.textContent = t.synopsis || "";
@@ -5105,6 +5604,63 @@
         epList.innerHTML = rows.join("");
       }
       epList.classList.toggle("single-episode", airedCount === 1);
+    }
+
+    /* Phase 2 live metadata. Every section is HIDDEN until it has data — an
+       empty studios list or an anime with no relations renders nothing. */
+    const castSection = document.getElementById("detail-cast-section");
+    const castGrid = document.getElementById("detail-cast-grid");
+    const cast = liveCharacters(t.characters);
+    if (castSection && castGrid) {
+      if (cast.length) {
+        castGrid.innerHTML = cast.map((c) => `
+          <div class="live-cast-card">
+            <img src="${escapeHtml(c.image || LIVE_POSTER_FALLBACK)}" alt="${escapeHtml(c.name || "")}" loading="lazy" decoding="async" ${livePosterAttrs()}>
+            <div>
+              <div class="live-cast-name">${escapeHtml(c.name || "")}</div>
+              <div class="live-cast-va">${c.voiceActor && c.voiceActor.name ? `<strong>VA:</strong> ${escapeHtml(c.voiceActor.name)}` : ""}</div>
+            </div>
+          </div>`).join("");
+        castSection.hidden = false;
+      } else {
+        castSection.hidden = true;
+      }
+    }
+
+    const relationCard = (r) => {
+      const href = r.anilistId != null
+        ? `detail.html?live=${encodeURIComponent(r.anilistId)}`
+        : "browse.html";
+      return `
+        <a class="live-relation-card" href="${href}">
+          <img src="${escapeHtml(r.cover || LIVE_POSTER_FALLBACK)}" alt="${escapeHtml(r.name || "")}" loading="lazy" decoding="async" ${livePosterAttrs()}>
+          <div class="live-relation-name">${escapeHtml(r.name || "")}</div>
+          <div class="live-relation-type">${escapeHtml(liveRelationLabel(r.relationType))}</div>
+        </a>`;
+    };
+
+    const moreSeasonsSection = document.getElementById("detail-more-seasons-section");
+    const moreSeasonsGrid = document.getElementById("detail-more-seasons-grid");
+    const moreSeasons = liveMoreSeasons(t.relations);
+    if (moreSeasonsSection && moreSeasonsGrid) {
+      if (moreSeasons.length) {
+        moreSeasonsGrid.innerHTML = moreSeasons.map(relationCard).join("");
+        moreSeasonsSection.hidden = false;
+      } else {
+        moreSeasonsSection.hidden = true;
+      }
+    }
+
+    const relatedSection = document.getElementById("detail-related-section");
+    const relatedGrid = document.getElementById("detail-related-grid");
+    const related = liveRelatedAnime(t.relations);
+    if (relatedSection && relatedGrid) {
+      if (related.length) {
+        relatedGrid.innerHTML = related.map(relationCard).join("");
+        relatedSection.hidden = false;
+      } else {
+        relatedSection.hidden = true;
+      }
     }
 
     /* Recommendations: live titles from the same genres. */
@@ -5579,6 +6135,7 @@
     initGenresPage();
     initWatchPage();
     initDetailPage();
+    initAzList();
 
     /* The continue-watching rail needs the resolved auth state. */
     authReady.then(() => initContinueWatchingRail());
@@ -5589,7 +6146,8 @@
       document.getElementById("spotlight-slider-container") ||
       document.getElementById("schedule-timeline-container") ||
       document.getElementById("zoro-video-stage") ||
-      document.getElementById("detail-stage")
+      document.getElementById("detail-stage") ||
+      document.getElementById("az-grid")
     );
     if (!hasDynamicContent) markContentReady();
 

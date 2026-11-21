@@ -30,6 +30,9 @@ import {
   withRealYearTotal,
   getLiveTitle,
   getAiringSchedule,
+  azAniList,
+  AZ_PAGE_SIZE,
+  normalizeAzLetter,
 } from "./anilist.js";
 import {
   ApiError,
@@ -639,6 +642,12 @@ app.get("/api/browse", async (req, res, next) => {
       format: req.query.format,
       status: req.query.status,
       year: req.query.year,
+      tags: req.query.tags,
+      season: req.query.season,
+      minScore: req.query.minScore,
+      maxScore: req.query.maxScore,
+      startAfter: req.query.startAfter,
+      startBefore: req.query.startBefore,
       page: req.query.page,
     };
     const live = await browseAniList(browseArgs);
@@ -653,6 +662,58 @@ app.get("/api/browse", async (req, res, next) => {
       page: Math.max(toInt(req.query.page, 1), 1),
       results: live.results.map((item) => withCatalogSlug(item, index)),
       pageInfo,
+    });
+  } catch (err) {
+    if (err instanceof AniListBusyError) return busyResponse(res);
+    next(err);
+  }
+});
+
+/* GET /api/az?letter=<A-Z|0-9|all>&page=<n>
+   A-Z index over the live catalog. AniList has no prefix search, so a letter
+   is served from a SEARCH_MATCH snapshot (10 pages x 50, 30-min cache,
+   in-flight dedup) filtered server-side to romaji/english prefix matches.
+   A snapshot that hit the fetch cap is flagged `capped` — the total is a
+   FLOOR and the UI must label it with a "+". letter=all is the plain
+   TITLE_ROMAJI browse (the A-Z "All" view uses /api/browse?sort=az). */
+app.get("/api/az", async (req, res, next) => {
+  try {
+    const letter = normalizeAzLetter(req.query.letter);
+    if (!letter) {
+      return res.status(400).json({ ok: false, error: "bad_letter" });
+    }
+    const page = Math.max(toInt(req.query.page, 1), 1);
+    const index = catalogIndex();
+
+    if (letter === "all") {
+      const live = await browseAniList({ sort: "az", page });
+      const pageInfo = await withRealYearTotal(live.pageInfo, { sort: "az", page });
+      return res.json({
+        ok: true,
+        letter: "all",
+        page: Math.max(toInt(req.query.page, 1), 1),
+        results: live.results.map((item) => withCatalogSlug(item, index)),
+        pageInfo,
+      });
+    }
+
+    const snap = await azAniList(letter);
+    const total = snap.total;
+    const lastPage = Math.max(1, Math.ceil(total / AZ_PAGE_SIZE));
+    const safePage = Math.min(page, lastPage);
+    const start = (safePage - 1) * AZ_PAGE_SIZE;
+    res.json({
+      ok: true,
+      letter,
+      page: safePage,
+      results: snap.items.slice(start, start + AZ_PAGE_SIZE).map((item) => withCatalogSlug(item, index)),
+      pageInfo: {
+        total,
+        currentPage: safePage,
+        lastPage,
+        hasNextPage: safePage < lastPage,
+        capped: !!snap.capped,
+      },
     });
   } catch (err) {
     if (err instanceof AniListBusyError) return busyResponse(res);
