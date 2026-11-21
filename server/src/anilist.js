@@ -250,7 +250,7 @@ export const LIVE_DETAIL_FIELDS = `
   }
   /* "More Like This": AniList's own recommendation edges. Screened like
      everything else (a recommendation can point at an adult title). */
-  recommendations(first: 12) {
+  recommendations(perPage: 12) {
     nodes {
       rating
       mediaRecommendation { id idMal isAdult title { romaji english } coverImage { large } averageScore format }

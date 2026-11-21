@@ -1626,7 +1626,7 @@ async function runTests() {
       assert.equal(recs[0].cover, "/api/cover?url=https%3A%2F%2Fs4.anilist.co%2Frec1.jpg", "AniList covers are same-origin");
       assert.equal(recs[0].rating, 90, "the real edge rating is carried");
       assert.equal(anilistRequests.length, 1, "recommendations ride the ONE detail query");
-      assert.ok(anilistRequests[0].query.includes("recommendations(first: 12)"), "the detail query asks for recommendations");
+      assert.ok(anilistRequests[0].query.includes("recommendations(perPage: 12)"), "the detail query asks for recommendations");
       resetAniListMock();
     });
 
