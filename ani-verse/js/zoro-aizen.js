@@ -17,6 +17,85 @@
       .replace(/'/g, "&#39;");
   }
 
+  /* __COMMENT_TEXT_LOGIC_START__ */
+  /* The API serves comment names/bodies HTML-escaped. Decode the FIVE entities
+     the server can emit (in this order, &amp; last) before handing the text to
+     textContent — the browser never parses it as markup. */
+  function decodeHtml(value) {
+    if (value == null) return "";
+    return String(value)
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&amp;/g, "&");
+  }
+
+  /* One comment row, built with DOM APIs ONLY: the name and body are assigned
+     via textContent, never innerHTML, so a stored payload can never become
+     markup. Lives in this marked block so the tests can render a comment
+     against a minimal fake DOM and prove no SCRIPT/IMG element is produced. */
+  function buildCommentNode(c) {
+    const wrap = document.createElement("div");
+    wrap.className = "single-comment";
+
+    const name = decodeHtml(c && c.user_name) || "";
+    const body = decodeHtml(c && c.content) || "";
+
+    const avatar = document.createElement("div");
+    avatar.className = "user-comment-avatar";
+    avatar.textContent = (name || "U").charAt(0).toUpperCase();
+
+    const main = document.createElement("div");
+    main.style.flex = "1";
+
+    const head = document.createElement("div");
+    const nameEl = document.createElement("span");
+    nameEl.className = "comment-user-name";
+    nameEl.textContent = name || "User";
+    head.appendChild(nameEl);
+
+    if (c && c.is_guest) {
+      const badge = document.createElement("span");
+      badge.className = "badge-mini-guest";
+      badge.textContent = "Guest";
+      head.appendChild(badge);
+    }
+
+    const dateEl = document.createElement("span");
+    dateEl.className = "comment-date";
+    dateEl.textContent = new Date(c.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    head.appendChild(dateEl);
+
+    const textEl = document.createElement("div");
+    textEl.className = "comment-body-text";
+    textEl.textContent = body;
+
+    main.appendChild(head);
+    main.appendChild(textEl);
+    wrap.appendChild(avatar);
+    wrap.appendChild(main);
+    return wrap;
+  }
+  /* __COMMENT_TEXT_LOGIC_END__ */
+
+  /* __AUTONEXT_LOGIC_START__ */
+  /* Auto-next decision — ONE pure function for every player that reports an
+     end-of-episode event (Zoko `ended`, MegaPlay `complete`). The TVplus
+     backup emits no such event, so it never reaches here. totalEps is the
+     title's real count (the AIRED count for a live title); 0 = unknown, and
+     an unknown count must NEVER invent a next episode. */
+  function autoNextAction({ server, currentEp, totalEps, autonext }) {
+    if (server === "backup") return { action: "none" };
+    if (!autonext) return { action: "none" };
+    const total = Number(totalEps) || 0;
+    const current = Number(currentEp) || 0;
+    if (total <= 0) return { action: "none" };
+    if (current >= total) return { action: "completed" };
+    return { action: "next", nextEp: current + 1 };
+  }
+  /* __AUTONEXT_LOGIC_END__ */
+
   /* ---- Real metadata helpers (Phase 1) ----
      Local cover art is the primary image; the remote URL is only a fallback.
      Title cards/links navigate to the detail page; explicit "Watch"/"Resume"
@@ -377,6 +456,20 @@
     if (section) section.hidden = false;
   }
 
+  /* Catalog "More Like This" — up to 6 same-genre catalog titles. ONE helper
+     shared by the catalog detail page and the watch page, so both rails pick
+     the same titles in the same order. Live titles use AniList's own
+     recommendation edges (already in the /api/live payload), never this. */
+  function sameGenreRecommendations(titles, currentSlug, genres) {
+    const myGenres = new Set((genres || []).map((g) => String(g).toLowerCase()));
+    return (Array.isArray(titles) ? titles : [])
+      .filter((o) => o && o.slug && o.slug !== currentSlug && !o.isAdult)
+      .map((o) => ({ o, shared: (o.genres || []).filter((g) => myGenres.has(String(g).toLowerCase())).length }))
+      .filter((x) => x.shared > 0)
+      .sort((a, b) => b.shared - a.shared || (b.o.score || 0) - (a.o.score || 0))
+      .map((x) => x.o);
+  }
+
   /* One live card — same markup/style as the catalog cards. */
   function renderLiveCard(t, opts = {}) {
     if (!t) return "";
@@ -576,6 +669,37 @@
   function clearPlayerToasts() {
     document.querySelectorAll(".aizen-toast-container, #zoro-toasts").forEach((c) => {
       c.innerHTML = "";
+    });
+  }
+
+  /* ==========================================================================
+     LIGHT / DARK THEME (Phase 3b)
+     ========================================================================== */
+
+  const LS_THEME_KEY = "av_theme";
+
+  function currentTheme() {
+    return document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
+  }
+
+  function applyTheme(theme) {
+    document.documentElement.setAttribute("data-theme", theme);
+    const btn = document.getElementById("btn-theme-toggle");
+    if (btn) btn.setAttribute("aria-pressed", theme === "light" ? "true" : "false");
+  }
+
+  /* The palette itself lives in zoro-aizen.css ([data-theme="light"]); this
+     only owns the attribute and the persisted choice. An inline head script
+     already set the attribute before first paint, so there is no flash. */
+  function initThemeToggle() {
+    const btn = document.getElementById("btn-theme-toggle");
+    if (!btn) return;
+    applyTheme(currentTheme());
+    btn.addEventListener("click", () => {
+      const next = currentTheme() === "light" ? "dark" : "light";
+      applyTheme(next);
+      try { localStorage.setItem(LS_THEME_KEY, next); } catch {}
+      showToast(next === "light" ? "Light theme" : "Dark theme");
     });
   }
 
@@ -3893,6 +4017,27 @@
       return (titleData && titleData.episodes) || episodesList.length || 0;
     }
 
+    /* "More Like This" rail under the player (Phase 3b).
+       Live titles: the recommendation edges are ALREADY in the /api/live
+       payload — no second query. Catalog titles: the same same-genre shelf
+       the catalog detail page renders. Empty -> fillRecommendations hides the
+       section, so a title with no recommendations shows nothing at all. */
+    async function loadWatchRecommendations() {
+      const wrap = document.getElementById("detail-recommendations");
+      if (!wrap) return;
+      if (isLive) {
+        const recs = (titleData && Array.isArray(titleData.recommendations)) ? titleData.recommendations : [];
+        fillRecommendations(recs.filter((r) => r && !r.isAdult));
+        return;
+      }
+      const res = await fetchTitles(100);
+      if (res.ok && res.data && Array.isArray(res.data.titles)) {
+        fillRecommendations(sameGenreRecommendations(res.data.titles, currentSlug, titleData && titleData.genres));
+      } else {
+        fillRecommendations([]);
+      }
+    }
+
     /* LIVE title details — /api/live/:anilistId.
        The episode list comes from the AIRED episode count: an airing title
        has aired (nextAiringEpisode.episode - 1) episodes, a finished title
@@ -3975,6 +4120,7 @@
 
       renderEpisodesGrid();
       updateEpisodeNavState();
+      loadWatchRecommendations();
       markContentReady();
       return true;
     }
@@ -4041,6 +4187,7 @@
       renderEpisodesGrid();
       updateEpisodeNavState();
       /* The episode list is the watch page's real content. */
+      loadWatchRecommendations();
       markContentReady();
       return true;
     }
@@ -4862,6 +5009,34 @@
       });
     }
 
+    /* ---- Theater mode (Phase 3b) ----
+       Layout only: the player column takes the full content width and the
+       episode sidebar is hidden. The iframe is never touched, so this behaves
+       identically on Zoko, TVplus and MegaPlay. The choice is persisted per
+       browser (localStorage) and restored before the first paint of the page
+       logic. */
+    const LS_THEATER_KEY = "av_theater_mode";
+    const watchLayout = document.querySelector(".watch-layout");
+    const theaterBtn = document.getElementById("btn-theater-mode");
+    function applyTheaterMode(on) {
+      if (watchLayout) watchLayout.classList.toggle("theater-mode", on);
+      if (theaterBtn) {
+        theaterBtn.classList.toggle("active", on);
+        theaterBtn.setAttribute("aria-pressed", on ? "true" : "false");
+      }
+    }
+    try {
+      applyTheaterMode(localStorage.getItem(LS_THEATER_KEY) === "1");
+    } catch {}
+    if (theaterBtn) {
+      theaterBtn.addEventListener("click", () => {
+        const on = !(watchLayout && watchLayout.classList.contains("theater-mode"));
+        applyTheaterMode(on);
+        try { localStorage.setItem(LS_THEATER_KEY, on ? "1" : "0"); } catch {}
+        showToast(on ? "Theater mode on" : "Theater mode off");
+      });
+    }
+
     // Play/Pause button
     if (playPauseBtn) {
       playPauseBtn.addEventListener("click", () => {
@@ -5080,11 +5255,16 @@
           if (playerEp == null || playerEp !== currentEp) return;
           /* totalEpisodes() is the AIRED count for live titles — auto-next
              must never jump to an episode that has not aired yet. */
-          const totalEps = totalEpisodes() || 12;
-          if (playerSettings.autonext && currentEp < totalEps) {
-            showToast(`Episode finished! Auto-playing Episode ${currentEp + 1}...`);
-            setTimeout(() => loadEpisode(currentEp + 1), 1500);
-          } else if (currentEp >= totalEps) {
+          const decision = autoNextAction({
+            server: "megaplay",
+            currentEp,
+            totalEps: totalEpisodes(),
+            autonext: playerSettings.autonext,
+          });
+          if (decision.action === "next") {
+            showToast(`Episode finished! Auto-playing Episode ${decision.nextEp}...`);
+            setTimeout(() => loadEpisode(decision.nextEp), 1500);
+          } else if (decision.action === "completed") {
             showToast("You finished this anime!");
           }
           return;
@@ -5390,12 +5570,18 @@
         if (!eventIsForCurrentLoad) return;
         markPlayerSettled();
         /* totalEpisodes() is the AIRED count for live titles — auto-next must
-           never jump to an episode that has not aired yet. */
-        const totalEps = totalEpisodes() || 12;
-        if (playerSettings.autonext && currentEp < totalEps) {
-          showToast(`Episode finished! Auto-playing Episode ${currentEp + 1}...`);
-          setTimeout(() => loadEpisode(currentEp + 1), 1500);
-        } else if (currentEp >= totalEps) {
+           never jump to an episode that has not aired yet, and an unknown
+           count (0) must never invent one. */
+        const decision = autoNextAction({
+          server: "zoko",
+          currentEp,
+          totalEps: totalEpisodes(),
+          autonext: playerSettings.autonext,
+        });
+        if (decision.action === "next") {
+          showToast(`Episode finished! Auto-playing Episode ${decision.nextEp}...`);
+          setTimeout(() => loadEpisode(decision.nextEp), 1500);
+        } else if (decision.action === "completed") {
           showToast("You finished this anime!");
         }
       }
@@ -5593,20 +5779,8 @@
           list.innerHTML = `<p style="color: var(--text-muted); font-size: 0.85rem; padding: 12px 0;">No comments on this episode yet. Be the first to start the discussion!</p>`;
           return;
         }
-        list.innerHTML = comments
-          .map((c) => `
-            <div class="single-comment">
-              <div class="user-comment-avatar">${(c.user_name || "U")[0].toUpperCase()}</div>
-              <div style="flex: 1;">
-                <div>
-                  <span class="comment-user-name">${c.user_name}</span>
-                  <span class="comment-date">${new Date(c.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
-                </div>
-                <div class="comment-body-text">${c.content}</div>
-              </div>
-            </div>
-          `)
-          .join("");
+        list.textContent = "";
+        for (const c of comments) list.appendChild(buildCommentNode(c));
       } else {
         if (countEl) countEl.textContent = "Comments unavailable";
         list.innerHTML = `
@@ -5624,39 +5798,54 @@
       form.dataset.zoroCommentsBound = "true";
       form.addEventListener("submit", async (e) => {
         e.preventDefault();
-        if (!currentUser) {
-          openAuthModal("login");
-          return;
-        }
         const text = input ? input.value.trim() : "";
         if (!text) return;
 
+        /* Guests post with a display name; a signed-in user's name is their
+           account name (the server ignores `name` when a session is present). */
+        const payload = { content: text };
+        const nameInput = document.getElementById("zoro-comment-name");
+        if (!currentUser) {
+          const guestName = nameInput ? nameInput.value.trim() : "";
+          if (!guestName) {
+            showToast("Please enter a name to comment.", "!", 3000);
+            if (nameInput) nameInput.focus();
+            return;
+          }
+          payload.name = guestName;
+        }
+
         const res = await api(`/api/comments/${encodeURIComponent(slug)}/${activeEpisode}`, {
           method: "POST",
-          body: { content: text },
+          body: payload,
         });
 
         if (res.ok) {
           input.value = "";
+          if (nameInput) nameInput.value = "";
           loadComments(true);
           showToast("Comment published!");
+        } else {
+          const msg = res.data && res.data.error && res.data.error.message;
+          showToast(msg || "Could not post your comment.", "!", 4000);
         }
       });
     }
 
-    /* Signed-out state: posting requires sign-in, so the box must LOOK
-       unavailable — disabled textarea, "Sign in to comment" placeholder and
-       a button that opens the auth modal instead of pretending to post. */
+    /* Guest comments: the box is ALWAYS usable. Signed out, a name field
+       appears above the textarea; signed in, it is hidden and the account
+       name is used. (The old signed-out state disabled the textarea and
+       forced a sign-in — Phase 3b removes that gate.) */
     const submitBtn = form ? form.querySelector('button[type="submit"]') : null;
     function applyCommentAuthState() {
       if (!form || !input) return;
       const signedIn = !!currentUser;
-      form.classList.toggle("is-signed-out", !signedIn);
-      input.disabled = !signedIn;
-      input.placeholder = signedIn
-        ? "Join the discussion... Share your thoughts about this episode!"
-        : "Sign in to comment";
-      if (submitBtn) submitBtn.textContent = signedIn ? "Post Comment" : "Sign in to Comment";
+      const nameInput = document.getElementById("zoro-comment-name");
+      if (nameInput) nameInput.hidden = signedIn;
+      form.classList.toggle("is-guest", !signedIn);
+      input.disabled = false;
+      input.placeholder = "Join the discussion... Share your thoughts about this episode!";
+      if (submitBtn) submitBtn.textContent = "Post Comment";
     }
     applyCommentAuthState();
     if (form && form.dataset.zoroCommentAuthBound !== "true") {
@@ -6105,19 +6294,13 @@
     }
 
     // Recommendations: up to 6 same-genre catalog titles, rendered by the
-    // ONE shared "More Like This" renderer the live detail page also uses.
+    // ONE shared "More Like This" renderer the live detail page and the watch
+    // page also use.
     const recWrap = document.getElementById("detail-recommendations");
     if (recWrap) {
       const allRes = await api("/api/titles?limit=100");
       if (allRes.ok && allRes.data && Array.isArray(allRes.data.titles)) {
-        const myGenres = new Set((t.genres || []).map((g) => g.toLowerCase()));
-        const recs = allRes.data.titles
-          .filter((o) => o.slug !== slug)
-          .map((o) => ({ o, shared: (o.genres || []).filter((g) => myGenres.has(g.toLowerCase())).length }))
-          .filter((x) => x.shared > 0)
-          .sort((a, b) => b.shared - a.shared || (b.o.score || 0) - (a.o.score || 0))
-          .map((x) => x.o);
-        fillRecommendations(recs);
+        fillRecommendations(sameGenreRecommendations(allRes.data.titles, slug, t.genres));
       } else {
         fillRecommendations([]);
       }
@@ -6324,6 +6507,7 @@
   if (document.body) initAizenIntro();
 
   document.addEventListener("DOMContentLoaded", () => {
+    initThemeToggle();
     initMobileDrawer();
     initSearch();
 

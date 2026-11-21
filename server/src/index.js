@@ -12,6 +12,14 @@ import {
   PASSWORD_MAX,
   NAME_MIN,
   NAME_MAX,
+  COMMENT_NAME_MAX,
+  COMMENT_TEXT_MAX,
+  COMMENT_RATE_LIMIT_MS,
+  LOGIN_MAX_ATTEMPTS,
+  LOGIN_WINDOW_MS,
+  REGISTER_MAX_ATTEMPTS,
+  REGISTER_WINDOW_MS,
+  TRUST_PROXY,
   HISTORY_LIMIT,
   CONTINUE_LIMIT,
   ZOKO_EMBED_ORIGIN,
@@ -22,6 +30,7 @@ import {
 import { db } from "./db.js";
 import { buildEmbedUrl, ZOKO_SOURCES, ZOKO_TRACKS } from "./zoko.js";
 import { checkDubAvailability } from "./dub-check.js";
+import { createRateLimiter } from "./ratelimit.js";
 import {
   AniListBusyError,
   searchAniList,
@@ -51,6 +60,8 @@ import {
   burnPasswordCheck,
   normalizeEmail,
   cleanText,
+  escapeHtml,
+  tooManyRequests,
   parseCookies,
   toInt,
   userView,
@@ -58,6 +69,24 @@ import {
 } from "./utils.js";
 
 const app = express();
+
+/* Behind Caddy the peer is the proxy; trust X-Forwarded-For only when the
+   operator explicitly enables it (see config.TRUST_PROXY). */
+app.set("trust proxy", TRUST_PROXY);
+
+/* Client IP for the rate limits. req.ip already honours X-Forwarded-For when
+   trust proxy is on; normalise the IPv6-mapped loopback forms so one client
+   cannot split its quota across ::1 / ::ffff:127.0.0.1. */
+function clientIp(req) {
+  const raw = req.ip || (req.socket && req.socket.remoteAddress) || "unknown";
+  return String(raw).replace(/^::ffff:/i, "").replace(/^\[|\]$/g, "");
+}
+
+/* In-memory throttles. A restart clears them — fine for abuse control. */
+const loginIpLimiter = createRateLimiter({ max: LOGIN_MAX_ATTEMPTS, windowMs: LOGIN_WINDOW_MS });
+const loginAccountLimiter = createRateLimiter({ max: LOGIN_MAX_ATTEMPTS, windowMs: LOGIN_WINDOW_MS });
+const registerLimiter = createRateLimiter({ max: REGISTER_MAX_ATTEMPTS, windowMs: REGISTER_WINDOW_MS });
+const commentLimiter = createRateLimiter({ max: 1, windowMs: COMMENT_RATE_LIMIT_MS });
 
 // Body parser
 app.use(express.json());
@@ -161,6 +190,17 @@ function requireAuth(req, res, next) {
 
 app.post("/api/auth/register", async (req, res, next) => {
   try {
+    /* 5 registration attempts per IP per hour — counted before any work so
+       a flood cannot burn password hashing. */
+    const ip = clientIp(req);
+    const rl = registerLimiter.check(`ip:${ip}`);
+    if (!rl.allowed) {
+      throw tooManyRequests(
+        "Too many accounts created from this address. Please try again later.",
+        Math.ceil(rl.retryAfterMs / 1000)
+      );
+    }
+
     const email = normalizeEmail(req.body.email);
     const password = typeof req.body.password === "string" ? req.body.password : "";
     const name = cleanText(req.body.name);
@@ -215,7 +255,21 @@ app.post("/api/auth/register", async (req, res, next) => {
 
 app.post("/api/auth/login", async (req, res, next) => {
   try {
+    /* 5 attempts per 15 minutes, per IP AND per account — whichever trips
+       first. Counted before the credential check so a spray is throttled
+       even when every guess is wrong. */
     const email = normalizeEmail(req.body.email);
+    const ip = clientIp(req);
+    const ipCheck = loginIpLimiter.check(`ip:${ip}`);
+    const accountCheck = loginAccountLimiter.check(`acct:${email}`);
+    if (!ipCheck.allowed || !accountCheck.allowed) {
+      const retryMs = Math.max(ipCheck.retryAfterMs, accountCheck.retryAfterMs);
+      throw tooManyRequests(
+        "Too many sign-in attempts. Please wait a few minutes and try again.",
+        Math.ceil(retryMs / 1000)
+      );
+    }
+
     const password = typeof req.body.password === "string" ? req.body.password : "";
 
     if (!email || !password) {
@@ -232,6 +286,11 @@ app.post("/api/auth/login", async (req, res, next) => {
     if (!valid) {
       throw unauthorized("Invalid email or password.");
     }
+
+    /* Success clears the per-ACCOUNT counter (the IP counter is left alone:
+       one household behind a proxy must not be locked out because one member
+       mistyped, but a correct password always earns a fresh set of tries). */
+    loginAccountLimiter.reset(`acct:${email}`);
 
     const now = nowIso();
     const token = randomToken(32);
@@ -1146,49 +1205,99 @@ app.get("/api/history", requireAuth, (req, res) => {
    COMMENTS / DISCUSSION ROUTES
    ========================================================================== */
 
+/* One comment as the API serves it. Names and bodies are escaped HERE, at the
+   API boundary, so no executable markup can leave the server even if a client
+   later inserts the JSON with innerHTML. `is_guest` lets the UI badge guest
+   posts. The browser still inserts the decoded text with textContent (never
+   innerHTML) — two independent layers. */
+function commentView(row) {
+  const name = row.user_id != null
+    ? (row.user_name || "User")
+    : (row.guest_name || "Guest");
+  return {
+    id: row.id,
+    content: escapeHtml(row.content),
+    created_at: row.created_at,
+    user_name: escapeHtml(name),
+    avatar_tone: row.user_id != null ? row.avatar_tone : null,
+    is_guest: row.user_id == null,
+  };
+}
+
 app.get("/api/comments/:slug/:ep", (req, res) => {
   const { slug } = req.params;
   const epNum = toInt(req.params.ep, 1);
 
   const rows = db
     .prepare(`
-      SELECT c.id, c.content, c.created_at, u.name as user_name, u.avatar_tone
+      SELECT c.id, c.content, c.created_at, c.user_id, c.guest_name,
+             u.name as user_name, u.avatar_tone
       FROM comments c
-      JOIN users u ON c.user_id = u.id
+      LEFT JOIN users u ON c.user_id = u.id
       WHERE c.title_slug = ? AND c.episode_num = ?
       ORDER BY c.created_at DESC
       LIMIT 50
     `)
     .all(slug, epNum);
 
-  res.json({ ok: true, comments: rows });
+  res.json({ ok: true, comments: rows.map(commentView) });
 });
 
-app.post("/api/comments/:slug/:ep", requireAuth, (req, res) => {
+/* Guest comments (Phase 3b): no account needed. A signed-in user's name is
+   their account name; a guest supplies a display name (required, max 40).
+   Both are rate-limited to one post per IP per 30 seconds. */
+app.post("/api/comments/:slug/:ep", (req, res) => {
   const { slug } = req.params;
   const epNum = toInt(req.params.ep, 1);
-  const content = cleanText(req.body.content);
 
-  if (!content || content.length < 2 || content.length > 500) {
-    throw badRequest("Comment must be between 2 and 500 characters.");
+  const ip = clientIp(req);
+  const rl = commentLimiter.check(`ip:${ip}`);
+  if (!rl.allowed) {
+    throw tooManyRequests(
+      "You're posting comments too quickly. Please wait a moment before commenting again.",
+      Math.ceil(rl.retryAfterMs / 1000)
+    );
+  }
+
+  const content = cleanText(req.body.content);
+  if (!content || content.length < 2 || content.length > COMMENT_TEXT_MAX) {
+    throw badRequest(`Comment must be between 2 and ${COMMENT_TEXT_MAX} characters.`);
+  }
+
+  let userId = null;
+  let guestName = null;
+  let avatarTone = null;
+  let authorName;
+
+  if (req.user) {
+    userId = req.user.id;
+    authorName = req.user.name;
+    avatarTone = req.user.avatarTone;
+  } else {
+    guestName = cleanText(req.body.name);
+    if (!guestName || guestName.length > COMMENT_NAME_MAX) {
+      throw badRequest(`Please enter a name (up to ${COMMENT_NAME_MAX} characters).`);
+    }
+    authorName = guestName;
   }
 
   const now = nowIso();
   const resInsert = db
     .prepare(`
-      INSERT INTO comments (user_id, title_slug, episode_num, content, created_at)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO comments (user_id, guest_name, title_slug, episode_num, content, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)
     `)
-    .run(req.user.id, slug, epNum, content, now);
+    .run(userId, guestName, slug, epNum, content, now);
 
   res.status(201).json({
     ok: true,
     comment: {
       id: resInsert.lastInsertRowid,
-      content,
+      content: escapeHtml(content),
       created_at: now,
-      user_name: req.user.name,
-      avatar_tone: req.user.avatarTone,
+      user_name: escapeHtml(authorName),
+      avatar_tone: avatarTone,
+      is_guest: userId == null,
     },
   });
 });
@@ -1247,6 +1356,9 @@ app.get("/:page", (req, res, next) => {
 
 app.use((err, req, res, next) => {
   if (err instanceof ApiError) {
+    if (err.retryAfter != null) {
+      res.set("Retry-After", String(err.retryAfter));
+    }
     return res.status(err.status).json({
       ok: false,
       error: {

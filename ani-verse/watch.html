@@ -11,8 +11,8 @@
   <!-- Loaded async: a slow Google Fonts response must never block the app script or render. -->
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
   <noscript><link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet"></noscript>
-  <link rel="preload" href="css/zoro-aizen.css?v=14" as="style">
-  <link rel="preload" href="js/zoro-aizen.js?v=15" as="script">
+  <link rel="preload" href="css/zoro-aizen.css?v=15" as="style">
+  <link rel="preload" href="js/zoro-aizen.js?v=16" as="script">
   <script>
     /* Warm the API while the app script is still downloading: this removes a
        full round trip from the critical path. The app script adopts these
@@ -34,7 +34,19 @@
           });
       });
     })();
-  </script>  <link rel="stylesheet" href="css/zoro-aizen.css?v=14">
+  </script>  <script>
+    /* Set the theme before first paint (no flash of the wrong palette). The
+       shared app script owns the toggle; this only reads the stored choice. */
+    (function () {
+      try {
+        var t = localStorage.getItem("av_theme");
+        document.documentElement.setAttribute("data-theme", t === "light" ? "light" : "dark");
+      } catch (e) {
+        document.documentElement.setAttribute("data-theme", "dark");
+      }
+    })();
+  </script>
+  <link rel="stylesheet" href="css/zoro-aizen.css?v=15">
   <!-- Player-specific styles (spinner overlay, resume note, toasts). Without
        this sheet the spinner rendered as plain text BELOW the player. -->
   <link rel="stylesheet" href="css/zoko-player.css?v=11">
@@ -86,6 +98,10 @@
         </button>
         <button class="icon-action-btn" id="btn-replay-intro" type="button" title="Replay Aizen Shutter Intro">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 12 7-7v4c7 0 11 4 11 11-2-5-6-7-11-7v4l-7-5z"/></svg>
+        </button>
+        <button class="icon-action-btn" id="btn-theme-toggle" type="button" title="Toggle light / dark theme" aria-label="Toggle light or dark theme" aria-pressed="false">
+          <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
         </button>
         <div id="header-user-slot" aria-busy="true">
           <button class="btn-zoro-primary" type="button" disabled style="opacity: 0.55;">···</button>
@@ -219,7 +235,8 @@
           <button class="btn-zoro-primary" id="watch-add-list-btn" type="button" data-active="false" style="padding: 0.5rem 1.25rem;">
             + Add to List
           </button>
-          <div style="display: flex; gap: 0.75rem;">
+          <div style="display: flex; gap: 0.75rem; align-items: center;">
+            <button class="genre-chip-zoro" id="btn-theater-mode" type="button" aria-pressed="false" title="Theater mode — expand the player to full width, hide the episode sidebar">⛶ Theater</button>
             <button class="genre-chip-zoro" id="btn-prev-ep" type="button">‹ Prev Ep</button>
             <button class="genre-chip-zoro" id="btn-next-ep" type="button">Next Ep ›</button>
           </div>
@@ -268,6 +285,7 @@
           <form id="zoro-comment-form" class="comment-input-area">
             <div class="user-comment-avatar">U</div>
             <div class="comment-form-wrap">
+              <input id="zoro-comment-name" class="comment-name-input" type="text" maxlength="40" placeholder="Your name (shown with your comment)" autocomplete="off">
               <textarea id="zoro-comment-input" placeholder="Join the discussion... Share your thoughts about this episode!" required></textarea>
               <div style="display: flex; justify-content: flex-end;">
                 <button class="btn-zoro-primary" type="submit" style="padding: 0.45rem 1.25rem;">Post Comment</button>
@@ -279,6 +297,17 @@
             <!-- Populated via API -->
           </div>
         </div>
+
+        <!-- More Like This (Phase 3b): the SAME rail as the detail page.
+             Live titles reuse the recommendations already in the /api/live
+             payload (no second query); catalog titles use the same same-genre
+             shelf. The section hides itself when there is nothing to show. -->
+        <section class="watch-recommendations" id="watch-recommendations-section" hidden>
+          <div class="section-header-zoro">
+            <h2 class="section-title">More Like <span class="accent">This</span></h2>
+          </div>
+          <div class="cards-grid-zoro" id="detail-recommendations"></div>
+        </section>
       </div>
 
       <!-- Watch Sidebar: Episodes & Related -->
@@ -345,6 +374,6 @@
     </div>
   </footer>
 
-  <script src="js/zoro-aizen.js?v=15"></script>
+  <script src="js/zoro-aizen.js?v=16"></script>
 </body>
 </html>

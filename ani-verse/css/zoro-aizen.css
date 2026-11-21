@@ -3477,3 +3477,161 @@ body.drawer-open .zoro-header {
   .filters-grid { grid-template-columns: 1fr 1fr; }
   .live-cast-grid, .live-relation-grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
 }
+
+/* ==========================================================================
+   PHASE 3b — LIGHT THEME
+   The dark palette stays the default (:root). These are the SAME variables
+   redefined for [data-theme="light"], plus component overrides for surfaces
+   whose colour is hardcoded in the dark design. The lime accent is kept; the
+   surrounding surfaces, text and borders flip. No layout changes.
+   ========================================================================== */
+[data-theme="light"] {
+  color-scheme: light;
+  --bg-main: #f3f4f7;
+  --bg-darker: #e6e8ee;
+  --bg-surface: #ffffff;
+  --bg-card: #eef0f5;
+  --bg-card-hover: #e2e5ee;
+  --bg-glass: rgba(255, 255, 255, 0.86);
+  --bg-glass-card: rgba(255, 255, 255, 0.8);
+  --text-main: #14161c;
+  --text-sub: #4b5563;
+  --text-muted: #6b7280;
+  --border-subtle: rgba(15, 23, 42, 0.12);
+  --border-active: rgba(146, 168, 45, 0.6);
+  --shadow-card: 0 10px 30px -12px rgba(15, 23, 42, 0.18);
+  --shadow-neon: 0 0 25px rgba(202, 233, 98, 0.4);
+}
+
+[data-theme="light"] body { background-color: var(--bg-main); }
+[data-theme="light"] .zoro-header { background: rgba(255, 255, 255, 0.88); }
+[data-theme="light"] .zoro-header.scrolled {
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 4px 20px rgba(15, 23, 42, 0.12);
+}
+[data-theme="light"] .ambient-glow { opacity: 0.4; }
+[data-theme="light"] .menu-toggle-btn:hover,
+[data-theme="light"] .icon-action-btn:hover { background: rgba(15, 23, 42, 0.06); }
+[data-theme="light"] .search-box:focus-within { background: var(--bg-card); }
+[data-theme="light"] .search-dropdown,
+[data-theme="light"] .user-dropdown-menu {
+  background: var(--bg-surface);
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.18);
+}
+[data-theme="light"] .search-result-title { color: var(--text-main); }
+[data-theme="light"] .user-dropdown-name { color: var(--text-main); }
+[data-theme="light"] .user-badge-btn { background: var(--bg-card); }
+
+/* Text that was hardcoded white in the dark design. */
+[data-theme="light"] .section-title,
+[data-theme="light"] .zoro-card-title,
+[data-theme="light"] .col-item-title,
+[data-theme="light"] .trending-anime-title,
+[data-theme="light"] .zoro-empty-state-title,
+[data-theme="light"] .comment-user-name,
+[data-theme="light"] .detail-title,
+[data-theme="light"] .detail-meta strong,
+[data-theme="light"] .genre-card-title,
+[data-theme="light"] .schedule-title-link,
+[data-theme="light"] .live-relation-name,
+[data-theme="light"] .live-cast-name { color: var(--text-main); }
+
+[data-theme="light"] .comment-body-text { color: var(--text-sub); }
+[data-theme="light"] .single-comment { border-bottom-color: rgba(15, 23, 42, 0.08); }
+[data-theme="light"] .comment-form-wrap textarea,
+[data-theme="light"] .comment-name-input {
+  background: var(--bg-card);
+  color: var(--text-main);
+}
+[data-theme="light"] .ep-search-input { color: var(--text-main); }
+[data-theme="light"] .zoko-bar-label { color: var(--text-sub); }
+[data-theme="light"] .zoko-toggle { color: var(--text-sub); }
+[data-theme="light"] .zoko-toggle:hover { color: var(--text-main); }
+[data-theme="light"] .ep-btn:hover,
+[data-theme="light"] .ep-number-btn:hover { color: var(--text-main); }
+[data-theme="light"] .filter-tag-chip:hover,
+[data-theme="light"] .az-chip:hover { color: var(--text-main); }
+[data-theme="light"] .modal-close-cross:hover,
+[data-theme="light"] .mobile-drawer-close:hover { color: var(--text-main); }
+[data-theme="light"] .aizen-modal-backdrop { background: rgba(243, 244, 247, 0.82); }
+[data-theme="light"] .discussions-empty,
+[data-theme="light"] .ep-grid-status { color: var(--text-muted); }
+
+/* ==========================================================================
+   PHASE 3b — GUEST COMMENTS
+   ========================================================================== */
+.comment-name-input {
+  width: 100%;
+  max-width: 320px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 0.55rem 0.9rem;
+  font-size: 0.875rem;
+  color: var(--text-main);
+  font-family: inherit;
+}
+.comment-name-input:focus { border-color: var(--zoro-lime); }
+.comment-name-input[hidden] { display: none; }
+
+/* "Guest" badge next to a guest comment's name. */
+.badge-mini-guest {
+  margin-left: 0.45rem;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #0c0d12;
+  background: var(--zoro-lime);
+}
+
+/* Theme toggle icon: moon in dark mode, sun in light mode. */
+#btn-theme-toggle .icon-sun { display: none; }
+[data-theme="light"] #btn-theme-toggle .icon-sun { display: block; }
+[data-theme="light"] #btn-theme-toggle .icon-moon { display: none; }
+
+/* ==========================================================================
+   PHASE 3b — THEATER MODE (watch page)
+   Layout only: the player column takes the full content width and the
+   episode sidebar is hidden. The iframe is never touched, so this is
+   identical on Zoko / TVplus / MegaPlay.
+   ========================================================================== */
+.watch-layout.theater-mode { grid-template-columns: minmax(0, 1fr); }
+.watch-layout.theater-mode .watch-sidebar { display: none; }
+#btn-theater-mode { margin-left: auto; }
+#btn-theater-mode.active {
+  background: var(--zoro-lime);
+  color: #0c0d12;
+  border-color: var(--zoro-lime);
+}
+
+/* ==========================================================================
+   PHASE 3b — 390px RESPONSIVE FIXES (code-level)
+   The header is the one real overflow: at 390px the brand text + search +
+   three action buttons exceed the viewport. Hide the brand WORDMARK (the Z
+   mark stays), drop the shuffle button, and let the search shrink. The
+   search dropdown is re-anchored so its wider panel grows leftward instead
+   of off-screen. Tooltips are capped to the viewport.
+   ========================================================================== */
+@media (max-width: 480px) {
+  .header-left { gap: 0.6rem; }
+  .header-left .zoro-brand > span { display: none; }
+  .search-wrapper { max-width: 96px; }
+  .search-dropdown {
+    left: auto;
+    right: 0;
+    width: min(78vw, 320px);
+  }
+  .zoro-tooltip { max-width: calc(100vw - 1.5rem); }
+}
+
+@media (max-width: 420px) {
+  #btn-random-anime { display: none; }
+  .search-wrapper { max-width: 84px; }
+  .header-actions { gap: 0.35rem; }
+  .discussion-box { padding: 1rem; }
+  .comment-input-area { gap: 0.75rem; }
+  .user-comment-avatar { width: 38px; height: 38px; }
+}

@@ -20,6 +20,27 @@ export const unauthorized = (message = "Sign in to continue.") =>
 export const notFound = (message = "Not found.") => new ApiError(404, "NOT_FOUND", message);
 export const conflict = (code, message) => new ApiError(409, code, message);
 
+/* 429 — carries an optional Retry-After (seconds) so a client can back off
+   instead of guessing. */
+export const tooManyRequests = (message = "Too many requests. Please try again later.", retryAfterSec = null) => {
+  const err = new ApiError(429, "RATE_LIMITED", message);
+  err.retryAfter = retryAfterSec;
+  return err;
+};
+
+/* HTML-escaping for every user-supplied string the API serves (comment names
+   and bodies). Stored raw, escaped at the API boundary; the browser inserts
+   the decoded text with textContent, never innerHTML. */
+export function escapeHtml(value) {
+  if (value == null) return "";
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 export function nowIso() {
   return new Date().toISOString();
 }

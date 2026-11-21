@@ -127,7 +127,10 @@ export function initSchema() {
 
     CREATE TABLE IF NOT EXISTS comments (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER NOT NULL,
+      /* NULL for a guest comment (Phase 3b) — the display name then lives in
+         guest_name. A signed-in comment keeps its user_id. */
+      user_id INTEGER,
+      guest_name TEXT,
       title_slug TEXT NOT NULL,
       episode_num INTEGER NOT NULL,
       content TEXT NOT NULL,
@@ -183,6 +186,45 @@ export function initSchema() {
       db.exec(`ALTER TABLE titles ADD COLUMN ${col};`);
     } catch (e) {}
   }
+
+  migrateCommentsForGuests();
+}
+
+/* Phase 3b — guest comments. Older databases created `comments` with
+   user_id NOT NULL and no guest_name. SQLite cannot drop a NOT NULL or add
+   a column with a default to an existing table in place, so the table is
+   rebuilt once (data copied verbatim) and the index recreated. Idempotent:
+   a database that already has the new shape is left untouched. */
+function migrateCommentsForGuests() {
+  const cols = db.prepare("PRAGMA table_info(comments)").all();
+  if (!cols.length) return;
+  const hasGuestName = cols.some((c) => c.name === "guest_name");
+  const userIdCol = cols.find((c) => c.name === "user_id");
+  if (hasGuestName && userIdCol && Number(userIdCol.notnull) === 0) return;
+
+  db.transaction(() => {
+    db.exec("ALTER TABLE comments RENAME TO comments_legacy");
+    db.exec(`
+      CREATE TABLE comments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER,
+        guest_name TEXT,
+        title_slug TEXT NOT NULL,
+        episode_num INTEGER NOT NULL,
+        content TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (title_slug) REFERENCES titles(slug) ON DELETE CASCADE
+      )
+    `);
+    db.exec(`
+      INSERT INTO comments (id, user_id, title_slug, episode_num, content, created_at, guest_name)
+      SELECT id, user_id, title_slug, episode_num, content, created_at, NULL
+      FROM comments_legacy
+    `);
+    db.exec("DROP TABLE comments_legacy");
+    db.exec("CREATE INDEX IF NOT EXISTS idx_comments_target ON comments(title_slug, episode_num, created_at DESC)");
+  })();
 }
 
 // Auto-initialize schema on load

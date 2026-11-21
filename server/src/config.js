@@ -28,11 +28,34 @@ export const COOKIE_SECURE = process.env.COOKIE_SECURE
   ? process.env.COOKIE_SECURE === "true"
   : IS_PROD;
 
+/* Behind a reverse proxy (Caddy) the peer is the proxy, so req.ip would
+   otherwise be the SAME address for every visitor and the auth/comment rate
+   limits would be global. Set ANIVERSE_TRUST_PROXY=true only when the app
+   really sits behind a proxy that sets X-Forwarded-For. */
+export const TRUST_PROXY = process.env.ANIVERSE_TRUST_PROXY === "true"
+  || process.env.ANIVERSE_TRUST_PROXY === "1";
+
 /* Breach lists are long. This is the floor, not a policy. */
 export const PASSWORD_MIN = 8;
 export const PASSWORD_MAX = 200;
 export const NAME_MIN = 1;
 export const NAME_MAX = 40;
+
+/* Guest comments (Phase 3b). A guest supplies a display name (max 40) and a
+   comment (max 1000); a signed-in user's name comes from their account. */
+export const COMMENT_NAME_MAX = 40;
+export const COMMENT_TEXT_MAX = 1000;
+/* One comment per IP per 30 seconds — enough for a conversation, far too
+   slow to flood. */
+export const COMMENT_RATE_LIMIT_MS = 30 * 1000;
+
+/* Auth rate limits (Phase 3b), in-memory fixed windows. Login is limited per
+   IP AND per account (whichever trips first); a successful login resets the
+   per-account counter. Registration is limited per IP. */
+export const LOGIN_MAX_ATTEMPTS = 5;
+export const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+export const REGISTER_MAX_ATTEMPTS = 5;
+export const REGISTER_WINDOW_MS = 60 * 60 * 1000;
 
 /* ZokoAnime embed player configuration (never hardcoded in the frontend). */
 export const ZOKO_EMBED_ORIGIN = (process.env.ZOKO_EMBED_ORIGIN || "https://zokoanime.video").replace(/\/+$/, "");

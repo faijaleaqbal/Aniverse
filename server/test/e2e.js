@@ -4,6 +4,10 @@ import { fileURLToPath } from "node:url";
 /* Self-contained test database: a temporary seeded + enriched DB (see
    setup-db.js). `npm test` needs no manual seed/metadata steps and never
    touches the live database. */
+/* The Phase 3b rate-limit tests need per-IP isolation, and the server only
+   honours X-Forwarded-For when ANIVERSE_TRUST_PROXY is set (config.js). Set
+   it BEFORE the first src import so the app boots with trust proxy on. */
+process.env.ANIVERSE_TRUST_PROXY = "1";
 const { app, db } = await import("./setup-db.js");
 const { clearAniListCache } = await import("../src/anilist.js");
 
@@ -154,6 +158,19 @@ function resetAniListMock() {
   clearAniListCache();
   anilistResponder = null;
   anilistRequests.length = 0;
+}
+
+/* JSON POST with an optional spoofed client IP. The suite boots the app with
+   trust proxy on (see the top of this file), so X-Forwarded-For becomes
+   req.ip and each test can present its own address. */
+function postJson(path, body, ip) {
+  const headers = { "Content-Type": "application/json" };
+  if (ip) headers["X-Forwarded-For"] = ip;
+  return fetch(`${baseUrl}${path}`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body),
+  });
 }
 
 console.log("=== Running Ani Verse API & Zoko E2E Integration Tests ===");
@@ -1732,6 +1749,265 @@ async function runTests() {
         );
       }
       resetAniListMock();
+    });
+
+    /* ======================================================================
+       PHASE 3b — GUEST COMMENTS, XSS HARDENING, RATE LIMITS, AUTO-NEXT
+       ====================================================================== */
+
+    // 54. Guest comments post without an account; XSS payloads in the name and
+    //     body are served HTML-escaped, and the client decode yields inert text.
+    await test("Phase 3b: guest comment posts and XSS payloads render escaped", async () => {
+      const ip = "203.0.113.10";
+      const payloadName = "<script>alert(1)</script>";
+      const payloadText = "<img src=x onerror=alert(1)>";
+
+      const post = await postJson("/api/comments/kagerou-protocol/7", { name: payloadName, content: payloadText }, ip);
+      assert.equal(post.status, 201);
+      const posted = await post.json();
+      assert.equal(posted.ok, true);
+      assert.equal(posted.comment.is_guest, true);
+      assert.ok(!/<script>/i.test(JSON.stringify(posted)), "the POST response carries no raw <script> tag");
+      assert.ok(posted.comment.content.includes("&lt;img"), "the POST response body is HTML-escaped");
+
+      const res = await fetch(`${baseUrl}/api/comments/kagerou-protocol/7`);
+      assert.equal(res.status, 200);
+      const raw = await res.text();
+      const data = JSON.parse(raw);
+      const mine = data.comments.find((c) => c.id === posted.comment.id);
+      assert.ok(mine, "the guest comment is served");
+      assert.equal(mine.is_guest, true);
+      assert.ok(mine.user_name.includes("&lt;script&gt;"), "the guest name is escaped");
+      assert.ok(mine.content.includes("&lt;img"), "the guest content is escaped");
+      assert.ok(!/<script>/i.test(raw), "served comments contain no <script> tag");
+      assert.ok(!/<img\b/i.test(raw), "served comments contain no raw <img> tag");
+
+      /* The browser decodes the five entities and inserts with textContent,
+         so the payload comes back as the literal text the poster typed. */
+      const { decodeHtml, buildCommentNode } = evalZoroBlock("COMMENT_TEXT_LOGIC", ["decodeHtml", "buildCommentNode"]);
+      assert.equal(decodeHtml(mine.user_name), payloadName);
+      assert.equal(decodeHtml(mine.content), payloadText);
+      assert.equal(decodeHtml("Tom &amp; Jerry &lt;3"), "Tom & Jerry <3");
+
+      /* Render the served comment against a minimal fake DOM: the result must
+         be text nodes only — no SCRIPT or IMG element anywhere. This is the
+         client's real render path (textContent, never innerHTML). */
+      class FakeNode {
+        constructor(tag) {
+          this.tagName = String(tag).toUpperCase();
+          this.children = [];
+          this.attributes = {};
+          this.style = {};
+          this._text = "";
+        }
+        set textContent(v) { this._text = String(v); }
+        get textContent() { return this._text; }
+        set className(v) { this.attributes.class = v; }
+        get className() { return this.attributes.class; }
+        appendChild(c) { this.children.push(c); return c; }
+      }
+      const realDocument = globalThis.document;
+      globalThis.document = { createElement: (tag) => new FakeNode(tag) };
+      let rendered;
+      try {
+        rendered = buildCommentNode(mine);
+      } finally {
+        globalThis.document = realDocument;
+      }
+      const all = [];
+      const walk = (n) => { all.push(n); n.children.forEach(walk); };
+      walk(rendered);
+      assert.ok(
+        !all.some((n) => n.tagName === "SCRIPT" || n.tagName === "IMG"),
+        "the rendered comment contains no SCRIPT or IMG element"
+      );
+      const textEl = rendered.children[1].children[1];
+      assert.equal(textEl.tagName, "DIV");
+      assert.equal(textEl.textContent, payloadText, "the body is inert text");
+      assert.equal(rendered.children[1].children[0].children[0].textContent, payloadName, "the name is inert text");
+    });
+
+    // 55. Guest validation: name required (<=40), body <= 1000.
+    await test("Phase 3b: guest comment validation (name required, length caps)", async () => {
+      const noName = await postJson("/api/comments/kagerou-protocol/7", { content: "no name here" }, "203.0.113.30");
+      assert.equal(noName.status, 400);
+      const longName = await postJson("/api/comments/kagerou-protocol/7", { name: "x".repeat(41), content: "hi" }, "203.0.113.31");
+      assert.equal(longName.status, 400);
+      const longText = await postJson("/api/comments/kagerou-protocol/7", { name: "Ok", content: "x".repeat(1001) }, "203.0.113.32");
+      assert.equal(longText.status, 400);
+      const ok = await postJson("/api/comments/kagerou-protocol/7", { name: "Ok", content: "A valid guest comment" }, "203.0.113.33");
+      assert.equal(ok.status, 201);
+    });
+
+    // 56. Guest comment rate limit: 1 per IP per 30s; another IP is unaffected.
+    await test("Phase 3b: guest comment rate limit (1 / 30s / IP)", async () => {
+      const ip = "203.0.113.40";
+      const first = await postJson("/api/comments/kagerou-protocol/7", { name: "Rate", content: "first" }, ip);
+      assert.equal(first.status, 201);
+      const second = await postJson("/api/comments/kagerou-protocol/7", { name: "Rate", content: "second" }, ip);
+      assert.equal(second.status, 429);
+      const body = await second.json();
+      assert.equal(body.error.code, "RATE_LIMITED");
+      assert.ok(/too quickly/i.test(body.error.message));
+      assert.ok(second.headers.get("retry-after") != null, "the 429 carries Retry-After");
+      const other = await postJson("/api/comments/kagerou-protocol/7", { name: "Rate", content: "other ip" }, "203.0.113.41");
+      assert.equal(other.status, 201, "a different IP is unaffected");
+    });
+
+    // 57. Signed-in comments keep working exactly as before (no guest name).
+    await test("Phase 3b: signed-in comments still post without a guest name", async () => {
+      const reg = await postJson("/api/auth/register", {
+        email: `signed-${Date.now()}@example.com`,
+        password: "password123",
+        name: "Signed In",
+      }, "198.51.100.40");
+      assert.equal(reg.status, 201);
+      const cookie = (reg.headers.get("set-cookie") || "").split(";")[0];
+      assert.ok(cookie, "register sets a session cookie");
+      const post = await fetch(`${baseUrl}/api/comments/kagerou-protocol/7`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Cookie: cookie },
+        body: JSON.stringify({ content: "Signed in and still commenting" }),
+      });
+      assert.equal(post.status, 201);
+      const data = await post.json();
+      assert.equal(data.comment.is_guest, false);
+      assert.equal(data.comment.user_name, "Signed In");
+    });
+
+    // 58. Login rate limit: 5 / 15 min per IP, 6th -> 429, another IP unaffected.
+    await test("Phase 3b: login rate limit (6th attempt 429 + IP isolation)", async () => {
+      const email = "demo@aniverse.io";
+      const ip = "198.51.100.10";
+      for (let i = 0; i < 5; i++) {
+        const r = await postJson("/api/auth/login", { email, password: "wrong-password" }, ip);
+        assert.equal(r.status, 401, `attempt ${i + 1} must be a normal rejection`);
+      }
+      const sixth = await postJson("/api/auth/login", { email, password: "wrong-password" }, ip);
+      assert.equal(sixth.status, 429, "the 6th rapid attempt is throttled");
+      const body = await sixth.json();
+      assert.equal(body.error.code, "RATE_LIMITED");
+      assert.ok(/too many sign-in attempts/i.test(body.error.message));
+      assert.ok(sixth.headers.get("retry-after") != null, "the 429 carries Retry-After");
+
+      const otherIp = await postJson(
+        "/api/auth/login",
+        { email: `ghost-${Date.now()}@example.com`, password: "wrong" },
+        "198.51.100.11"
+      );
+      assert.equal(otherIp.status, 401, "a different IP is unaffected");
+
+      /* The per-ACCOUNT bucket follows the account to a new address: the same
+         account is locked from a different IP too (whichever limit hits
+         first). */
+      const sameAccountOtherIp = await postJson(
+        "/api/auth/login",
+        { email, password: "wrong-password" },
+        "198.51.100.12"
+      );
+      assert.equal(sameAccountOtherIp.status, 429, "the per-account limit follows the account across IPs");
+    });
+
+    // 59. A successful login resets the PER-ACCOUNT counter (a fresh account
+    //     starts at 0; 4 wrong, one success, then 5 more wrong are allowed and
+    //     only the 6th trips).
+    await test("Phase 3b: a successful login resets the per-account counter", async () => {
+      const email = `reset-${Date.now()}@example.com`;
+      const reg = await postJson("/api/auth/register", { email, password: "password123", name: "Reset User" }, "198.51.100.50");
+      assert.equal(reg.status, 201);
+
+      for (let i = 0; i < 4; i++) {
+        const r = await postJson("/api/auth/login", { email, password: "wrong" }, "198.51.100.50");
+        assert.equal(r.status, 401, `attempt ${i + 1} must be a normal rejection`);
+      }
+      const ok = await postJson("/api/auth/login", { email, password: "password123" }, "198.51.100.51");
+      assert.equal(ok.status, 200, "a correct password succeeds");
+
+      for (let i = 0; i < 5; i++) {
+        const r = await postJson("/api/auth/login", { email, password: "wrong" }, "198.51.100.52");
+        assert.equal(r.status, 401, `after the reset, attempt ${i + 1} must be allowed`);
+      }
+      const afterReset = await postJson("/api/auth/login", { email, password: "wrong" }, "198.51.100.53");
+      assert.equal(afterReset.status, 429, "the 6th attempt after a reset trips the per-account limit");
+    });
+
+    // 60. Register rate limit: 5 / hour per IP, 6th -> 429, another IP fine.
+    await test("Phase 3b: register rate limit (6th attempt 429)", async () => {
+      const ip = "198.51.100.20";
+      const stamp = Date.now();
+      for (let i = 0; i < 5; i++) {
+        const r = await postJson("/api/auth/register", {
+          email: `rl-${stamp}-${i}@example.com`,
+          password: "password123",
+          name: "Rate Limit",
+        }, ip);
+        assert.equal(r.status, 201, `register ${i + 1} must succeed`);
+      }
+      const sixth = await postJson("/api/auth/register", {
+        email: `rl-${stamp}-6@example.com`,
+        password: "password123",
+        name: "Rate Limit",
+      }, ip);
+      assert.equal(sixth.status, 429, "the 6th rapid register is throttled");
+      assert.equal((await sixth.json()).error.code, "RATE_LIMITED");
+
+      const other = await postJson("/api/auth/register", {
+        email: `rl-${stamp}-other@example.com`,
+        password: "password123",
+        name: "Rate Limit",
+      }, "198.51.100.21");
+      assert.equal(other.status, 201, "a different IP is unaffected");
+    });
+
+    // 61. Auto-next decision: Zoko `ended` / MegaPlay `complete` advance, the
+    //     last episode shows the completed state, the backup never auto-nexts,
+    //     and an unknown episode count never invents a next episode.
+    await test("Phase 3b: auto-next cases (next / completed / backup / unknown)", async () => {
+      const { autoNextAction } = evalZoroBlock("AUTONEXT_LOGIC", ["autoNextAction"]);
+
+      assert.deepEqual(
+        autoNextAction({ server: "zoko", currentEp: 3, totalEps: 12, autonext: true }),
+        { action: "next", nextEp: 4 },
+        "Zoko ended on ep 3 of 12 loads ep 4"
+      );
+      assert.deepEqual(
+        autoNextAction({ server: "megaplay", currentEp: 3, totalEps: 12, autonext: true }),
+        { action: "next", nextEp: 4 },
+        "MegaPlay complete on ep 3 of 12 loads ep 4"
+      );
+      assert.deepEqual(
+        autoNextAction({ server: "zoko", currentEp: 12, totalEps: 12, autonext: true }),
+        { action: "completed" },
+        "the last episode reports completed (no next)"
+      );
+      assert.deepEqual(
+        autoNextAction({ server: "megaplay", currentEp: 12, totalEps: 12, autonext: true }),
+        { action: "completed" },
+        "the last episode reports completed on MegaPlay too"
+      );
+      assert.deepEqual(
+        autoNextAction({ server: "zoko", currentEp: 3, totalEps: 12, autonext: false }),
+        { action: "none" },
+        "auto-next off never advances"
+      );
+      assert.deepEqual(
+        autoNextAction({ server: "backup", currentEp: 3, totalEps: 12, autonext: true }),
+        { action: "none" },
+        "the backup player has no ended event, so it never auto-nexts"
+      );
+      assert.deepEqual(
+        autoNextAction({ server: "zoko", currentEp: 1, totalEps: 0, autonext: true }),
+        { action: "none" },
+        "an unknown episode count must not invent a next episode"
+      );
+
+      /* Both real end-of-episode handlers must go through the shared decision
+         (the backup branch has no such path). */
+      const src = readFileSync(ZORO_JS_PATH, "utf8");
+      const decisionCalls = src.match(/autoNextAction\(/g) || [];
+      assert.equal(decisionCalls.length, 3, "one definition + the Zoko and MegaPlay handlers");
+      assert.ok(src.includes('server: "zoko"'), "the Zoko ended handler uses the shared decision");
+      assert.ok(src.includes('server: "megaplay"'), "the MegaPlay complete handler uses the shared decision");
     });
 
     console.log(`\nAll ${passed} E2E integration tests passed successfully!\n`);

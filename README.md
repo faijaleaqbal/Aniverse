@@ -162,7 +162,7 @@ npm run seed
 ```bash
 npm test
 ```
-Runs `test/smoke.js` (11 unit checks) and `test/e2e.js` (10 integration tests) — **21 tests, all passing on a fresh clone with no manual steps**.
+Runs `test/smoke.js` (11 unit checks) and `test/e2e.js` (62 integration tests) — **73 tests, all passing on a fresh clone with no manual steps**.
 
 The E2E suite is fully self-contained: `test/setup-db.js` creates a **temporary database** (never touches `data/aniverse.db`), seeds the catalog, and enriches it offline from `test/fixtures/enriched-metadata.json` (a snapshot of the real titles + real per-title episode names). No network access, no `npm run seed`, and no metadata fetches are needed before `npm test`. The temporary database is deleted on exit.
 
@@ -195,3 +195,71 @@ This enrichment is only for the running app — the test suite does not depend o
 - **Email**: `demo@aniverse.io`
 - **Password**: `password123`
 *(Or click "Quick Fill Demo Account" inside the Sign In modal).*
+
+---
+
+## 🚢 Production Notes
+
+Ani Verse is a **personal / demo project**. The video players are **unofficial
+third-party embeds** (ZokoAnime, animeTVplus, MegaPlay); the site stores no
+video files and makes no claim about them. Titles, posters and episode names
+come from AniList; the site is not affiliated with AniList or with any player
+provider. Licensed under MIT — see [LICENSE](./LICENSE) (Copyright 2026
+faijaleaqbal).
+
+### Required environment variables
+| Variable | Default | Notes |
+|---|---|---|
+| `PORT` | `4000` | HTTP port |
+| `HOST` | `127.0.0.1` | Bind address. Use `0.0.0.0` only behind a reverse proxy. |
+| `DATA_DIR` | `<server>/data` | Directory holding `aniverse.db`. Must be writable. |
+
+`DB_PATH` overrides the database file inside `DATA_DIR`. Optional: `NODE_ENV`,
+`COOKIE_SECURE`, `ANIVERSE_TRUST_PROXY`, `ZOKO_*`, `ANILIST_URL` (see the
+environment table above).
+
+> **Behind a reverse proxy:** set `ANIVERSE_TRUST_PROXY=true` so `req.ip` is
+> read from `X-Forwarded-For`. Without it every visitor shares the proxy's
+> address and the login/comment rate limits effectively become global.
+
+### Run
+```bash
+cd server
+npm install
+npm run seed          # catalog + demo user (first run only)
+npm start             # http://127.0.0.1:4000
+```
+
+### systemd unit (sketch)
+```ini
+[Unit]
+Description=Ani Verse API
+After=network.target
+
+[Service]
+WorkingDirectory=/opt/aniverse/server
+Environment=NODE_ENV=production
+Environment=PORT=4000
+Environment=HOST=127.0.0.1
+Environment=DATA_DIR=/var/lib/aniverse
+ExecStart=/usr/bin/node src/index.js
+Restart=on-failure
+User=aniverse
+
+[Install]
+WantedBy=multi-user.target
+```
+
+### Caddy (sketch)
+```caddy
+aniversetesting.duckdns.org {
+    reverse_proxy 127.0.0.1:4000
+}
+```
+Caddy terminates TLS and sets `X-Forwarded-For`; run the app with
+`ANIVERSE_TRUST_PROXY=true` (and `COOKIE_SECURE=true`) behind it.
+
+### Tests
+`npm test` runs `test/smoke.js` (11 checks) and `test/e2e.js` (62 integration
+tests) — 73 total, all offline (AniList is mocked; the live database is never
+touched).
