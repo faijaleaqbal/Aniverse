@@ -73,7 +73,7 @@ export const MEDIA_FIELDS = `
   title { romaji english native }
   coverImage { large }
   description(asHtml: false)
-  episodes duration format status
+  episodes duration format status type
   startDate { year month day }
   genres averageScore seasonYear popularity
   nextAiringEpisode { episode airingAt }
@@ -231,16 +231,59 @@ function pageResult(pageData) {
   };
 }
 
-/* GET /api/search — SEARCH_MATCH, 12 per page, adult excluded. */
-export async function searchAniList(q, page = 1) {
+/* GET /api/search — SEARCH_MATCH, anime only, adult excluded.
+   AniList's SEARCH_MATCH pagination is NOT stable: every page re-runs the
+   fuzzy match and returns a different total (a "Naruto" search reported
+   5,000 matches on page 1 and 26 on page 3), and consecutive pages can hand
+   back the SAME titles — which made the site's page 2 largely repeat page 1.
+   So the search is served from a SNAPSHOT: one fixed set of results is
+   fetched (3 AniList pages x 50), de-duplicated by AniList id, screened for
+   adult content, and cached for 10 minutes. Every page of a given query is
+   then a slice of that one immutable set — the total never moves, no page
+   repeats another page's titles, and there is never a page past the end. */
+export const SEARCH_PAGE_SIZE = 12;
+const SEARCH_SNAPSHOT_PAGES = 3;
+const SEARCH_SNAPSHOT_PER_PAGE = 50;
+
+/* One snapshot of a search: the raw media list, de-duplicated by id and
+   adult-screened. Cached by the query, so all pages share one result set. */
+async function searchSnapshot(q) {
+  const key = `search-snapshot:${String(q).trim().toLowerCase()}`;
+  const hit = cacheGet(key);
+  if (hit) return hit;
+
   const query = `query ($search: String, $page: Int, $perPage: Int) {
     Page(page: $page, perPage: $perPage) {
-      ${PAGE_INFO_FIELDS}
       media(search: $search, type: ANIME, sort: SEARCH_MATCH, isAdult: false) { ${MEDIA_FIELDS} }
     }
   }`;
-  const data = await anilistQuery(query, { search: q, page, perPage: 12 });
-  return pageResult(data && data.Page);
+  /* The three pages are fetched in parallel — one slow page must not serialise
+     the others. A failing page just contributes fewer titles. */
+  const pages = await Promise.all(
+    Array.from({ length: SEARCH_SNAPSHOT_PAGES }, (_, i) =>
+      anilistQuery(query, { search: q, page: i + 1, perPage: SEARCH_SNAPSHOT_PER_PAGE })
+        .then((data) => (data && data.Page && Array.isArray(data.Page.media) ? data.Page.media : []))
+        .catch(() => [])
+    )
+  );
+
+  const seen = new Set();
+  const items = [];
+  for (const media of pages.flat()) {
+    if (!media || media.id == null || seen.has(media.id)) continue;
+    if (isAdultMedia(media)) continue;
+    seen.add(media.id);
+    items.push(mediaView(media));
+  }
+  cacheSet(key, items, DEFAULT_TTL_MS);
+  return items;
+}
+
+/* The whole search result set for a query (stable, snapshot-backed). The
+   caller slices it into pages. */
+export async function searchAniList(q) {
+  const items = await searchSnapshot(q);
+  return { items, total: items.length };
 }
 
 /* GET /api/browse — one flexible list endpoint. Sort/filter mapping is
@@ -383,7 +426,7 @@ export async function getLiveTitle(anilistId) {
   if (!Number.isFinite(id) || id <= 0) return null;
   id = LIVE_ID_ALIASES[id] || id;
   const query = `query ($id: Int) {
-    Media(id: $id, isAdult: false) { ${MEDIA_FIELDS} }
+    Media(id: $id, type: ANIME, isAdult: false) { ${MEDIA_FIELDS} }
   }`;
   let data;
   try {
@@ -394,7 +437,8 @@ export async function getLiveTitle(anilistId) {
     throw err;
   }
   const media = data && data.Media;
-  if (!media || isAdultMedia(media)) return null;
+  /* Not an anime (a manga id, for example) -> not available. */
+  if (!media || (media.type && media.type !== "ANIME") || isAdultMedia(media)) return null;
   return mediaView(media);
 }
 
@@ -423,7 +467,7 @@ export async function getAiringSchedule(page = 1, nowSec = Math.floor(Date.now()
   const rows = (pageData && Array.isArray(pageData.airingSchedules)) ? pageData.airingSchedules : [];
   return {
     results: rows
-      .filter((r) => r && r.media && !isAdultMedia(r.media))
+      .filter((r) => r && r.media && (!r.media.type || r.media.type === "ANIME") && !isAdultMedia(r.media))
       .map((r) => ({ airingAt: r.airingAt, episode: r.episode, media: mediaView(r.media) })),
     pageInfo: (pageData && pageData.pageInfo) || { total: 0, currentPage: 1, lastPage: 1, hasNextPage: false },
   };

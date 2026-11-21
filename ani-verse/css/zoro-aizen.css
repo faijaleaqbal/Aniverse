@@ -840,6 +840,13 @@ img {
   box-shadow: 0 0 20px var(--zoro-lime-glow);
 }
 
+/* A title with no episodes has nothing to watch — the button is hidden
+   (the .btn-watch-now display rule would otherwise beat the [hidden] UA
+   rule). */
+.btn-watch-now[hidden] {
+  display: none;
+}
+
 .btn-watch-now:hover {
   background: var(--zoro-lime-hover);
   transform: translateY(-2px) scale(1.03);
