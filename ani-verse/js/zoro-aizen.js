@@ -1713,17 +1713,16 @@
     /* ---- heading: active filter + result count ---- */
     function updateHeading(count, pageInfo) {
       if (!headingEl) return;
-      const hasFilter = !!(state.genre || state.format || state.status || state.year);
       /* The total now comes from the server and is STABLE: the same number
          for every page of the same query. Search uses the post-filter count
          (the titles this site actually serves); browse uses AniList's own
-         total, which is only meaningful without a filter. A filtered browse
-         total IS real (< 5,000), so it is shown too. */
+         total. A filtered browse total below the 5,000 cap is real and is
+         shown exactly; a capped total (>= 5,000) is shown as "5,000+" in
+         filtered views too — the same treatment unfiltered Browse gets. */
       const rawTotal = pageInfo && Number.isFinite(Number(pageInfo.total)) ? Number(pageInfo.total) : null;
-      const total = rawTotal != null && (!hasFilter || rawTotal < 5000) ? rawTotal : null;
+      const total = rawTotal;
       /* AniList caps the reported total at 5,000 — show it as "5,000+" rather
-         than pretending that is the exact number. Filtered views do not show
-         the 5,000+ capped total. */
+         than pretending that is the exact number. */
       const countLabel = total != null
         ? (total >= 5000
           ? `5,000+ ${total === 1 ? "title" : "titles"}`
@@ -1808,8 +1807,14 @@
         }
       }
       html += `<button class="page-btn" type="button" data-page="${current + 1}"${current >= last ? " disabled" : ""} aria-label="Next page">Next ›</button>`;
-      /* "Page X of Y" whenever the last page is really known. */
-      if (!bounded && last > 1) {
+      /* "Page X of Y" whenever the last page is really known. A bounded
+         (filtered + capped) view still gets a label, but the "+" marks the
+         last page as a FLOOR, not an exact count — AniList caps the total
+         at 5,000, so the true end is at least pageInfo.lastPage. */
+      if (bounded) {
+        const lastFloor = (pageInfo && Number(pageInfo.lastPage)) || last;
+        html += `<span class="page-btn" style="border:none; background:none; cursor:default;" aria-live="polite">Page ${current} of ${lastFloor}+</span>`;
+      } else if (last > 1) {
         html += `<span class="page-btn" style="border:none; background:none; cursor:default;" aria-live="polite">Page ${current} of ${last}</span>`;
       }
       paginationWrap.innerHTML = html;

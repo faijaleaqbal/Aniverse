@@ -238,20 +238,28 @@ function pageResult(pageData) {
    back the SAME titles — which made the site's page 2 largely repeat page 1.
    So the search is served from a SNAPSHOT: one fixed set of results is
    fetched (3 AniList pages x 50), de-duplicated by AniList id, screened for
-   adult content, and cached for 10 minutes. Every page of a given query is
+   adult content, and cached for 30 minutes. Every page of a given query is
    then a slice of that one immutable set — the total never moves, no page
    repeats another page's titles, and there is never a page past the end. */
 export const SEARCH_PAGE_SIZE = 12;
 const SEARCH_SNAPSHOT_PAGES = 3;
 const SEARCH_SNAPSHOT_PER_PAGE = 50;
+const SEARCH_SNAPSHOT_TTL_MS = 30 * 60 * 1000;
 
-/* One snapshot of a search: the raw media list, de-duplicated by id and
-   adult-screened. Cached by the query, so all pages share one result set. */
-async function searchSnapshot(q) {
-  const key = `search-snapshot:${String(q).trim().toLowerCase()}`;
-  const hit = cacheGet(key);
-  if (hit) return hit;
+/* In-flight snapshot builds, keyed by the normalized query. The search page
+   fires concurrent /api/search calls (dropdown + grid); without dedup every
+   cold-cache caller built its OWN snapshot from AniList's non-deterministic
+   SEARCH_MATCH, so concurrent callers got DIFFERENT result sets (audit-6 B4:
+   totals [0, 5, 5, 5, 5] for one query). Callers that arrive while a build
+   is running await the SAME promise; the entry is removed when it settles
+   (success or failure). */
+const snapshotInFlight = new Map();
 
+/* Build one snapshot: 3 pages in parallel, per-page success tracked. A
+   failing page contributes fewer titles — but if ALL pages fail the build
+   throws AniListBusyError (the route answers 502 search_busy) instead of
+   returning an empty set that would then be cached as a real "no results". */
+async function buildSearchSnapshot(q) {
   const query = `query ($search: String, $page: Int, $perPage: Int) {
     Page(page: $page, perPage: $perPage) {
       media(search: $search, type: ANIME, sort: SEARCH_MATCH, isAdult: false) { ${MEDIA_FIELDS} }
@@ -262,21 +270,50 @@ async function searchSnapshot(q) {
   const pages = await Promise.all(
     Array.from({ length: SEARCH_SNAPSHOT_PAGES }, (_, i) =>
       anilistQuery(query, { search: q, page: i + 1, perPage: SEARCH_SNAPSHOT_PER_PAGE })
-        .then((data) => (data && data.Page && Array.isArray(data.Page.media) ? data.Page.media : []))
-        .catch(() => [])
+        .then((data) => ({
+          ok: true,
+          media: data && data.Page && Array.isArray(data.Page.media) ? data.Page.media : [],
+        }))
+        .catch(() => ({ ok: false, media: [] }))
     )
   );
+  if (pages.every((p) => !p.ok)) {
+    throw new AniListBusyError("AniList search failed on every page");
+  }
 
   const seen = new Set();
   const items = [];
-  for (const media of pages.flat()) {
+  for (const media of pages.flatMap((p) => p.media)) {
     if (!media || media.id == null || seen.has(media.id)) continue;
     if (isAdultMedia(media)) continue;
     seen.add(media.id);
     items.push(mediaView(media));
   }
-  cacheSet(key, items, DEFAULT_TTL_MS);
   return items;
+}
+
+/* One snapshot of a search: the raw media list, de-duplicated by id and
+   adult-screened. Cached by the query, so all pages share one result set.
+   A genuinely empty result (at least one page succeeded, zero matches) is
+   cached like any other; an all-pages-failure never is. */
+async function searchSnapshot(q) {
+  const key = `search-snapshot:${String(q).trim().toLowerCase()}`;
+  const hit = cacheGet(key);
+  if (hit) return hit;
+
+  const running = snapshotInFlight.get(key);
+  if (running) return running;
+
+  const build = buildSearchSnapshot(q)
+    .then((items) => {
+      cacheSet(key, items, SEARCH_SNAPSHOT_TTL_MS);
+      return items;
+    })
+    .finally(() => {
+      snapshotInFlight.delete(key);
+    });
+  snapshotInFlight.set(key, build);
+  return build;
 }
 
 /* The whole search result set for a query (stable, snapshot-backed). The
