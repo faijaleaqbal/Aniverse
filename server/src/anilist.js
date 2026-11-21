@@ -441,6 +441,10 @@ export async function searchAniList(q) {
    (0-9 = starts with a digit), de-duplicated by id and adult-screened. Every
    page of a letter is a slice of that one immutable set.
 
+   EXCEPT a single-letter "A" search returns NOTHING on AniList's side, so for
+   an empty A-Z letter snapshot the pool falls back to TITLE_ROMAJI paging
+   (no search term) with an early stop past the letter.
+
    The pool is a best-effort candidate set, not the whole catalog: if the
    10-page fetch cap is reached the snapshot is partial, so the total is a
    FLOOR. `capped` is returned and the UI must label it with a "+" — a partial
@@ -503,6 +507,82 @@ async function buildAzSnapshot(letter) {
     seen.add(media.id);
     items.push(mediaView(media));
   }
+
+  /* FALLBACK — TITLE_ROMAJI paging, A-Z letters only. AniList returns NOTHING
+     for a single-letter "A" search (every other letter works), so the search
+     snapshot is empty and the most common starting letter of the whole catalog
+     rendered an empty list. A-Z only: "0-9" is a search-only bucket (its
+     search term is "0"), and a NON-EMPTY search snapshot never falls back
+     (B/C/S/... keep the search path exactly as-is). */
+  if (!items.length && isAzFallbackLetter(letter)) {
+    const fallback = await buildAzTitleRomajiSnapshot(letter);
+    if (fallback.items.length) return fallback;
+    /* The fallback itself is a real, empty catalog slice for this letter —
+       that honest empty set is cached like any other (same key, same TTL). */
+    return { items: fallback.items, capped: fallback.capped };
+  }
+
+  return { items, capped };
+}
+
+/* Only the 26 single letters fall back; "0-9" and "all" never do. */
+function isAzFallbackLetter(letter) {
+  return /^[A-Z]$/.test(String(letter || ""));
+}
+
+/* The fallback pool: page the WHOLE catalog sorted by TITLE_ROMAJI (no search
+   term), SEQUENTIALLY — the early stop needs the order, so the pages cannot be
+   fetched in parallel. Collect titles whose romaji OR english name starts with
+   the letter, and STOP at the first title whose ROMAJI name starts with a
+   letter strictly after the target: TITLE_ROMAJI sorts by romaji, so every
+   later page is past the letter too.
+
+   The scan stops on PAST-THE-LETTER or the 10-page cap (same cap as the search
+   path, capped=true then). A SHORT page is NOT a stop: the boundary page that
+   carries the first past-letter title is itself short (it ends the letter's
+   run), and stopping on shortness would never fetch it — which is exactly the
+   page that proves the scan is done. */
+async function buildAzTitleRomajiSnapshot(letter) {
+  const query = `query ($page: Int, $perPage: Int) {
+    Page(page: $page, perPage: $perPage) {
+      media(type: ANIME, sort: TITLE_ROMAJI, isAdult: false) { ${MEDIA_FIELDS} }
+    }
+  }`;
+  const target = String(letter).toLowerCase();
+  const seen = new Set();
+  const items = [];
+  let capped = false;
+
+  for (let page = 1; page <= AZ_SNAPSHOT_PAGES; page++) {
+    const data = await anilistQuery(query, { page, perPage: AZ_SNAPSHOT_PER_PAGE });
+    const media = data && data.Page && Array.isArray(data.Page.media) ? data.Page.media : [];
+    /* A title whose ROMAJI name starts with a LETTER strictly after the target
+       ends the scan — TITLE_ROMAJI sorts by romaji, so every later page is past
+       the letter too. A symbol/digit-led romaji (which sorts before "a") is NOT
+       a stop: it has not reached the letter yet. */
+    let stop = false;
+    for (const m of media) {
+      if (!m) continue;
+      const romaji = String(((m.title || {}).romaji) || "").trim();
+      const first = romaji.charAt(0).toLowerCase();
+      if (/^[a-z]$/.test(first) && first > target) {
+        stop = true;
+        break;
+      }
+    }
+    for (const m of media) {
+      if (!m || m.id == null || seen.has(m.id)) continue;
+      if (!azPrefixMatch(m, letter)) continue;
+      if (isAdultMedia(m)) continue;
+      seen.add(m.id);
+      items.push(mediaView(m));
+    }
+    if (stop) break;
+    /* Filling the 10th page means the cap was reached -> the total is a floor.
+       (A short page is not a stop: see the note above.) */
+    if (page === AZ_SNAPSHOT_PAGES) capped = true;
+  }
+
   return { items, capped };
 }
 

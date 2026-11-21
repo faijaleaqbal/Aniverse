@@ -546,6 +546,14 @@ img {
   box-shadow: 0 0 16px var(--zoro-lime-glow);
 }
 
+/* Live titles have no catalog slug, so the watchlist buttons (detail-add-list,
+   watch-add-list-btn) are hidden via [hidden] — the .btn-zoro-primary display
+   rule would otherwise beat the [hidden] UA rule and the buttons stayed
+   visible. Same pattern as .btn-watch-now[hidden] below. */
+.btn-zoro-primary[hidden] {
+  display: none;
+}
+
 .btn-zoro-primary:hover {
   background: var(--zoro-lime-hover);
   transform: translateY(-2px) scale(1.02);
@@ -2822,6 +2830,9 @@ body.drawer-open .zoro-header {
 }
 .detail-info { flex: 1; min-width: 0; }
 .detail-badges { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-bottom: 0.9rem; }
+/* A live title with no 18+ tag hides the badge row via [hidden] — the display
+   rule above would otherwise beat the UA `[hidden]` rule. */
+.detail-badges[hidden] { display: none; }
 .badge-score { background: var(--zoro-lime); color: #0c0d12; font-weight: 800; }
 
 /* ==========================================================================
@@ -2870,13 +2881,18 @@ body.drawer-open .zoro-header {
 }
 .zoro-live-notice.is-busy strong { color: var(--zoro-dub); }
 
-/* Live filter row: genre chips + format / status / year / sort selects. */
+/* Live filter row: genre chips + format / status / year / sort selects.
+   The search view hides this whole row via [hidden] — the display rule below
+   would otherwise beat the UA `[hidden]` rule and the row stayed visible. */
 .live-filter-row {
   display: flex;
   flex-wrap: wrap;
   gap: 0.75rem;
   align-items: center;
   margin-bottom: 1rem;
+}
+.live-filter-row[hidden] {
+  display: none;
 }
 
 .live-filter-group {

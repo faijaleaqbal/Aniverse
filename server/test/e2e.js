@@ -86,14 +86,25 @@ const MOCK_PAGE_INFO = { total: 42, currentPage: 1, lastPage: 4, hasNextPage: tr
    slice `allMedia` by page/perPage AND report AniList's 5,000 / 416 cap once
    the set is multi-page — the exact behavior that hides a small year's total.
    `alwaysFull` answers every page with `perPage` rows (no short page), so a
-   count runs into the 40-page cap. */
-function mockAniList({ mediaList = [], allMedia = null, alwaysFull = false, mediaById = {}, airing = [], fail = false } = {}) {
+   count runs into the 40-page cap.
+   `routes` (A-Z tests) answers by query SHAPE instead of with one media list:
+   each entry is { test(body)->bool, answer(body) }, tried in order. This lets
+   one mock serve BOTH the SEARCH_MATCH snapshot (empty for "A") and the
+   TITLE_ROMAJI fallback pages, and lets a test COUNT the calls of each kind. */
+function mockAniList({ mediaList = [], allMedia = null, alwaysFull = false, mediaById = {}, airing = [], fail = false, routes = null } = {}) {
   clearAniListCache();
   anilistRequests.length = 0;
   anilistResponder = async (body) => {
     const query = String(body.query || "");
     if (fail) {
       return jsonResponse({ errors: [{ message: "Upstream boom", status: 500 }] }, 500);
+    }
+    if (routes) {
+      for (const route of routes) {
+        if (route.test(body, query)) return route.answer(body, query);
+      }
+      /* Unrouted query: a plain empty page keeps the snapshot honest. */
+      return jsonResponse({ data: { Page: { pageInfo: { total: 0, lastPage: 1, hasNextPage: false }, media: [] } } });
     }
     if (query.includes("airingSchedules")) {
       return jsonResponse({
@@ -1038,6 +1049,151 @@ async function runTests() {
       const bad = await fetch(`${baseUrl}/api/az?letter=AB`);
       assert.equal(bad.status, 400);
       assert.equal((await bad.json()).error, "bad_letter");
+      resetAniListMock();
+    });
+
+    /* ======================================================================
+       PHASE 2 — A-Z FALLBACK (letter "A" search returns nothing on AniList)
+       The search snapshot for a single-letter "A" is EMPTY, so the pool falls
+       back to TITLE_ROMAJI paging with an early stop past the letter. The
+       mock serves the empty SEARCH_MATCH pages AND the TITLE_ROMAJI pages,
+       and counts the calls of each kind.
+       ====================================================================== */
+
+    // 42. Empty "A" search snapshot -> TITLE_ROMAJI fallback: only A-titles,
+    //     paging STOPS after the first B-title page, and the calls are counted.
+    await test("GET /api/az letter A falls back to TITLE_ROMAJI paging and stops at B", async () => {
+      clearAniListCache();
+      anilistRequests.length = 0;
+      let titleRomajiCalls = 0;
+      const titleRomajiPages = {
+        1: [
+          /* Symbol-led romaji sorts before "a" — a candidate, not a match. */
+          fakeMedia({ id: 960001, idMal: 960001, title: { romaji: "!Crest of the Stars", english: "!Crest", native: null } }),
+          fakeMedia({ id: 960002, idMal: 960002, title: { romaji: "Attack on Titan", english: "Attack on Titan", native: null } }),
+          fakeMedia({ id: 960003, idMal: 960003, title: { romaji: "Akame ga Kill!", english: "Akame ga Kill!", native: null } }),
+          fakeMedia({ id: 960004, idMal: 960004, title: { romaji: "Another", english: "Another", native: null } }),
+        ],
+        /* The first B-title ends the scan: nothing after it is fetched. */
+        2: [fakeMedia({ id: 960010, idMal: 960010, title: { romaji: "Bleach", english: "Bleach", native: null } })],
+      };
+      anilistResponder = async (body) => {
+        const query = String(body.query || "");
+        if (/sort: TITLE_ROMAJI/.test(query)) {
+          titleRomajiCalls++;
+          const page = Number(body.variables && body.variables.page) || 1;
+          const media = titleRomajiPages[page] || [];
+          return jsonResponse({ data: { Page: { pageInfo: { total: media.length, lastPage: 1 }, media } } });
+        }
+        /* SEARCH_MATCH on "A" -> AniList's real behaviour: nothing. */
+        return jsonResponse({ data: { Page: { pageInfo: { total: 0, lastPage: 1 }, media: [] } } });
+      };
+
+      const res = await fetch(`${baseUrl}/api/az?letter=A`);
+      assert.equal(res.status, 200);
+      const data = await res.json();
+      const ids = data.results.map((t) => t.anilistId).sort();
+      assert.deepEqual(ids, [960002, 960003, 960004], "only the A-titles are in the fallback snapshot");
+      assert.equal(data.pageInfo.total, 3, "total is the filtered fallback count");
+      assert.equal(data.pageInfo.capped, false, "the scan stopped before the cap");
+      /* 10 empty SEARCH_MATCH pages + 2 TITLE_ROMAJI pages (the B page stops it). */
+      assert.equal(anilistRequests.length, 12, "search pages then fallback pages");
+      assert.equal(titleRomajiCalls, 2, "paging stopped after the B-title page");
+      resetAniListMock();
+    });
+
+    // 43. The fallback screens adult titles out too, and 0-9 never falls back.
+    await test("GET /api/az fallback screens adult titles and 0-9 never falls back", async () => {
+      clearAniListCache();
+      anilistRequests.length = 0;
+      let titleRomajiCalls = 0;
+      anilistResponder = async (body) => {
+        const query = String(body.query || "");
+        if (/sort: TITLE_ROMAJI/.test(query)) {
+          titleRomajiCalls++;
+          const media = [
+            fakeMedia({ id: 961001, idMal: 961001, isAdult: true, title: { romaji: "Adult A", english: "Adult A", native: null } }),
+            fakeMedia({ id: 961002, idMal: 961002, title: { romaji: "Hentai A", english: "Hentai A", native: null } }),
+            fakeMedia({ id: 961003, idMal: 961003, title: { romaji: "Ao Haru Ride", english: "Ao Haru Ride", native: null } }),
+          ];
+          return jsonResponse({ data: { Page: { pageInfo: { total: media.length, lastPage: 1 }, media } } });
+        }
+        return jsonResponse({ data: { Page: { pageInfo: { total: 0, lastPage: 1 }, media: [] } } });
+      };
+
+      const res = await fetch(`${baseUrl}/api/az?letter=A`);
+      const data = await res.json();
+      assert.deepEqual(data.results.map((t) => t.anilistId), [961003], "adult titles are screened out of the fallback");
+      resetAniListMock();
+
+      /* 0-9 has no fallback: an empty search stays empty and no TITLE_ROMAJI
+         call is made. */
+      clearAniListCache();
+      anilistRequests.length = 0;
+      titleRomajiCalls = 0;
+      anilistResponder = async (body) => {
+        const query = String(body.query || "");
+        if (/sort: TITLE_ROMAJI/.test(query)) {
+          titleRomajiCalls++;
+          return jsonResponse({ data: { Page: { pageInfo: { total: 0, lastPage: 1 }, media: [] } } });
+        }
+        return jsonResponse({ data: { Page: { pageInfo: { total: 0, lastPage: 1 }, media: [] } } });
+      };
+      const digits = await (await fetch(`${baseUrl}/api/az?letter=0-9`)).json();
+      assert.equal(digits.pageInfo.total, 0);
+      assert.equal(titleRomajiCalls, 0, "0-9 never falls back");
+      resetAniListMock();
+    });
+
+    // 44. The 10-page fallback cap sets capped=true (a floor, same as search).
+    await test("GET /api/az fallback flags the 10-page cap", async () => {
+      clearAniListCache();
+      anilistRequests.length = 0;
+      let titleRomajiCalls = 0;
+      anilistResponder = async (body) => {
+        const query = String(body.query || "");
+        if (/sort: TITLE_ROMAJI/.test(query)) {
+          titleRomajiCalls++;
+          const page = Number((body.variables || {}).page) || 1;
+          /* Every page is FULL (50 rows) and stays inside the letter, so the
+             scan runs to the 10-page cap. */
+          const media = Array.from({ length: 50 }, (_, i) => {
+            const id = 962000 + (page - 1) * 50 + i;
+            return fakeMedia({ id, idMal: id, title: { romaji: `A ${page}-${i}`, english: `A ${page}-${i}`, native: null } });
+          });
+          return jsonResponse({ data: { Page: { pageInfo: { total: 5000, lastPage: 416 }, media } } });
+        }
+        return jsonResponse({ data: { Page: { pageInfo: { total: 0, lastPage: 1 }, media: [] } } });
+      };
+
+      const data = await (await fetch(`${baseUrl}/api/az?letter=A`)).json();
+      assert.equal(titleRomajiCalls, 10, "the fallback pages to the 10-page cap");
+      assert.equal(data.pageInfo.capped, true, "a full 10th page means the cap was hit");
+      assert.equal(data.pageInfo.total, 500, "the total is the de-duplicated snapshot floor");
+      resetAniListMock();
+    });
+
+    // 45. A NON-EMPTY search snapshot never falls back: B keeps its search
+    //     results and no TITLE_ROMAJI call is made.
+    await test("GET /api/az letter B does not fall back when the search snapshot is non-empty", async () => {
+      clearAniListCache();
+      anilistRequests.length = 0;
+      let titleRomajiCalls = 0;
+      const pool = Array.from({ length: 22 }, (_, i) =>
+        fakeMedia({ id: 963000 + i, idMal: 963000 + i, title: { romaji: `B Title ${i}`, english: `B Title ${i}`, native: null } })
+      );
+      anilistResponder = async (body) => {
+        const query = String(body.query || "");
+        if (/sort: TITLE_ROMAJI/.test(query)) {
+          titleRomajiCalls++;
+          return jsonResponse({ data: { Page: { pageInfo: { total: 0, lastPage: 1 }, media: [] } } });
+        }
+        return jsonResponse({ data: { Page: { pageInfo: { total: pool.length, lastPage: 1 }, media: pool } } });
+      };
+
+      const data = await (await fetch(`${baseUrl}/api/az?letter=B`)).json();
+      assert.equal(data.pageInfo.total, 22, "B keeps its search snapshot");
+      assert.equal(titleRomajiCalls, 0, "no TITLE_ROMAJI paging for a non-empty snapshot");
       resetAniListMock();
     });
 

@@ -2494,9 +2494,18 @@
 
     /* Pagination: same windowed controls as browse. A letter's last page is
        always known (the snapshot is a fixed set), so no "+" floor mark here —
-       the capped "+" belongs to the TOTAL only. */
+       the capped "+" belongs to the TOTAL only.
+
+       The controls are rendered ONLY from data the server has confirmed:
+       `pageInfo` is never invented, so a letter load never flashes a total
+       the data has not backed (no placeholder "Page 1 of N"). */
     function renderPagination(pageInfo) {
       if (!paginationWrap) return;
+      if (!pageInfo) {
+        paginationWrap.hidden = true;
+        paginationWrap.innerHTML = "";
+        return;
+      }
       const current = (pageInfo && Number(pageInfo.currentPage)) || state.page;
       const last = (pageInfo && Number(pageInfo.lastPage)) || 1;
       if (last <= 1 && !(pageInfo && pageInfo.hasNextPage)) {
@@ -2582,6 +2591,13 @@
       const token = ++loadToken;
       renderSkeleton();
       updateHeading(null);
+      /* A new load invalidates the previous letter's pagination: clear it
+         BEFORE the round trip so a stale "Page 1 of N" never survives into
+         the loading state (the container stays empty until real data lands). */
+      if (paginationWrap) {
+        paginationWrap.hidden = true;
+        paginationWrap.innerHTML = "";
+      }
       /* "All" is the plain A-Z browse; a letter is served by /api/az. */
       const path = state.letter === "all"
         ? `/api/browse?sort=az&page=${state.page}`

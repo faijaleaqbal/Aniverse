@@ -672,10 +672,11 @@ app.get("/api/browse", async (req, res, next) => {
 /* GET /api/az?letter=<A-Z|0-9|all>&page=<n>
    A-Z index over the live catalog. AniList has no prefix search, so a letter
    is served from a SEARCH_MATCH snapshot (10 pages x 50, 30-min cache,
-   in-flight dedup) filtered server-side to romaji/english prefix matches.
-   A snapshot that hit the fetch cap is flagged `capped` — the total is a
-   FLOOR and the UI must label it with a "+". letter=all is the plain
-   TITLE_ROMAJI browse (the A-Z "All" view uses /api/browse?sort=az). */
+   in-flight dedup) filtered server-side to romaji/english prefix matches; a
+   letter whose search snapshot comes back EMPTY falls back to TITLE_ROMAJI
+   paging (A-Z only). A snapshot that hit the fetch cap is flagged `capped` —
+   the total is a FLOOR and the UI must label it with a "+". letter=all is the
+   plain TITLE_ROMAJI browse (the A-Z "All" view uses /api/browse?sort=az). */
 app.get("/api/az", async (req, res, next) => {
   try {
     const letter = normalizeAzLetter(req.query.letter);
