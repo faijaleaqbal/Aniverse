@@ -11,7 +11,7 @@
   <!-- Loaded async: a slow Google Fonts response must never block the app script or render. -->
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
   <noscript><link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet"></noscript>
-  <link rel="preload" href="css/zoro-aizen.css?v=15" as="style">
+  <link rel="preload" href="css/zoro-aizen.css?v=16" as="style">
   <link rel="preload" href="js/zoro-aizen.js?v=16" as="script">
   <script>
     /* Warm the API while the app script is still downloading: this removes a
@@ -46,7 +46,7 @@
       }
     })();
   </script>
-  <link rel="stylesheet" href="css/zoro-aizen.css?v=15">
+  <link rel="stylesheet" href="css/zoro-aizen.css?v=16">
   <!-- Player-specific styles (spinner overlay, resume note, toasts). Without
        this sheet the spinner rendered as plain text BELOW the player. -->
   <link rel="stylesheet" href="css/zoko-player.css?v=11">
@@ -117,7 +117,7 @@
       <span>/</span>
       <a href="browse.html" style="color: var(--text-sub);">Series</a>
       <span>/</span>
-      <span id="watch-anime-title" style="color: var(--zoro-lime); font-weight: 600;">Loading…</span>
+      <span id="watch-anime-title">Loading…</span>
     </div>
 
     <!-- Data error state: shown instead of stale placeholder content.
@@ -269,7 +269,7 @@
 
         <!-- Anime Synopsis & Details Card -->
         <div style="background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 12px; padding: 1.5rem;">
-          <h3 style="font-size: 1.15rem; font-weight: 800; color: var(--zoro-lime); margin-bottom: 0.75rem;">Synopsis</h3>
+          <h3 class="watch-section-title">Synopsis</h3>
           <p id="watch-anime-desc" style="font-size: 0.925rem; color: var(--text-sub); line-height: 1.6;">
             Loading synopsis…
           </p>
@@ -332,7 +332,7 @@
 
         <!-- Quick Info Card (real metadata) -->
         <div style="background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 12px; padding: 1.25rem;">
-          <h3 style="font-size: 0.95rem; font-weight: 800; color: var(--zoro-lime); margin-bottom: 0.85rem;">Anime Details</h3>
+          <h3 class="watch-section-title watch-section-title-sm">Anime Details</h3>
           <div style="display: grid; gap: 0.6rem; font-size: 0.825rem; color: var(--text-sub);">
             <div><strong style="color: #fff;">Status:</strong> <span id="watch-detail-status">—</span></div>
             <div><strong style="color: #fff;">Studios:</strong> <span id="watch-detail-studios">—</span></div>
@@ -368,7 +368,7 @@
       </div>
       <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; margin-top: 1.5rem; font-size: 0.75rem; color: var(--text-muted);">
         <p>Ani Verse does not store any files on its server. Combining Zoro.to UI components with Aizen-Verse cinematic animation engine.</p>
-        <p style="font-family: var(--font-mono); color: var(--zoro-lime);">ZORO × AIZEN HYBRID ENGINE 2026</p>
+        <p class="footer-engine">ZORO × AIZEN HYBRID ENGINE 2026</p>
       </div>
       <p style="margin-top: 1.25rem; font-size: 0.75rem; color: var(--text-muted);">© <span class="js-footer-year">2026</span> Ani Verse. All rights reserved.</p>
     </div>

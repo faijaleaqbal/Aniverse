@@ -11,7 +11,7 @@
   <!-- Loaded async: a slow Google Fonts response must never block the app script or render. -->
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
   <noscript><link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet"></noscript>
-  <link rel="preload" href="css/zoro-aizen.css?v=15" as="style">
+  <link rel="preload" href="css/zoro-aizen.css?v=16" as="style">
   <link rel="preload" href="js/zoro-aizen.js?v=16" as="script">
   <script>
     /* Warm the API while the app script is still downloading: this removes a
@@ -46,7 +46,7 @@
       }
     })();
   </script>
-  <link rel="stylesheet" href="css/zoro-aizen.css?v=15">
+  <link rel="stylesheet" href="css/zoro-aizen.css?v=16">
 </head>
 <body>
 
@@ -250,7 +250,7 @@
     <section class="container-main" style="margin-bottom: 3rem;">
       <div class="section-header-zoro">
         <h2 class="section-title">From <span class="accent">Your Library</span></h2>
-        <a href="browse.html" style="font-size: 0.85rem; color: var(--zoro-lime); font-weight: 600;">View All →</a>
+        <a href="browse.html" class="section-view-all">View All →</a>
       </div>
 
       <div class="filter-bar-zoro">
@@ -277,7 +277,7 @@
           <h2 class="section-title">Top <span class="accent">Airing</span></h2>
           <span style="font-size: 0.85rem; color: var(--text-muted); font-family: var(--font-mono);">CURRENTLY AIRING</span>
         </div>
-        <a href="browse.html?view=top-airing" style="font-size: 0.85rem; color: var(--zoro-lime); font-weight: 600;">View All →</a>
+        <a href="browse.html?view=top-airing" class="section-view-all">View All →</a>
       </div>
       <div class="cards-grid-zoro" id="live-top-airing-grid"></div>
     </section>
@@ -288,7 +288,7 @@
           <h2 class="section-title">Top <span class="accent">Upcoming</span></h2>
           <span style="font-size: 0.85rem; color: var(--text-muted); font-family: var(--font-mono);">NOT YET RELEASED</span>
         </div>
-        <a href="browse.html?view=top-upcoming" style="font-size: 0.85rem; color: var(--zoro-lime); font-weight: 600;">View All →</a>
+        <a href="browse.html?view=top-upcoming" class="section-view-all">View All →</a>
       </div>
       <div class="cards-grid-zoro" id="live-top-upcoming-grid"></div>
     </section>
@@ -299,7 +299,7 @@
           <h2 class="section-title">Trending <span class="accent">Now</span></h2>
           <span style="font-size: 0.85rem; color: var(--text-muted); font-family: var(--font-mono);">LIVE FROM ANILIST</span>
         </div>
-        <a href="browse.html?sort=trending" style="font-size: 0.85rem; color: var(--zoro-lime); font-weight: 600;">View All →</a>
+        <a href="browse.html?sort=trending" class="section-view-all">View All →</a>
       </div>
       <div class="cards-grid-zoro" id="live-trending-grid"></div>
     </section>
@@ -310,7 +310,7 @@
           <h2 class="section-title">Top <span class="accent">Rated</span></h2>
           <span style="font-size: 0.85rem; color: var(--text-muted); font-family: var(--font-mono);">HIGHEST SCORED</span>
         </div>
-        <a href="browse.html?sort=top" style="font-size: 0.85rem; color: var(--zoro-lime); font-weight: 600;">View All →</a>
+        <a href="browse.html?sort=top" class="section-view-all">View All →</a>
       </div>
       <div class="cards-grid-zoro" id="live-top-rated-grid"></div>
     </section>
@@ -321,7 +321,7 @@
           <h2 class="section-title">New On <span class="accent">Aniverse</span></h2>
           <span style="font-size: 0.85rem; color: var(--text-muted); font-family: var(--font-mono);">MOST RECENTLY STARTED</span>
         </div>
-        <a href="browse.html?sort=newest" style="font-size: 0.85rem; color: var(--zoro-lime); font-weight: 600;">View All →</a>
+        <a href="browse.html?sort=newest" class="section-view-all">View All →</a>
       </div>
       <div class="cards-grid-zoro" id="live-new-on-grid"></div>
     </section>
@@ -355,7 +355,7 @@
       </div>
       <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; margin-top: 1.5rem; font-size: 0.75rem; color: var(--text-muted);">
         <p>Ani Verse does not store any files on its server. Combining Zoro.to UI components with Aizen-Verse cinematic animation engine.</p>
-        <p style="font-family: var(--font-mono); color: var(--zoro-lime);">ZORO × AIZEN HYBRID ENGINE 2026</p>
+        <p class="footer-engine">ZORO × AIZEN HYBRID ENGINE 2026</p>
       </div>
       <p style="margin-top: 1.25rem; font-size: 0.75rem; color: var(--text-muted);">© <span class="js-footer-year">2026</span> Ani Verse. All rights reserved.</p>
     </div>

@@ -3522,11 +3522,12 @@ body.drawer-open .zoro-header {
 [data-theme="light"] .user-dropdown-name { color: var(--text-main); }
 [data-theme="light"] .user-badge-btn { background: var(--bg-card); }
 
-/* Text that was hardcoded white in the dark design. */
+/* Text that was hardcoded white in the dark design. NOTE: .trending-anime-title
+   is NOT here — it sits on the poster's dark bottom gradient in BOTH themes,
+   so it stays white (see below). */
 [data-theme="light"] .section-title,
 [data-theme="light"] .zoro-card-title,
 [data-theme="light"] .col-item-title,
-[data-theme="light"] .trending-anime-title,
 [data-theme="light"] .zoro-empty-state-title,
 [data-theme="light"] .comment-user-name,
 [data-theme="light"] .detail-title,
@@ -3535,6 +3536,40 @@ body.drawer-open .zoro-header {
 [data-theme="light"] .schedule-title-link,
 [data-theme="light"] .live-relation-name,
 [data-theme="light"] .live-cast-name { color: var(--text-main); }
+
+/* Poster-overlay titles sit on the poster's dark bottom gradient in BOTH
+   themes — dark text on the gradient is invisible, so they stay white. */
+[data-theme="light"] .trending-anime-title { color: #fff; }
+
+/* Lime accent TEXT on light surfaces: bright lime (#cae962) is unreadable on
+   white, so accent text goes dark green in Light mode. Lime BACKGROUNDS
+   (buttons, chips, avatars, play circles) are untouched — they carry dark
+   text, and darkening them would break that. */
+[data-theme="light"] .zoro-brand span.verse,
+[data-theme="light"] .search-group-label,
+[data-theme="light"] .section-title span.accent,
+[data-theme="light"] .col-title,
+[data-theme="light"] .col-item:hover .col-item-title,
+[data-theme="light"] .zoro-card:hover .zoro-card-title,
+[data-theme="light"] .menu-toggle-btn:hover,
+[data-theme="light"] .icon-action-btn:hover,
+[data-theme="light"] .user-dropdown-item:hover,
+[data-theme="light"] .search-box:focus-within .search-btn,
+[data-theme="light"] .zoro-empty-state-icon,
+[data-theme="light"] .live-result-group-title .accent { color: #4d7c0f; }
+
+/* Formerly-inline lime text, now classed so Light mode can darken it. */
+.section-view-all { font-size: 0.85rem; color: var(--zoro-lime); font-weight: 600; }
+[data-theme="light"] .section-view-all { color: #4d7c0f; }
+.footer-engine { font-family: var(--font-mono); color: var(--zoro-lime); }
+[data-theme="light"] .footer-engine { color: #4d7c0f; }
+.watch-section-title { font-size: 1.15rem; font-weight: 800; color: var(--zoro-lime); margin-bottom: 0.75rem; }
+.watch-section-title-sm { font-size: 0.95rem; margin-bottom: 0.85rem; }
+[data-theme="light"] .watch-section-title { color: #4d7c0f; }
+#watch-anime-title { color: var(--zoro-lime); font-weight: 600; }
+[data-theme="light"] #watch-anime-title { color: #4d7c0f; }
+#live-jst-clock { color: var(--zoro-lime); font-weight: 700; }
+[data-theme="light"] #live-jst-clock { color: #4d7c0f; }
 
 [data-theme="light"] .comment-body-text { color: var(--text-sub); }
 [data-theme="light"] .single-comment { border-bottom-color: rgba(15, 23, 42, 0.08); }
