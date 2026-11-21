@@ -11,7 +11,7 @@
   <!-- Loaded async: a slow Google Fonts response must never block the app script or render. -->
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
   <noscript><link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet"></noscript>
-  <link rel="preload" href="css/zoro-aizen.css?v=16" as="style">
+  <link rel="preload" href="css/zoro-aizen.css?v=17" as="style">
   <link rel="preload" href="js/zoro-aizen.js?v=16" as="script">
   <script>
     /* Warm the API while the app script is still downloading: this removes a
@@ -46,7 +46,7 @@
       }
     })();
   </script>
-  <link rel="stylesheet" href="css/zoro-aizen.css?v=16">
+  <link rel="stylesheet" href="css/zoro-aizen.css?v=17">
   <!-- Player-specific styles (spinner overlay, resume note, toasts). Without
        this sheet the spinner rendered as plain text BELOW the player. -->
   <link rel="stylesheet" href="css/zoko-player.css?v=11">
@@ -132,7 +132,7 @@
          player and the episode sidebar start at the same y. -->
     <div style="margin-top: 1rem;">
       <div class="detail-badges" id="watch-anime-badges" hidden style="margin-bottom: 0.5rem;"></div>
-      <h1 id="watch-anime-title-h1" style="font-size: 1.75rem; font-weight: 800; color: #fff;">Loading…</h1>
+      <h1 id="watch-anime-title-h1" class="watch-page-title">Loading…</h1>
       <p id="watch-ep-subtitle" style="font-size: 0.95rem; color: var(--text-sub); margin-top: 4px;">Loading episode…</p>
     </div>    </div>
 
@@ -278,7 +278,7 @@
         <!-- Zoro Community & Comments Box (Synced to SQLite) -->
         <div class="discussion-box" id="watch-discussion">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem;">
-            <h3 style="font-size: 1.2rem; font-weight: 800; color: #fff;">Community Discussion</h3>
+            <h3 class="watch-panel-title">Community Discussion</h3>
             <span id="comments-count-text" style="font-size: 0.8rem; color: var(--text-muted); font-family: var(--font-mono);">Loading comments...</span>
           </div>
 
@@ -314,7 +314,7 @@
       <div class="watch-sidebar">
         <div class="episodes-card-zoro">
           <div class="ep-range-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
-            <h3 style="font-size: 1rem; font-weight: 800; color: #fff;">List of Episodes</h3>
+            <h3 class="watch-panel-title watch-panel-title-sm">List of Episodes</h3>
             <span style="font-size: 0.75rem; color: var(--zoro-lime); font-family: var(--font-mono);" id="track-label">SUB</span>
           </div>
 
@@ -334,15 +334,15 @@
         <div style="background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 12px; padding: 1.25rem;">
           <h3 class="watch-section-title watch-section-title-sm">Anime Details</h3>
           <div style="display: grid; gap: 0.6rem; font-size: 0.825rem; color: var(--text-sub);">
-            <div><strong style="color: #fff;">Status:</strong> <span id="watch-detail-status">—</span></div>
-            <div><strong style="color: #fff;">Studios:</strong> <span id="watch-detail-studios">—</span></div>
-            <div><strong style="color: #fff;">Aired:</strong> <span id="watch-detail-aired">—</span></div>
-            <div id="watch-detail-season-row" hidden><strong style="color: #fff;">Season:</strong> <span id="watch-detail-season">—</span></div>
-            <div><strong style="color: #fff;">Year:</strong> <span id="watch-detail-year">—</span></div>
-            <div><strong style="color: #fff;">Score:</strong> <span id="watch-detail-score">—</span></div>
-            <div><strong style="color: #fff;">Episodes:</strong> <span id="watch-detail-episodes">—</span></div>
-            <div><strong style="color: #fff;">Duration:</strong> <span id="watch-detail-duration">—</span></div>
-            <div id="watch-detail-next-row" hidden><strong style="color: #fff;">Next episode:</strong> <span id="watch-detail-next">—</span></div>
+            <div><strong class="watch-detail-label">Status:</strong> <span id="watch-detail-status">—</span></div>
+            <div><strong class="watch-detail-label">Studios:</strong> <span id="watch-detail-studios">—</span></div>
+            <div><strong class="watch-detail-label">Aired:</strong> <span id="watch-detail-aired">—</span></div>
+            <div id="watch-detail-season-row" hidden><strong class="watch-detail-label">Season:</strong> <span id="watch-detail-season">—</span></div>
+            <div><strong class="watch-detail-label">Year:</strong> <span id="watch-detail-year">—</span></div>
+            <div><strong class="watch-detail-label">Score:</strong> <span id="watch-detail-score">—</span></div>
+            <div><strong class="watch-detail-label">Episodes:</strong> <span id="watch-detail-episodes">—</span></div>
+            <div><strong class="watch-detail-label">Duration:</strong> <span id="watch-detail-duration">—</span></div>
+            <div id="watch-detail-next-row" hidden><strong class="watch-detail-label">Next episode:</strong> <span id="watch-detail-next">—</span></div>
           </div>
           <a id="watch-detail-link" href="browse.html" style="display:inline-block;margin-top:0.9rem;font-size:0.8rem;color:var(--zoro-lime);font-weight:600;">View Full Details →</a>
         </div>

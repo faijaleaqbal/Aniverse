@@ -3522,20 +3522,27 @@ body.drawer-open .zoro-header {
 [data-theme="light"] .user-dropdown-name { color: var(--text-main); }
 [data-theme="light"] .user-badge-btn { background: var(--bg-card); }
 
-/* Text that was hardcoded white in the dark design. NOTE: .trending-anime-title
-   is NOT here — it sits on the poster's dark bottom gradient in BOTH themes,
-   so it stays white (see below). */
+/* Text that was hardcoded white in the dark design. NOTE: .trending-anime-title,
+   .detail-title and .detail-meta strong are NOT here — they sit on dark
+   poster/hero gradients in BOTH themes, so they stay white (see below). */
 [data-theme="light"] .section-title,
 [data-theme="light"] .zoro-card-title,
 [data-theme="light"] .col-item-title,
 [data-theme="light"] .zoro-empty-state-title,
 [data-theme="light"] .comment-user-name,
-[data-theme="light"] .detail-title,
-[data-theme="light"] .detail-meta strong,
 [data-theme="light"] .genre-card-title,
 [data-theme="light"] .schedule-title-link,
 [data-theme="light"] .live-relation-name,
 [data-theme="light"] .live-cast-name { color: var(--text-main); }
+
+/* The detail hero and the spotlight keep their dark banner/gradient in BOTH
+   themes, so ALL text on them stays light in Light mode. */
+[data-theme="light"] .detail-title { color: #fff; }
+[data-theme="light"] .detail-meta strong { color: #fff; }
+[data-theme="light"] .detail-hero .detail-meta,
+[data-theme="light"] .detail-hero .detail-synopsis,
+[data-theme="light"] .detail-hero .detail-alt-titles,
+[data-theme="light"] .spotlight-desc { color: rgba(255, 255, 255, 0.82); }
 
 /* Poster-overlay titles sit on the poster's dark bottom gradient in BOTH
    themes — dark text on the gradient is invisible, so they stay white. */
@@ -3566,6 +3573,18 @@ body.drawer-open .zoro-header {
 .watch-section-title { font-size: 1.15rem; font-weight: 800; color: var(--zoro-lime); margin-bottom: 0.75rem; }
 .watch-section-title-sm { font-size: 0.95rem; margin-bottom: 0.85rem; }
 [data-theme="light"] .watch-section-title { color: #4d7c0f; }
+
+/* Titles on themed surfaces: white in Dark, dark in Light. (Was inline
+   color:#fff, which is invisible on light surfaces.) */
+.watch-page-title { font-size: 1.75rem; font-weight: 800; color: #fff; }
+.watch-panel-title { font-size: 1.2rem; font-weight: 800; color: #fff; }
+.watch-panel-title-sm { font-size: 1rem; }
+.watch-detail-label { color: #fff; }
+.surface-title { font-size: 1.25rem; font-weight: 800; margin-bottom: 0.35rem; color: #fff; }
+[data-theme="light"] .watch-page-title,
+[data-theme="light"] .watch-panel-title,
+[data-theme="light"] .watch-detail-label,
+[data-theme="light"] .surface-title { color: var(--text-main); }
 #watch-anime-title { color: var(--zoro-lime); font-weight: 600; }
 [data-theme="light"] #watch-anime-title { color: #4d7c0f; }
 #live-jst-clock { color: var(--zoro-lime); font-weight: 700; }
