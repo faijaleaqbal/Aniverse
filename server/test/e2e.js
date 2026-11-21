@@ -41,6 +41,7 @@ function fakeMedia(overrides = {}) {
   return {
     id: 900001,
     idMal: 900001,
+    type: "ANIME",
     isAdult: false,
     title: { romaji: "Mock Anime", english: "Mock Anime", native: "モック" },
     coverImage: { large: "https://cdn.test/mock-cover.jpg" },

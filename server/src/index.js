@@ -25,6 +25,7 @@ import { checkDubAvailability } from "./dub-check.js";
 import {
   AniListBusyError,
   searchAniList,
+  SEARCH_PAGE_SIZE,
   browseAniList,
   getLiveTitle,
   getAiringSchedule,
@@ -517,6 +518,15 @@ function withCatalogSlug(live, index) {
   if (row) {
     live.catalogSlug = row.slug;
     live.dubCount = index.dubBySlug.get(row.slug) || 0;
+    /* ONE source of truth for the SUB count. AniList leaves `episodes` null
+       for long-running / still-airing titles (One Piece, the current
+       seasons), which used to leave a bare "SUB" badge with no number. The
+       catalog twin's curated episode count fills that gap, so the same title
+       shows the same number on every surface (Browse, search, detail and
+       More Like This). */
+    if (live.episodes == null && row.episodes != null) {
+      live.episodes = Number(row.episodes);
+    }
   }
   return live;
 }
@@ -562,17 +572,19 @@ app.get("/api/search", async (req, res, next) => {
       });
     }
 
-    const live = await searchAniList(q, page);
+    const live = await searchAniList(q);
 
     /* Catalog entries for this query: the text matches, PLUS any catalog
        title that the live results revealed (same MAL id) — that title is
-       shown once, under "On Aniverse", and dropped from the live list. */
+       shown once, under "On Aniverse", and dropped from the live list.
+       The twin check runs over the WHOLE snapshot, so a catalog title is
+       never shown twice and never appears on two different pages. */
     const localRows = localSearchRows(q);
     const localBySlug = new Map();
     for (const row of localRows) localBySlug.set(row.slug, row);
 
-    const results = [];
-    for (const item of live.results) {
+    const allResults = [];
+    for (const item of live.items) {
       const row = catalogRowFor(item, index);
       if (row) {
         if (!localBySlug.has(row.slug)) {
@@ -581,18 +593,33 @@ app.get("/api/search", async (req, res, next) => {
         }
         continue; // dedupe: the catalog entry represents this title
       }
-      results.push(item);
+      allResults.push(item);
     }
 
-    const local = localRows.slice(0, 12).map((row) => withDubCount(titleView(row)));
+    /* One stable result set for the whole query: every page is a slice of
+       it, so the total never changes and no page repeats another page. */
+    const total = allResults.length;
+    const lastPage = Math.max(1, Math.ceil(total / SEARCH_PAGE_SIZE));
+    const safePage = Math.min(page, lastPage);
+    const start = (safePage - 1) * SEARCH_PAGE_SIZE;
+    const results = allResults.slice(start, start + SEARCH_PAGE_SIZE);
+
+    /* The curated shelf ("On Aniverse") belongs to the FIRST page only —
+       repeating it on every page would show the same titles twice. */
+    const local = safePage === 1 ? localRows.slice(0, 12).map((row) => withDubCount(titleView(row))) : [];
 
     res.json({
       ok: true,
       query: q,
-      page,
+      page: safePage,
       local,
       results,
-      pageInfo: live.pageInfo,
+      pageInfo: {
+        total,
+        currentPage: safePage,
+        lastPage,
+        hasNextPage: safePage < lastPage,
+      },
     });
   } catch (err) {
     if (err instanceof AniListBusyError) return busyResponse(res);

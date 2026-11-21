@@ -53,12 +53,17 @@
      "DUB N" (the probe-backed dub count, only when one really exists).
      Pure live titles have no dub probe data, so they NEVER get a DUB badge;
      a live title that IS a catalog twin carries its catalog dubCount from
-     the server, so its card agrees with the spotlight/detail cards. */
+     the server, so its card agrees with the spotlight/detail cards.
+     A badge is NEVER rendered without a count: when the episode count is
+     unknown the badge is hidden instead of showing a bare "SUB". */
+  function subCount(t) {
+    const n = Number(t && t.episodes);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }
   function subBadge(t) {
-    if (!t) return "";
-    const n = Number(t.episodes);
-    const count = Number.isFinite(n) && n > 0 ? ` ${n}` : "";
-    return `<span class="badge-mini-sub">SUB${count}</span>`;
+    const n = subCount(t);
+    if (n == null) return "";
+    return `<span class="badge-mini-sub">SUB ${n}</span>`;
   }
   function dubBadge(t) {
     return t && t.dubCount > 0 ? `<span class="badge-mini-dub">DUB ${t.dubCount}</span>` : "";
@@ -292,7 +297,7 @@
     const isLive = !!(t && t.live);
     const meta = isLive
       ? `<span>${escapeHtml(liveFormatLabel(t))}</span> • <span>${escapeHtml(String(t.year || "—"))}</span> • <span style="color: var(--zoro-sub);">${t.episodes != null ? `EP ${t.episodes}` : "ONGOING"}</span>`
-      : `<span>${t.year || 2025}</span> • <span>${t.kind || "Series"}</span> • <span style="color: var(--zoro-sub);">SUB ${t.episodes || 1}</span>`;
+      : `<span>${t.year || 2025}</span> • <span>${t.kind || "Series"}</span>${subCount(t) ? ` • <span style="color: var(--zoro-sub);">SUB ${subCount(t)}</span>` : ""}`;
     return `
       <a class="search-result-item" href="${href}">
         <img class="search-result-thumb" src="${escapeHtml(coverOf(t))}" alt="${escapeHtml(t.name)}" loading="lazy" ${livePosterAttrs()}>
@@ -885,6 +890,7 @@
       } else if (e.key === "Escape") {
         dropdown.classList.remove("is-open");
         dropdown.innerHTML = "";
+        input.value = "";
         input.blur();
       }
     });
@@ -998,7 +1004,7 @@
             <span class="spotlight-rank">🔥 #${idx + 1} Spotlight</span>
             <h1 class="spotlight-title"><a href="${detailHref(t.slug)}" style="color:inherit;text-decoration:none;">${escapeHtml(t.name)}</a></h1>
             <div class="spotlight-badges">
-              <span class="badge badge-sub">SUB ${t.episodes || 1}</span>
+              ${subCount(t) ? `<span class="badge badge-sub">SUB ${subCount(t)}</span>` : ""}
               ${t.dubCount > 0 ? `<span class="badge badge-dub">DUB ${t.dubCount}</span>` : ""}
               <span class="badge badge-type">${t.kind}</span>
               <span class="badge badge-hd">HD</span>
@@ -1091,7 +1097,7 @@
                 </div>
                 <div class="zoro-poster-badges">
                   <div class="badges-left">
-                    <span class="badge-mini-sub">SUB</span>
+                    ${subCount(item) ? subBadge(item) : ""}
                   </div>
                 </div>
               </a>
@@ -1174,7 +1180,7 @@
             <div class="trending-info-overlay">
               <div class="trending-anime-title">${escapeHtml(t.name)}</div>
               <div style="font-size: 0.7rem; color: var(--text-muted); margin-top: 2px;">
-                <span style="color: var(--zoro-sub);">SUB ${t.episodes || 1}</span> • <span>${t.year}</span>
+                ${subCount(t) ? `<span style="color: var(--zoro-sub);">SUB ${subCount(t)}</span>` : ""}<span>${t.year}</span>
               </div>
             </div>
           </div>
@@ -1708,11 +1714,13 @@
     function updateHeading(count, pageInfo) {
       if (!headingEl) return;
       const hasFilter = !!(state.genre || state.format || state.status || state.year);
-      /* SEARCH mode never shows AniList's browse-style total: that number
-         counts raw matches (including titles this site filters out and the
-         5,000 cap), so it does not equal the results actually rendered. The
-         heading always reports the real delivered count instead. */
-      const total = (!hasFilter && !isSearch() && pageInfo && Number.isFinite(pageInfo.total)) ? pageInfo.total : null;
+      /* The total now comes from the server and is STABLE: the same number
+         for every page of the same query. Search uses the post-filter count
+         (the titles this site actually serves); browse uses AniList's own
+         total, which is only meaningful without a filter. A filtered browse
+         total IS real (< 5,000), so it is shown too. */
+      const rawTotal = pageInfo && Number.isFinite(Number(pageInfo.total)) ? Number(pageInfo.total) : null;
+      const total = rawTotal != null && (!hasFilter || rawTotal < 5000) ? rawTotal : null;
       /* AniList caps the reported total at 5,000 — show it as "5,000+" rather
          than pretending that is the exact number. Filtered views do not show
          the 5,000+ capped total. */
@@ -1766,10 +1774,11 @@
       const current = (pageInfo && Number(pageInfo.currentPage)) || state.page;
       const hasFilter = !!(state.genre || state.format || state.status || state.year);
       const isCapped = pageInfo && pageInfo.total >= 5000;
-      /* A search result set is bounded by what was actually delivered (the
-         raw total counts filtered-out/adult rows), so it pages like a capped
-         view instead of advertising AniList's 416-page browse total. */
-      const bounded = (hasFilter && isCapped) || isSearch();
+      /* Only a CAPPED filtered browse has an unknown end, so only then are
+         the page numbers windowed to the neighbourhood. A search now has a
+         real lastPage (the snapshot has a fixed size) and a filtered browse
+         below the 5,000 cap knows its own last page too. */
+      const bounded = hasFilter && isCapped;
       const last = bounded
         ? (pageInfo.hasNextPage ? current + 1 : current)
         : ((pageInfo && Number(pageInfo.lastPage)) || current);
@@ -1799,6 +1808,10 @@
         }
       }
       html += `<button class="page-btn" type="button" data-page="${current + 1}"${current >= last ? " disabled" : ""} aria-label="Next page">Next ›</button>`;
+      /* "Page X of Y" whenever the last page is really known. */
+      if (!bounded && last > 1) {
+        html += `<span class="page-btn" style="border:none; background:none; cursor:default;" aria-live="polite">Page ${current} of ${last}</span>`;
+      }
       paginationWrap.innerHTML = html;
       paginationWrap.hidden = false;
     }
@@ -1906,10 +1919,11 @@
           updateHeading(0, pageInfo);
           return;
         }
-        /* The group count reports the results actually on screen — AniList's
-           raw total includes titles this site filters out (adult/hentai), so
-           it can never match the rendered list. */
-        const availableTotal = local.length + filtered.length;
+        /* The group count reports the results on this page out of the
+           server's STABLE total for the whole query (the snapshot is one
+           immutable set, so the total never moves between pages). */
+        const total = Number.isFinite(Number(pageInfo.total)) ? Number(pageInfo.total) : filtered.length;
+        const availableTotal = total;
         grid.innerHTML =
           (local.length
             ? `<div class="live-result-group"><div class="live-result-group-title">On <span class="accent">Aniverse</span><span class="live-result-group-count">${local.length} curated</span></div><div class="cards-grid-zoro" id="live-local-grid">${local.map((t) => `
@@ -1936,7 +1950,6 @@
         markContentReady();
         return;
       }
-
       const results = Array.isArray(data.results) ? data.results : [];
       if (!results.length) {
         renderEmptyState();
@@ -4897,11 +4910,14 @@
     }
 
     /* Badges: the 18+ tag comes from the SERVER flag (Ecchi genre). Live
-       titles have no dub data at all — never a DUB badge or count. */
+       titles have no dub data at all — never a DUB badge or count. The SUB
+       count is the ONE canonical episode count the server sent for this
+       title (the same number the cards show); when even that is unknown the
+       badge is hidden rather than shown without a number. */
     const badges = document.getElementById("detail-badges");
     if (badges) {
       badges.innerHTML = `
-        <span class="badge badge-sub">SUB ${airedCount || 1}</span>
+        ${subCount(t) ? `<span class="badge badge-sub">SUB ${subCount(t)}</span>` : ""}
         ${t.is18plus ? `<span class="badge badge-18plus">18+</span>` : ""}
         <span class="badge badge-type">${escapeHtml(liveFormatLabel(t))}</span>
         <span class="badge badge-hd">HD</span>
@@ -4931,7 +4947,18 @@
     const syn = document.getElementById("detail-synopsis");
     if (syn) syn.textContent = t.synopsis || "";
     const watchNow = document.getElementById("detail-watch-now");
-    if (watchNow) watchNow.href = liveWatchHref(t, 1);
+    if (watchNow) {
+      /* No episodes (a title with no episode list) has nothing to watch —
+         the button is hidden instead of leading to an empty player. */
+      const hasEpisodes = subCount(t) != null || airedCount > 0;
+      if (hasEpisodes) {
+        watchNow.href = liveWatchHref(t, 1);
+        watchNow.hidden = false;
+      } else {
+        watchNow.hidden = true;
+        watchNow.removeAttribute("href");
+      }
+    }
     document.title = `${t.name} - Ani Verse`;
 
     /* No watchlist row for live titles — the catalog is never written to. */
