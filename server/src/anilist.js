@@ -248,8 +248,8 @@ export const LIVE_DETAIL_FIELDS = `
       node { id idMal isAdult type title { romaji english } coverImage { large } format status }
     }
   }
-  /* "More Like This": AniList's own recommendation edges. Screened like
-     everything else (a recommendation can point at an adult title). */
+  # "More Like This": AniList's own recommendation edges. Screened like
+  # everything else (a recommendation can point at an adult title).
   recommendations(perPage: 12) {
     nodes {
       rating
