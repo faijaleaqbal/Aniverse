@@ -33,6 +33,9 @@ import {
   azAniList,
   AZ_PAGE_SIZE,
   normalizeAzLetter,
+  getAniListGenres,
+  browseViewFormat,
+  canonicalFormat,
 } from "./anilist.js";
 import {
   ApiError,
@@ -373,21 +376,30 @@ app.get("/api/titles", (req, res) => {
   });
 });
 
-app.get("/api/genres", (req, res) => {
-  const rows = db.prepare("SELECT genres FROM titles").all();
-  const counts = {};
-  for (const row of rows) {
-    if (!row.genres) continue;
-    const list = row.genres.split(",").map((g) => g.trim().toLowerCase()).filter(Boolean);
-    for (const g of list) {
-      counts[g] = (counts[g] || 0) + 1;
+app.get("/api/genres", async (req, res, next) => {
+  try {
+    const rows = db.prepare("SELECT genres FROM titles").all();
+    const counts = {};
+    for (const row of rows) {
+      if (!row.genres) continue;
+      const list = row.genres.split(",").map((g) => g.trim().toLowerCase()).filter(Boolean);
+      for (const g of list) {
+        counts[g] = (counts[g] || 0) + 1;
+      }
     }
+    /* The FULL AniList genre list (cached 24 h). A failure degrades to the
+       known genres inside getAniListGenres — this route never 502s and never
+       invents a genre. */
+    const allGenres = await getAniListGenres();
+    res.json({
+      ok: true,
+      totalTitles: rows.length,
+      counts,
+      allGenres,
+    });
+  } catch (err) {
+    next(err);
   }
-  res.json({
-    ok: true,
-    totalTitles: rows.length,
-    counts,
-  });
 });
 
 app.get("/api/titles/:slug", (req, res) => {
@@ -559,7 +571,9 @@ function busyResponse(res) {
 /* GET /api/search?q=<query>&page=<n>
    LOCAL catalog matches first ("On Aniverse"), AniList results below
    ("More results"). An AniList result that IS a catalog title (same MAL id)
-   is shown ONLY as the catalog entry — never twice. */
+   is dropped from the LIVE list (never a duplicate live row) but still
+   appears in the results grid, marked with its catalog slug — so a search
+   for a catalog title surfaces that exact season, not only its sequels. */
 app.get("/api/search", async (req, res, next) => {
   try {
     const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
@@ -595,7 +609,15 @@ app.get("/api/search", async (req, res, next) => {
           localBySlug.set(row.slug, row);
           localRows.push(row);
         }
-        continue; // dedupe: the catalog entry represents this title
+        /* The twin ALSO stays in the results grid, in its proper place.
+           Dedupe keeps it out of the LIVE list (no second live row for the
+           same AniList id), but the grid still shows the catalog title —
+           otherwise searching a catalog title surfaces only its other
+           seasons/movies and never the season the catalog actually has.
+           It carries the catalog slug + probe-backed dub count so the grid
+           card agrees with the curated card. */
+        allResults.push(withCatalogSlug(item, index));
+        continue;
       }
       allResults.push(item);
     }
@@ -631,15 +653,90 @@ app.get("/api/search", async (req, res, next) => {
   }
 });
 
+/* GET /api/browse?view=dubbed — the DUBBED shelf.
+   Only curated catalog titles with a VERIFIED dub (dub_checks rows with
+   available = 1) belong here. Live AniList titles have NO dub data at all —
+   AniList knows nothing about dubs — so listing one as "dubbed" would invent
+   availability. This view therefore reads the catalog, never AniList, and it
+   keeps working while AniList is down. Filters / sorts / pagination behave
+   like every other browse view. */
+const DUBBED_PAGE_SIZE = 12;
+
+function catalogDubBrowse(query = {}) {
+  const genre = String(query.genre || "").trim().toLowerCase();
+  const yearRaw = Number(query.year);
+  const year = Number.isFinite(yearRaw) && yearRaw > 1800 && yearRaw < 2200 ? Math.floor(yearRaw) : null;
+  const format = canonicalFormat(query.format);
+  const sortKey = String(query.sort || "trending").toLowerCase();
+  const page = Math.max(toInt(query.page, 1), 1);
+
+  const where = [];
+  const params = [];
+  if (genre) { where.push("LOWER(t.genres) LIKE ?"); params.push(`%${genre}%`); }
+  if (year) { where.push("t.year = ?"); params.push(year); }
+  /* The catalog's `kind` is "Film" for movies and "Series" for everything
+     else, so only a MOVIE preset maps cleanly onto it. */
+  if (format === "MOVIE") where.push("LOWER(t.kind) = 'film'");
+  else if (format) where.push("LOWER(t.kind) <> 'film'");
+  const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
+
+  const orderSql = {
+    newest: "t.year DESC, t.slug ASC",
+    az: "t.name ASC",
+    name: "t.name ASC",
+    episodes: "t.episodes DESC, t.slug ASC",
+    top: "t.score DESC, t.year DESC, t.slug ASC",
+    popular: "t.score DESC, t.year DESC, t.slug ASC",
+  }[sortKey] || "t.year DESC, t.slug ASC";
+
+  const total = db
+    .prepare(`SELECT COUNT(DISTINCT t.slug) AS c FROM titles t JOIN dub_checks d ON d.title_slug = t.slug AND d.available = 1 ${whereSql}`)
+    .get(...params).c;
+  const rows = db
+    .prepare(`
+      SELECT t.*, COUNT(d.ep_num) AS dub_count
+      FROM titles t
+      JOIN dub_checks d ON d.title_slug = t.slug AND d.available = 1
+      ${whereSql}
+      GROUP BY t.slug
+      ORDER BY ${orderSql}
+      LIMIT ? OFFSET ?
+    `)
+    .all(...params, DUBBED_PAGE_SIZE, (page - 1) * DUBBED_PAGE_SIZE);
+
+  return {
+    ok: true,
+    page,
+    view: "dubbed",
+    results: rows.map((row) => ({ ...titleView(row), dubCount: row.dub_count })),
+    pageInfo: {
+      total,
+      currentPage: page,
+      lastPage: Math.max(1, Math.ceil(total / DUBBED_PAGE_SIZE)),
+      hasNextPage: page * DUBBED_PAGE_SIZE < total,
+    },
+  };
+}
+
 /* GET /api/browse?sort=&genre=&format=&status=&year=&page=
    One flexible list endpoint over the whole AniList catalog. */
 app.get("/api/browse", async (req, res, next) => {
   try {
     const index = catalogIndex();
+    const view = String(req.query.view || "").toLowerCase();
+
+    /* The dubbed shelf is catalog-only (see catalogDubBrowse). */
+    if (view === "dubbed") {
+      return res.json(catalogDubBrowse(req.query));
+    }
+
+    /* A type view (?view=movie|ona|special|tv) is a format preset. It wins
+       over a ?format= param so ?view=movie can never silently mean "TV". */
+    const viewFormat = browseViewFormat(view);
     const browseArgs = {
       sort: req.query.sort,
       genre: req.query.genre,
-      format: req.query.format,
+      format: viewFormat || req.query.format,
       status: req.query.status,
       year: req.query.year,
       tags: req.query.tags,
@@ -648,6 +745,7 @@ app.get("/api/browse", async (req, res, next) => {
       maxScore: req.query.maxScore,
       startAfter: req.query.startAfter,
       startBefore: req.query.startBefore,
+      perPage: req.query.perPage,
       page: req.query.page,
     };
     const live = await browseAniList(browseArgs);

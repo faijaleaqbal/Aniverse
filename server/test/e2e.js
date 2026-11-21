@@ -329,9 +329,11 @@ async function runTests() {
        LIVE CATALOG (AniList) — mocked, offline, deterministic
        ====================================================================== */
 
-    // 11. /api/search returns the CATALOG entry first and never shows the
-    //     same title twice (dedupe by MAL id).
-    await test("GET /api/search puts the catalog entry first and dedupes by MAL id", async () => {
+    // 11. /api/search returns the CATALOG entry first and never shows a
+    //     duplicate LIVE row for it — but the twin still surfaces in the
+    //     results grid (audit-11: a search for a catalog title must show that
+    //     season, not only its sequels/movies).
+    await test("GET /api/search keeps the catalog entry and still surfaces the twin in the grid", async () => {
       mockAniList({
         mediaList: [
           // Naruto (mal 20) IS in the curated catalog -> catalog entry only.
@@ -353,11 +355,10 @@ async function runTests() {
       assert.equal(data.ok, true);
       assert.equal(data.local.length, 1, "the catalog Naruto must be the local match");
       assert.equal(data.local[0].slug, "sea-of-stars");
-      assert.equal(
-        data.results.some((t) => t.malId === 20),
-        false,
-        "the live Naruto row must be dropped (dedupe by MAL id)"
-      );
+      const twin = data.results.find((t) => t.malId === 20);
+      assert.ok(twin, "the catalog twin must still appear in the results grid, in its proper place");
+      assert.equal(twin.catalogSlug, "sea-of-stars", "the grid twin carries its catalog slug");
+      assert.equal(twin.anilistId, 20);
       assert.ok(
         data.results.some((t) => t.malId === 700),
         "other live Naruto results must still be listed"
@@ -1447,6 +1448,289 @@ async function runTests() {
       assert.ok(request.query.includes("status_in: $status"), "the rail's request sends a status filter");
       assert.ok(request.query.includes("sort: POPULARITY_DESC"), "the rail's request sorts by popularity");
       assert.deepEqual(request.variables.status, ["NOT_YET_RELEASED"]);
+      resetAniListMock();
+    });
+
+    /* ======================================================================
+       PHASE 3a — BROWSE PRESETS (subbed / dubbed / type views)
+       ====================================================================== */
+
+    // 46. A type view (?view=movie|ona|special|tv) is a FORMAT preset: it must
+    //     reach AniList as format_in with the right enum, and subbed must stay
+    //     the whole catalog (no format filter).
+    await test("GET /api/browse type views map to the right format args", async () => {
+      for (const [view, format] of [["movie", "MOVIE"], ["ona", "ONA"], ["special", "SPECIAL"], ["tv", "TV"]]) {
+        mockAniList({ mediaList: [fakeMedia()] });
+        const res = await fetch(`${baseUrl}/api/browse?view=${view}`);
+        assert.equal(res.status, 200);
+        const q = anilistRequests[0];
+        assert.ok(q.query.includes("format_in: $format"), `${view} must send a format filter`);
+        assert.deepEqual(q.variables.format, [format], `${view} must map to ${format}`);
+        assert.ok(q.query.includes("isAdult: false"), "every query must exclude adult titles");
+        resetAniListMock();
+      }
+
+      /* subbed = every title. No format/status preset, no extra AniList arg. */
+      mockAniList({ mediaList: [fakeMedia()] });
+      const subbed = await fetch(`${baseUrl}/api/browse?view=subbed`);
+      assert.equal(subbed.status, 200);
+      assert.ok(
+        !anilistRequests[0].query.includes("format_in:"),
+        "the subbed view is the whole catalog (every title plays SUB)"
+      );
+      assert.ok(
+        !anilistRequests[0].query.includes("status_in:"),
+        "the subbed view sets no status preset"
+      );
+      resetAniListMock();
+    });
+
+    // 47. The DUBBED shelf is catalog-only: live titles have NO dub data, so
+    //     they must never be listed, and the route must not even ask AniList.
+    await test("GET /api/browse?view=dubbed lists only catalog titles with a verified dub", async () => {
+      const ins = db.prepare(
+        "INSERT INTO dub_checks (title_slug, ep_num, available, reason, checked_at) VALUES (?, ?, 1, 'probe', datetime('now'))"
+      );
+      ins.run("second-wind", 1);
+      ins.run("second-wind", 2);
+      ins.run("ronin-of-the-neon-ward", 1);
+      try {
+        /* AniList is mocked with a live title that happens to be a catalog
+           twin: it must NOT leak into the dubbed shelf as a live row. */
+        mockAniList({
+          mediaList: [
+            fakeMedia({
+              id: 151807, idMal: 52299,
+              title: { romaji: "Solo Leveling", english: "Solo Leveling", native: null },
+            }),
+          ],
+        });
+        const res = await fetch(`${baseUrl}/api/browse?view=dubbed`);
+        assert.equal(res.status, 200);
+        const data = await res.json();
+        assert.equal(data.ok, true);
+        assert.deepEqual(
+          data.results.map((t) => t.slug).sort(),
+          ["ronin-of-the-neon-ward", "second-wind"],
+          "only catalog titles with a verified dub are listed"
+        );
+        assert.ok(
+          data.results.every((t) => t.slug && t.dubCount > 0),
+          "every dubbed row is a catalog title carrying its probe-backed dub count"
+        );
+        assert.equal(
+          data.results.some((t) => t.live === true),
+          false,
+          "no live AniList title may appear in the dubbed shelf"
+        );
+        assert.equal(data.pageInfo.total, 2, "the real total is the verified-dub catalog count");
+        assert.equal(anilistRequests.length, 0, "the dubbed shelf never asks AniList (no live dub data exists)");
+        resetAniListMock();
+      } finally {
+        db.prepare("DELETE FROM dub_checks WHERE title_slug IN ('second-wind', 'ronin-of-the-neon-ward')").run();
+      }
+    });
+
+    /* ======================================================================
+       PHASE 3a — FULL GENRE LIST (GenreCollection, 24 h cache)
+       ====================================================================== */
+
+    // 48. /api/genres answers with AniList's own genre list, cached, and keeps
+    //     the honest local counts alongside it.
+    await test("GET /api/genres returns the full AniList genre list (cached 24h)", async () => {
+      const genres = [
+        "Action", "Adventure", "Comedy", "Drama", "Ecchi", "Fantasy", "Horror",
+        "Mahou Shoujo", "Mecha", "Music", "Mystery", "Psychological", "Romance",
+        "Sci-Fi", "Slice of Life", "Sports", "Supernatural", "Thriller",
+      ];
+      mockAniList({
+        routes: [
+          {
+            test: (body) => String(body.query || "").includes("GenreCollection"),
+            answer: () => jsonResponse({ data: { GenreCollection: genres } }),
+          },
+        ],
+      });
+      const res = await fetch(`${baseUrl}/api/genres`);
+      assert.equal(res.status, 200);
+      const data = await res.json();
+      assert.ok(Array.isArray(data.allGenres), "allGenres is an array");
+      assert.ok(data.allGenres.includes("Psychological"), "the list goes beyond the old hardcoded 17");
+      assert.ok(data.allGenres.includes("Action"), "the existing 17 still work");
+      assert.ok(data.counts.action >= 1, "the honest local counts are still present");
+      const afterFirst = anilistRequests.length;
+      assert.equal(afterFirst, 1, "one GenreCollection query");
+      const res2 = await fetch(`${baseUrl}/api/genres`);
+      const data2 = await res2.json();
+      assert.deepEqual(data2.allGenres, data.allGenres);
+      assert.equal(anilistRequests.length, afterFirst, "the genre list is cached (no second fetch)");
+      resetAniListMock();
+    });
+
+    /* ======================================================================
+       PHASE 3a — TOP 10 TABS (perPage 10, honest sorts)
+       ====================================================================== */
+
+    // 49. The Home Top 10 tabs read /api/browse with perPage=10 and the exact
+    //     sort each tab names (Trending / Most Popular / Top Rated).
+    await test("GET /api/browse?perPage=10 returns 10 items with the tab's sort", async () => {
+      const all = Array.from({ length: 14 }, (_, i) =>
+        fakeMedia({ id: 970000 + i, idMal: 970000 + i, title: { romaji: `Top ${i}`, english: `Top ${i}`, native: null } })
+      );
+      for (const [sort, expected] of [["trending", "TRENDING_DESC"], ["popular", "POPULARITY_DESC"], ["top", "SCORE_DESC"]]) {
+        mockAniList({ allMedia: all });
+        const res = await fetch(`${baseUrl}/api/browse?sort=${sort}&perPage=10`);
+        assert.equal(res.status, 200);
+        const data = await res.json();
+        assert.equal(data.results.length, 10, `${sort} returns exactly 10 items`);
+        assert.equal(anilistRequests[0].variables.perPage, 10, `${sort} asks AniList for 10 per page`);
+        assert.ok(anilistRequests[0].query.includes(`sort: ${expected}`), `${sort} maps to ${expected}`);
+        resetAniListMock();
+      }
+      /* The default page size is unchanged (12) for every other grid. */
+      mockAniList({ mediaList: [fakeMedia()] });
+      await fetch(`${baseUrl}/api/browse?sort=trending`);
+      assert.equal(anilistRequests[0].variables.perPage, 12, "the default page size stays 12");
+      resetAniListMock();
+    });
+
+    /* ======================================================================
+       PHASE 3a — RECOMMENDATIONS (adult-screened, detail payload)
+       ====================================================================== */
+
+    // 50. Recommendations ride the ONE detail query and go through the same
+    //     adult screen as every other title.
+    await test("GET /api/live/:id returns adult-screened recommendations", async () => {
+      const detail = fakeMedia({
+        id: 159043,
+        idMal: 540100,
+        title: { romaji: "Rec Test", english: "Rec Test", native: null },
+        recommendations: {
+          nodes: [
+            { rating: 90, mediaRecommendation: { id: 540101, idMal: 540101, isAdult: false, title: { romaji: "Good Rec", english: "Good Rec" }, coverImage: { large: "https://s4.anilist.co/rec1.jpg" }, averageScore: 80, format: "TV" } },
+            { rating: 70, mediaRecommendation: { id: 540102, idMal: 540102, isAdult: true, title: { romaji: "Adult Rec", english: "Adult Rec" }, coverImage: { large: "https://s4.anilist.co/rec2.jpg" }, averageScore: 60, format: "OVA" } },
+            { rating: 60, mediaRecommendation: { id: 540103, idMal: 540103, title: { romaji: "Hentai Rec", english: "Hentai Rec" }, coverImage: { large: "https://s4.anilist.co/rec3.jpg" }, averageScore: 50, format: "OVA" } },
+            { rating: 50, mediaRecommendation: null },
+            { rating: 40, mediaRecommendation: { id: 159043, idMal: 540100, isAdult: false, title: { romaji: "Self Rec", english: "Self Rec" }, coverImage: { large: null }, averageScore: 70, format: "TV" } },
+          ],
+        },
+      });
+      mockAniList({ mediaById: { 159043: detail } });
+      const res = await fetch(`${baseUrl}/api/live/159043`);
+      assert.equal(res.status, 200);
+      const data = await res.json();
+      const recs = data.title.recommendations;
+      assert.equal(recs.length, 1, "only the clean, non-self recommendation survives");
+      assert.equal(recs[0].anilistId, 540101);
+      assert.equal(recs[0].name, "Good Rec");
+      assert.equal(recs[0].cover, "/api/cover?url=https%3A%2F%2Fs4.anilist.co%2Frec1.jpg", "AniList covers are same-origin");
+      assert.equal(recs[0].rating, 90, "the real edge rating is carried");
+      assert.equal(anilistRequests.length, 1, "recommendations ride the ONE detail query");
+      assert.ok(anilistRequests[0].query.includes("recommendations(first: 12)"), "the detail query asks for recommendations");
+      resetAniListMock();
+    });
+
+    /* ======================================================================
+       PHASE 3a — SMOKE-CHECK FIXES (2026-11-21)
+       ====================================================================== */
+
+    // 51. (6a) Distinct titles must get distinct poster URLs. The live grid
+    //     already proxies each cover; the bug was the catalog fallback that
+    //     gave every slugless-art card the SAME placeholder.
+    await test("Phase 3a fix: distinct titles get distinct poster URLs", async () => {
+      const all = Array.from({ length: 10 }, (_, i) =>
+        fakeMedia({
+          id: 980000 + i,
+          idMal: 980000 + i,
+          title: { romaji: `Poster ${i}`, english: `Poster ${i}`, native: null },
+          coverImage: { large: `https://s4.anilist.co/poster-${i}.jpg` },
+        })
+      );
+      mockAniList({ allMedia: all });
+      const res = await fetch(`${baseUrl}/api/browse?sort=trending&perPage=10`);
+      assert.equal(res.status, 200);
+      const data = await res.json();
+      const covers = data.results.map((t) => t.cover);
+      assert.equal(covers.length, 10);
+      assert.equal(new Set(covers).size, covers.length, "no two titles may share a poster URL");
+      assert.ok(covers.every((c) => c.startsWith("/api/cover?url=")), "live posters are same-origin proxied");
+      resetAniListMock();
+
+      /* The frontend fallback: a catalog row with NO art resolves to its OWN
+         shipped cover, never to the one shared placeholder. */
+      const { coverOf, bannerOf } = evalZoroBlock("POSTER_LOGIC", ["coverOf", "bannerOf"]);
+      const a = coverOf({ slug: "ronin-of-the-neon-ward" });
+      const b = coverOf({ slug: "second-wind" });
+      assert.equal(a, "img/covers/ronin-of-the-neon-ward.jpg", "the catalog title's own cover");
+      assert.equal(b, "img/covers/second-wind.jpg");
+      assert.notEqual(a, b, "distinct titles get distinct posters");
+      assert.equal(
+        coverOf({ slug: "x", cover: "https://cdn.test/known.jpg" }),
+        "https://cdn.test/known.jpg",
+        "a cover the API DID supply always wins"
+      );
+      assert.equal(bannerOf({ slug: "ronin-of-the-neon-ward" }), "img/banners/ronin-of-the-neon-ward.jpg");
+      assert.equal(coverOf(null), "img/banner.jpg", "a title with no slug still degrades to the placeholder");
+    });
+
+    // 52. (6b) A catalog twin surfaces for its OWN title query: searching
+    //     "Solo Leveling" must show Season 1, not only S2 + the movies.
+    await test("Phase 3a fix: the Solo Leveling catalog twin surfaces in the grid", async () => {
+      mockAniList({
+        mediaList: [
+          fakeMedia({ id: 151807, idMal: 52299, title: { romaji: "Solo Leveling", english: "Solo Leveling", native: null } }),
+          fakeMedia({ id: 176496, idMal: 58567, title: { romaji: "Solo Leveling Season 2", english: "Solo Leveling Season 2", native: null } }),
+          fakeMedia({ id: 184694, idMal: 59841, title: { romaji: "Solo Leveling -ReAwakening-", english: "Solo Leveling -ReAwakening-", native: null } }),
+        ],
+      });
+      const res = await fetch(`${baseUrl}/api/search?q=Solo Leveling`);
+      assert.equal(res.status, 200);
+      const data = await res.json();
+      assert.ok(data.local.some((t) => t.slug === "second-wind"), "the curated card still leads");
+      const s1 = data.results.find((t) => t.malId === 52299);
+      assert.ok(s1, "Season 1 must appear in the results grid for its own title query");
+      assert.equal(s1.catalogSlug, "second-wind");
+      assert.ok(data.results.some((t) => t.malId === 58567), "Season 2 is still listed");
+      assert.equal(data.pageInfo.total, 3, "the grid total counts the twin");
+      resetAniListMock();
+    });
+
+    // 53. (6c) The A-Z fallback keeps its romaji-OR-english prefix invariant.
+    //     "My Father's Room" is a CORRECT A entry because its romaji is
+    //     "Abeojiuibang"; a title whose NEITHER title starts with A is not.
+    await test("GET /api/az fallback keeps the romaji-or-english prefix invariant", async () => {
+      clearAniListCache();
+      anilistRequests.length = 0;
+      anilistResponder = async (body) => {
+        const query = String(body.query || "");
+        if (/sort: TITLE_ROMAJI/.test(query)) {
+          const page = Number((body.variables || {}).page) || 1;
+          const media = page === 1
+            ? [
+                /* English does not start with A, romaji does -> a legit A. */
+                fakeMedia({ id: 990001, idMal: 990001, title: { romaji: "Abeojiuibang", english: "My Father's Room", native: "아버지의 방" } }),
+                /* Neither title starts with A -> must be dropped. */
+                fakeMedia({ id: 990002, idMal: 990002, title: { romaji: "My Father's Room 2", english: "My Father's Room 2", native: null } }),
+                /* An "A" word, not a prefix -> must be dropped. */
+                fakeMedia({ id: 990003, idMal: 990003, title: { romaji: "My Hero Academia", english: "My Hero Academia", native: null } }),
+              ]
+            : [fakeMedia({ id: 990010, idMal: 990010, title: { romaji: "Bleach", english: "Bleach", native: null } })];
+          return jsonResponse({ data: { Page: { pageInfo: { total: media.length, lastPage: 1 }, media } } });
+        }
+        return jsonResponse({ data: { Page: { pageInfo: { total: 0, lastPage: 1 }, media: [] } } });
+      };
+
+      const res = await fetch(`${baseUrl}/api/az?letter=A`);
+      assert.equal(res.status, 200);
+      const data = await res.json();
+      assert.deepEqual(data.results.map((t) => t.anilistId), [990001], "only the romaji-A title is an A entry");
+      for (const t of data.results) {
+        const names = [t.romajiTitle, t.englishTitle].filter(Boolean).map((s) => String(s).toLowerCase());
+        assert.ok(
+          names.some((s) => s.startsWith("a")),
+          `every fallback item's romaji OR english must start with the letter (got ${names.join(" / ")})`
+        );
+      }
       resetAniListMock();
     });
 

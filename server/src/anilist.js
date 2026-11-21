@@ -69,6 +69,7 @@ export function clearAniListCache() {
   yearCountCache.clear();
   yearCountInFlight.clear();
   azSnapshotInFlight.clear();
+  genreCache = null;
 }
 
 /* Shared media fields for every query (spec). isAdult: false is added to
@@ -247,6 +248,14 @@ export const LIVE_DETAIL_FIELDS = `
       node { id idMal isAdult type title { romaji english } coverImage { large } format status }
     }
   }
+  /* "More Like This": AniList's own recommendation edges. Screened like
+     everything else (a recommendation can point at an adult title). */
+  recommendations(first: 12) {
+    nodes {
+      rating
+      mediaRecommendation { id idMal isAdult title { romaji english } coverImage { large } averageScore format }
+    }
+  }
   tags { name rank isMediaSpoiler }
   bannerImage
 `;
@@ -319,6 +328,34 @@ export function liveDetailView(media) {
         .filter((t) => t.name)
     : [];
 
+  /* Recommendations ("More Like This"). A node whose mediaRecommendation is
+     null (deleted/unavailable media) or that points at the title itself is
+     dropped, and every survivor goes through the SAME adult screen as every
+     other title on the site — a recommendation edge is not a trusted source.
+     `rating` is AniList's own score for the edge; it is kept because it is
+     real data, but nothing is invented when it is absent. */
+  const recommendationNodes = (media.recommendations && Array.isArray(media.recommendations.nodes))
+    ? media.recommendations.nodes
+    : [];
+  const recommendations = recommendationNodes
+    .map((node) => {
+      const rec = node && node.mediaRecommendation;
+      if (!rec) return null;
+      if (rec.id != null && media.id != null && Number(rec.id) === Number(media.id)) return null;
+      if (isAdultMedia(rec)) return null;
+      const title = rec.title || {};
+      return {
+        anilistId: rec.id != null ? Number(rec.id) : null,
+        malId: rec.idMal != null ? Number(rec.idMal) : null,
+        name: title.english || title.romaji || "Unknown title",
+        cover: localCoverUrl(rec.coverImage && rec.coverImage.large),
+        score: rec.averageScore != null ? Number(rec.averageScore) : null,
+        format: rec.format || null,
+        rating: node.rating != null ? Number(node.rating) : null,
+      };
+    })
+    .filter(Boolean);
+
   return {
     ...base,
     startDate: media.startDate || null,
@@ -327,6 +364,7 @@ export function liveDetailView(media) {
     studios,
     characters,
     relations,
+    recommendations,
     tags,
     banner: localCoverUrl(media.bannerImage) || base.banner,
   };
@@ -852,6 +890,53 @@ export function canonicalGenre(value) {
   return raw.charAt(0).toUpperCase() + raw.slice(1);
 }
 
+/* ---- The FULL AniList genre list (GenreCollection) ----
+   The browse filters used to hardcode 17 genres. AniList's own list is the
+   real one, so it is fetched once and cached for 24 h (genre taxonomy barely
+   moves, and the endpoint is one cheap query). A failure degrades to the
+   known 17 — the filters keep working, never a 500 and never an invented
+   genre. */
+const GENRE_QUERY = `query { GenreCollection }`;
+const GENRE_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+/* Adult genres must never surface as a browse shelf, exactly like adult
+   titles never do. */
+const ADULT_GENRES = new Set(["Hentai"]);
+const FALLBACK_GENRES = [...new Set(Object.values(GENRE_CANONICAL))];
+let genreCache = null;
+
+export async function getAniListGenres() {
+  if (genreCache) return genreCache;
+  try {
+    const data = await anilistQuery(GENRE_QUERY, {}, GENRE_CACHE_TTL_MS);
+    const raw = data && Array.isArray(data.GenreCollection) ? data.GenreCollection : [];
+    const list = raw
+      .filter((g) => typeof g === "string" && g.trim())
+      .map((g) => g.trim())
+      .filter((g) => !ADULT_GENRES.has(g));
+    if (list.length) {
+      genreCache = list;
+      return list;
+    }
+  } catch {
+    /* AniList down / rate-limited: fall through to the known list. */
+  }
+  return FALLBACK_GENRES;
+}
+
+/* Browse VIEW presets that are really FORMAT filters. `subbed` (every title)
+   and `dubbed` (catalog titles with a verified dub) are handled by the route,
+   not here. */
+const VIEW_FORMATS = {
+  movie: "MOVIE",
+  ona: "ONA",
+  special: "SPECIAL",
+  tv: "TV",
+};
+
+export function browseViewFormat(view) {
+  return VIEW_FORMATS[String(view || "").toLowerCase()] || null;
+}
+
 /* AniList TAGS are case-sensitive too (tag_in: ["Isekai"]). The browse filter
    panel sends the site's curated tag list; this map canonicalises the popular
    ones so a lowercased "isekai" still matches. Unknown tags pass through
@@ -993,19 +1078,26 @@ export function normalizeBrowseArgs(query = {}) {
   const pageRaw = Number(query.page);
   const page = Number.isFinite(pageRaw) && pageRaw > 0 ? Math.floor(pageRaw) : 1;
 
+  /* Page size. Browse grids are 12; the Home "Top 10" rail asks for exactly
+     10. Capped at 50 (AniList's own perPage ceiling). */
+  const perPageRaw = Number(query.perPage);
+  const perPage = Number.isFinite(perPageRaw) && perPageRaw > 0
+    ? Math.min(50, Math.floor(perPageRaw))
+    : 12;
+
   return {
     sort, genres, formats, statuses, tags, season, year,
-    minScore, maxScore, startAfter, startBefore, page,
+    minScore, maxScore, startAfter, startBefore, page, perPage,
   };
 }
 
 export async function browseAniList(opts = {}) {
   const {
     sort, genres, formats, statuses, tags, season, year,
-    minScore, maxScore, startAfter, startBefore, page,
+    minScore, maxScore, startAfter, startBefore, page, perPage,
   } = normalizeBrowseArgs(opts);
   const args = ["type: ANIME", "sort: " + sort, "isAdult: false"];
-  const vars = { page, perPage: 12 };
+  const vars = { page, perPage };
   if (genres.length) { args.push("genre_in: $genre"); vars.genre = genres; }
   if (formats.length) { args.push("format_in: $format"); vars.format = formats; }
   if (statuses.length) { args.push("status_in: $status"); vars.status = statuses; }

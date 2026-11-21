@@ -2693,6 +2693,70 @@ body.drawer-open .zoro-header {
 }
 
 /* ==========================================================================
+   PHASE 3a — TOP 10 TABS, VIEW NOTE, GENRE COUNT
+   ========================================================================== */
+
+/* Home "Top 10" tabs: one rail, three honest categories. */
+.top10-tabs {
+  display: inline-flex;
+  gap: 0.35rem;
+  margin-left: 0.9rem;
+  padding: 3px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  vertical-align: middle;
+}
+
+.top10-tab {
+  border: 0;
+  background: none;
+  color: var(--text-sub);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.32rem 0.8rem;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: color 0.2s ease, background 0.2s ease;
+  white-space: nowrap;
+}
+
+.top10-tab:hover { color: var(--text-main); }
+
+.top10-tab.active {
+  background: var(--zoro-lime);
+  color: #000;
+}
+
+/* The honest Subbed / Dubbed note under the browse heading. */
+.browse-view-note {
+  margin: -0.5rem 0 1.25rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.browse-view-note[hidden] { display: none; }
+
+/* A genre with no local count shows a dash, never an invented number. */
+.genre-card-count-none {
+  color: var(--text-muted);
+}
+
+/* The header nav carries more links now (Subbed / Dubbed / Movies / ONAs /
+   Specials). Let it scroll horizontally instead of overflowing the bar. */
+.header-nav {
+  gap: 1.1rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.header-nav::-webkit-scrollbar { display: none; }
+
+.nav-link { white-space: nowrap; }
+
+/* ==========================================================================
    RESPONSIVE MEDIA QUERIES
    ========================================================================== */
 

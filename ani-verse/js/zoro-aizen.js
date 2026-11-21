@@ -21,7 +21,43 @@
      Local cover art is the primary image; the remote URL is only a fallback.
      Title cards/links navigate to the detail page; explicit "Watch"/"Resume"
      actions go straight to the watch page. */
+  /* __POSTER_LOGIC_START__ */
   const COVER_FALLBACK = "img/banner.jpg";
+  /* AniList's CDN (s4.anilist.co) answers cross-site hotlinked <img> requests
+     with 403 when a Referer is sent, so live posters are loaded with
+     referrerpolicy="no-referrer". The onerror fallback guarantees a failed
+     poster degrades to the local placeholder instead of a broken-image card. */
+  const LIVE_POSTER_FALLBACK = "img/banner.jpg";
+
+  /* A catalog title's OWN shipped artwork (img/covers/<slug>.jpg and
+     img/banners/<slug>.jpg are real files in the site bundle). A catalog row
+     can reach the API with NO cover metadata at all — a fresh seed, or a
+     deployment where the metadata fetch never ran — and when every card fell
+     back to the ONE shared placeholder, a whole rail rendered the same
+     poster for ten different titles. This per-title path is truthful (it is
+     that title's real art) and distinct per title. Used ONLY when the API
+     gave no artwork at all, so an enriched row behaves exactly as before. */
+  function localAssetFor(t, dir) {
+    const slug = t && t.slug;
+    return slug ? `img/${dir}/${slug}.jpg` : "";
+  }
+
+  function coverOf(t) {
+    if (!t) return COVER_FALLBACK;
+    const known = t.cover || t.coverLocal;
+    return known || localAssetFor(t, "covers") || COVER_FALLBACK;
+  }
+
+  function livePosterAttrs() {
+    return `referrerpolicy="no-referrer" onerror="this.onerror=null;this.src='${LIVE_POSTER_FALLBACK}';"`;
+  }
+
+  function bannerOf(t) {
+    if (!t) return COVER_FALLBACK;
+    const known = t.banner || t.bannerLocal || t.cover || t.coverLocal;
+    return known || localAssetFor(t, "banners") || COVER_FALLBACK;
+  }
+  /* __POSTER_LOGIC_END__ */
   /* Truncate at a WORD boundary. The hero's CSS 3-line clamp alone sliced
      mid-word ("romantic lov…") — pre-trimming the synopsis means the clamp
      never has to cut a word. */
@@ -32,21 +68,6 @@
     const lastSpace = cut.lastIndexOf(" ");
     const base = lastSpace > 40 ? cut.slice(0, lastSpace) : cut;
     return base.replace(/[\s.,;:!?-]+$/, "") + "…";
-  }
-
-  function coverOf(t) {
-    return (t && (t.cover || t.coverLocal)) || COVER_FALLBACK;
-  }
-  /* AniList's CDN (s4.anilist.co) answers cross-site hotlinked <img> requests
-     with 403 when a Referer is sent, so live posters are loaded with
-     referrerpolicy="no-referrer". The onerror fallback guarantees a failed
-     poster degrades to the local placeholder instead of a broken-image card. */
-  const LIVE_POSTER_FALLBACK = "img/banner.jpg";
-  function livePosterAttrs() {
-    return `referrerpolicy="no-referrer" onerror="this.onerror=null;this.src='${LIVE_POSTER_FALLBACK}';"`;
-  }
-  function bannerOf(t) {
-    return (t && (t.banner || t.bannerLocal || t.cover || t.coverLocal)) || COVER_FALLBACK;
   }
 
   /* ONE badge format on every card: "SUB N" (the title's episode count) and
@@ -313,13 +334,61 @@
     }
   }
 
+  /* ---- "More Like This" (ONE renderer for the catalog AND live detail pages) ----
+     A recommendation is a poster card with a link and the SUB/DUB/18+ badges,
+     whichever side of the catalog it came from. The section hides itself
+     when there is nothing to show — an empty "More Like This" is noise. */
+  function renderRecommendationCard(o) {
+    if (!o) return "";
+    const isCatalog = !!o.slug;
+    const href = isCatalog ? detailHref(o.slug) : liveDetailHref(o);
+    const cover = coverOf(o);
+    const typeLabel = isCatalog ? (o.kind || "Series") : liveFormatLabel(o);
+    /* A live recommendation carries no start date in the detail payload, so
+       its year is unknown — show the type alone rather than an invented "—". */
+    const yearPart = o.year != null ? ` • <span>${escapeHtml(String(o.year))}</span>` : "";
+    return `
+      <div class="zoro-card" ${isCatalog ? `data-slug="${escapeHtml(o.slug)}"` : `data-anilist-id="${escapeHtml(o.anilistId)}"`}>
+        <a class="zoro-card-poster" href="${href}">
+          <img src="${escapeHtml(cover)}" alt="${escapeHtml(o.name)}" loading="lazy" decoding="async" ${isCatalog ? "" : livePosterAttrs()}>
+          <div class="zoro-play-overlay"><div class="zoro-play-circle">▶</div></div>
+          <div class="zoro-poster-badges">
+            <div class="badges-left">${subBadge(o)}${dubBadge(o)}${isCatalog ? "" : eighteenBadge(o)}</div>
+          </div>
+        </a>
+        <div class="zoro-card-info">
+          <a class="zoro-card-title" href="${href}">${escapeHtml(o.name)}</a>
+          <div class="zoro-card-submeta"><span>${escapeHtml(typeLabel)}</span>${yearPart}</div>
+        </div>
+      </div>`;
+  }
+
+  function fillRecommendations(items, limit = 6) {
+    const wrap = document.getElementById("detail-recommendations");
+    if (!wrap) return;
+    const section = wrap.closest("section");
+    const recs = (Array.isArray(items) ? items : []).filter(Boolean).slice(0, limit);
+    if (!recs.length) {
+      wrap.innerHTML = "";
+      if (section) section.hidden = true;
+      return;
+    }
+    wrap.innerHTML = recs.map(renderRecommendationCard).join("");
+    if (section) section.hidden = false;
+  }
+
   /* One live card — same markup/style as the catalog cards. */
   function renderLiveCard(t, opts = {}) {
     if (!t) return "";
-    const href = opts.href || liveDetailHref(t);
+    /* Catalog rows (the DUBBED shelf) carry a slug + kind instead of an
+       AniList id + format. Same card, but the link must open the catalog
+       detail page and the type label reads the catalog's own kind. */
+    const isCatalog = !!(t && t.slug);
+    const href = opts.href || (isCatalog ? detailHref(t.slug) : liveDetailHref(t));
     const cover = coverOf(t);
     const score = scoreLabel(t);
     const year = t.year || "—";
+    const typeLabel = isCatalog ? (t.kind || "Series") : liveFormatLabel(t);
     return `
       <div class="zoro-card" data-anilist-id="${escapeHtml(t.anilistId)}" data-title="${escapeHtml(t.name)}">
         <a class="zoro-card-poster" href="${href}">
@@ -338,7 +407,7 @@
         <div class="zoro-card-info">
           <a class="zoro-card-title" href="${href}" title="${escapeHtml(t.name)}">${escapeHtml(t.name)}</a>
           <div class="zoro-card-submeta">
-            <span>${escapeHtml(liveFormatLabel(t))}</span> • <span>${escapeHtml(String(year))}</span>${score ? ` • <span style="color: var(--zoro-lime);">★ ${score}</span>` : ""}
+            <span>${escapeHtml(typeLabel)}</span> • <span>${escapeHtml(String(year))}</span>${score ? ` • <span style="color: var(--zoro-lime);">★ ${score}</span>` : ""}
           </div>
           ${opts.submeta ? `<div class="zoro-card-submeta live-ep-time">${opts.submeta}</div>` : ""}
         </div>
@@ -546,6 +615,11 @@
             <a class="mobile-drawer-link" href="browse.html">🔍 Browse Catalog</a>
             <a class="mobile-drawer-link" href="genres.html">📑 All Genres</a>
             <a class="mobile-drawer-link" href="schedule.html">📅 Broadcast Schedule</a>
+            <a class="mobile-drawer-link" href="browse.html?view=subbed">📺 Subbed</a>
+            <a class="mobile-drawer-link" href="browse.html?view=dubbed">🔊 Dubbed</a>
+            <a class="mobile-drawer-link" href="browse.html?view=movie">🎬 Movies</a>
+            <a class="mobile-drawer-link" href="browse.html?view=ona">📡 ONAs</a>
+            <a class="mobile-drawer-link" href="browse.html?view=special">✨ Specials</a>
             <a class="mobile-drawer-link" href="browse.html?genre=action">🔥 Action Anime</a>
             <a class="mobile-drawer-link" href="browse.html?genre=fantasy">✨ Fantasy & Isekai</a>
             <a class="mobile-drawer-link" href="browse.html?view=top-airing&sort=newest">⭐ Top Airing</a>
@@ -1190,25 +1264,17 @@
   });
 
   /* ==========================================================================
-     5. ZORO TRENDING RAIL & 4-COLUMN SECTIONS
+     5. HOME 4-COLUMN SECTIONS (curated catalog)
      ========================================================================== */
 
-  async function initTrendingAndColumns() {
-    const trendingRail = document.getElementById("trending-rail-container");
+  async function initHomeCatalogColumns() {
     const airingList = document.getElementById("col-airing-list");
     const popularList = document.getElementById("col-popular-list");
     const favoriteList = document.getElementById("col-favorite-list");
     const completedList = document.getElementById("col-completed-list");
 
-    /* First paint: skeleton placeholders hold the rail/column layout while
-       the catalog API answers — never empty dark boxes (Bug 9). */
-    if (trendingRail && !trendingRail.querySelector(".trending-item")) {
-      trendingRail.innerHTML = Array.from({ length: 7 }, () => `
-        <div class="trending-item trending-item-skeleton" aria-hidden="true">
-          <div class="trending-poster-wrap skeleton-shimmer"></div>
-        </div>
-      `).join("");
-    }
+    /* First paint: skeleton placeholders hold the column layout while the
+       catalog API answers — never empty dark boxes (Bug 9). */
     for (const list of [airingList, popularList, favoriteList, completedList]) {
       if (list && !list.querySelector(".col-item")) {
         list.innerHTML = Array.from({ length: 5 }, () => `
@@ -1227,63 +1293,6 @@
     if (!res.ok || !res.data || !res.data.titles) return;
     const allTitles = res.data.titles;
 
-    // 1. Trending Top 10
-    if (trendingRail) {
-      trendingRail.innerHTML = allTitles.slice(0, 10).map((t, i) => `
-        <a class="trending-item" href="${detailHref(t.slug)}">
-          <div class="trending-poster-wrap">
-            <img src="${coverOf(t)}" alt="${escapeHtml(t.name)}" loading="lazy" decoding="async" fetchpriority="low">
-            <div class="trending-rank-num">${(i + 1 < 10 ? "0" : "") + (i + 1)}</div>
-            <div class="trending-info-overlay">
-              <div class="trending-anime-title">${escapeHtml(t.name)}</div>
-              <div style="font-size: 0.7rem; color: var(--text-muted); margin-top: 2px;">
-                ${subCount(t) ? `<span style="color: var(--zoro-sub);">SUB ${subCount(t)}</span>` : ""}<span>${t.year}</span>
-              </div>
-            </div>
-          </div>
-        </a>
-      `).join("");
-
-      const trendingPrev = document.getElementById("trending-prev");
-      const trendingNext = document.getElementById("trending-next");
-      /* Jump by WHOLE cards, landing exactly on a card boundary. Instant
-         (not smooth) so no card is ever sliced mid-scroll; manual wheel/touch
-         scrolling still settles whole via scroll-snap. The landing is
-         computed from live FRACTIONAL rects (card edge -> rail edge), never
-         from rounded scrollWidth/clientWidth integers — integer math let
-         Chrome's device-pixel rounding shave a sub-pixel sliver off the edge
-         card. At the end, the LAST card's right edge aligns flush instead. */
-      const scrollTrendingBy = (dirCards) => {
-        const items = Array.from(trendingRail.querySelectorAll(".trending-item"));
-        if (!items.length) return;
-        const railRect = trendingRail.getBoundingClientRect();
-        const gap = parseFloat(getComputedStyle(trendingRail).columnGap) || 20;
-        const step = items[0].getBoundingClientRect().width + gap;
-        const visibleCount = Math.max(1, Math.round(railRect.width / step));
-        const lastStartIdx = Math.max(0, items.length - visibleCount);
-        const idx = Math.round(trendingRail.scrollLeft / step);
-        const targetIdx = Math.min(lastStartIdx, Math.max(0, idx + dirCards));
-        let target;
-        if (targetIdx >= lastStartIdx && items.length > visibleCount) {
-          const lastRect = items[items.length - 1].getBoundingClientRect();
-          target = trendingRail.scrollLeft + (lastRect.right - railRect.right);
-        } else {
-          const cardRect = items[targetIdx].getBoundingClientRect();
-          target = trendingRail.scrollLeft + (cardRect.left - railRect.left);
-        }
-        trendingRail.scrollTo({ left: Math.max(0, target), behavior: "instant" });
-      };
-      if (trendingPrev && trendingPrev.dataset.bound !== "true") {
-        trendingPrev.dataset.bound = "true";
-        trendingPrev.addEventListener("click", () => scrollTrendingBy(-2));
-      }
-      if (trendingNext && trendingNext.dataset.bound !== "true") {
-        trendingNext.dataset.bound = "true";
-        trendingNext.addEventListener("click", () => scrollTrendingBy(2));
-      }
-    }
-
-    // 2. 4 Columns
     function renderColItems(container, items) {
       if (!container) return;
       container.innerHTML = items.map((t) => `
@@ -1304,6 +1313,119 @@
     renderColItems(popularList, allTitles.slice(5, 10));
     renderColItems(favoriteList, allTitles.slice(10, 15));
     renderColItems(completedList, allTitles.slice(3, 8));
+  }
+
+  /* ==========================================================================
+     5B. HOME TOP 10 TABS (live AniList)
+     One rail, three honest tabs — Trending / Most Popular / Top Rated.
+     AniList has NO historical trending window, so the tabs are named after
+     what the sort actually is (never "Today / This Week / This Month").
+     Data comes from /api/browse with perPage=10, the same endpoint Browse
+     uses — the numbered cards are the site's real top ten.
+     ========================================================================== */
+
+  const TOP_TEN_TABS = [
+    { sort: "trending", label: "Trending" },
+    { sort: "popular", label: "Most Popular" },
+    { sort: "top", label: "Top Rated" },
+  ];
+
+  async function initTopTenTabs() {
+    const rail = document.getElementById("top10-rail");
+    if (!rail) return;
+    const tabsWrap = document.getElementById("top10-tabs");
+    let activeSort = TOP_TEN_TABS[0].sort;
+
+    rail.innerHTML = Array.from({ length: 7 }, () => `
+      <div class="trending-item trending-item-skeleton" aria-hidden="true">
+        <div class="trending-poster-wrap skeleton-shimmer"></div>
+      </div>
+    `).join("");
+
+    function renderTabs() {
+      if (!tabsWrap) return;
+      tabsWrap.innerHTML = TOP_TEN_TABS.map((tab) =>
+        `<button class="top10-tab${tab.sort === activeSort ? " active" : ""}" type="button" data-sort="${tab.sort}">${escapeHtml(tab.label)}</button>`
+      ).join("");
+    }
+    renderTabs();
+
+    if (tabsWrap && tabsWrap.dataset.bound !== "true") {
+      tabsWrap.dataset.bound = "true";
+      tabsWrap.addEventListener("click", (e) => {
+        const btn = e.target.closest(".top10-tab");
+        if (!btn || btn.dataset.sort === activeSort) return;
+        activeSort = btn.dataset.sort;
+        renderTabs();
+        load();
+      });
+    }
+
+    /* The rail scroll arrows behave exactly like the old trending rail:
+       whole-card jumps, flush at the end. */
+    const prev = document.getElementById("top10-prev");
+    const next = document.getElementById("top10-next");
+    const scrollBy = (dirCards) => {
+      const items = Array.from(rail.querySelectorAll(".trending-item"));
+      if (!items.length) return;
+      const railRect = rail.getBoundingClientRect();
+      const gap = parseFloat(getComputedStyle(rail).columnGap) || 20;
+      const step = items[0].getBoundingClientRect().width + gap;
+      const visibleCount = Math.max(1, Math.round(railRect.width / step));
+      const lastStartIdx = Math.max(0, items.length - visibleCount);
+      const idx = Math.round(rail.scrollLeft / step);
+      const targetIdx = Math.min(lastStartIdx, Math.max(0, idx + dirCards));
+      let target;
+      if (targetIdx >= lastStartIdx && items.length > visibleCount) {
+        const lastRect = items[items.length - 1].getBoundingClientRect();
+        target = rail.scrollLeft + (lastRect.right - railRect.right);
+      } else {
+        const cardRect = items[targetIdx].getBoundingClientRect();
+        target = rail.scrollLeft + (cardRect.left - railRect.left);
+      }
+      rail.scrollTo({ left: Math.max(0, target), behavior: "instant" });
+    };
+    if (prev && prev.dataset.bound !== "true") {
+      prev.dataset.bound = "true";
+      prev.addEventListener("click", () => scrollBy(-2));
+    }
+    if (next && next.dataset.bound !== "true") {
+      next.dataset.bound = "true";
+      next.addEventListener("click", () => scrollBy(2));
+    }
+
+    async function load() {
+      rail.innerHTML = Array.from({ length: 7 }, () => `
+        <div class="trending-item trending-item-skeleton" aria-hidden="true">
+          <div class="trending-poster-wrap skeleton-shimmer"></div>
+        </div>
+      `).join("");
+      const tab = TOP_TEN_TABS.find((t) => t.sort === activeSort) || TOP_TEN_TABS[0];
+      const res = await api(`/api/browse?sort=${encodeURIComponent(tab.sort)}&perPage=10&page=1`);
+      if (!res.ok || !res.data || !Array.isArray(res.data.results) || !res.data.results.length) {
+        const section = rail.closest("section");
+        if (section) section.hidden = true;
+        rail.innerHTML = "";
+        return;
+      }
+      rail.innerHTML = res.data.results.slice(0, 10).map((t, i) => `
+        <a class="trending-item" href="${liveDetailHref(t)}">
+          <div class="trending-poster-wrap">
+            <img src="${escapeHtml(coverOf(t))}" alt="${escapeHtml(t.name)}" loading="lazy" decoding="async" fetchpriority="low">
+            <div class="trending-rank-num">${(i + 1 < 10 ? "0" : "") + (i + 1)}</div>
+            <div class="trending-info-overlay">
+              <div class="trending-anime-title">${escapeHtml(t.name)}</div>
+              <div style="font-size: 0.7rem; color: var(--text-muted); margin-top: 2px;">
+                ${subCount(t) ? `<span style="color: var(--zoro-sub);">SUB ${subCount(t)}</span>` : ""}<span>${t.year}</span>
+              </div>
+            </div>
+          </div>
+        </a>
+      `).join("");
+      markContentReady();
+    }
+
+    await load();
   }
 
   /* ==========================================================================
@@ -1750,12 +1872,22 @@
        so ?view=top-upcoming can never silently mean "finished"). */
     const viewIsTopAiring = view === "top-airing";
     const viewIsTopUpcoming = view === "top-upcoming";
+    /* Phase 3a browse presets. subbed = the whole catalog (every title plays
+       SUB); dubbed = only catalog titles with a VERIFIED dub (the server
+       reads dub_checks, so live titles never appear here); the type views are
+       format presets. `kind=film` is the old Movies link and still works. */
+    const viewIsSubbed = view === "subbed";
+    const viewIsDubbed = view === "dubbed";
+    const VIEW_FORMAT = { movie: "MOVIE", ona: "ONA", special: "SPECIAL", tv: "TV" };
+    const VIEW_LABEL = { movie: "Movies", ona: "ONAs", special: "Specials", tv: "TV" };
+    const viewFormat = VIEW_FORMAT[view] || "";
+    const viewIsMovie = view === "movie" || kind === "film";
 
     const state = {
       q: (params.get("q") || "").trim(),
       sort: params.get("sort") || (viewIsTopAiring || viewIsTopUpcoming ? "popular" : "trending"),
       genre: canonicalGenreName(params.get("genre") || ""),
-      format: params.get("format") || (kind === "film" ? "MOVIE" : ""),
+      format: params.get("format") || viewFormat || (kind === "film" ? "MOVIE" : ""),
       status: params.get("status") || (viewIsTopAiring ? "RELEASING" : viewIsTopUpcoming ? "NOT_YET_RELEASED" : ""),
       year: params.get("year") || "",
       /* Phase 2 filters. minScore is the AniList 0-100 floor; maxScore the
@@ -1791,16 +1923,27 @@
     }
     renderGridSkeleton();
 
-    /* ---- genre chips (AniList genres) ---- */
+    /* ---- genre chips (the FULL AniList genre list) ----
+       The server's /api/genres answers with AniList's own GenreCollection
+       (cached 24 h). The hardcoded 17 stay as the immediate paint and as the
+       fallback, so the chips never regress and never wait on the network. */
+    let chipGenres = ANILIST_GENRES;
     function renderChips() {
       if (!chipsWrap) return;
       chipsWrap.innerHTML =
         `<button class="genre-chip-zoro${state.genre ? "" : " active"}" data-genre="" type="button">All</button>` +
-        ANILIST_GENRES.map((g) => {
+        chipGenres.map((g) => {
           const active = state.genre && state.genre.toLowerCase() === g.toLowerCase();
           return `<button class="genre-chip-zoro${active ? " active" : ""}" data-genre="${encodeURIComponent(g)}" type="button">${escapeHtml(g)}</button>`;
         }).join("");
     }
+    renderChips();
+    api("/api/genres").then((res) => {
+      const list = res && res.ok && res.data && Array.isArray(res.data.allGenres) ? res.data.allGenres : null;
+      if (!list || !list.length || state.genre) return;
+      chipGenres = list;
+      renderChips();
+    }).catch(() => {});
 
     /* ---- year select (the full library range) ---- */
     function renderYears() {
@@ -1992,8 +2135,14 @@
         title = `Top <span class="accent">Airing</span>`;
       } else if (viewIsTopUpcoming) {
         title = `Top <span class="accent">Upcoming</span>`;
-      } else if (kind === "film") {
-        title = `Movies <span class="accent">${escapeHtml(SORT_LABELS[state.sort] || "")}</span>`;
+      } else if (viewIsSubbed) {
+        title = `Subbed <span class="accent">· ${escapeHtml(SORT_LABELS[state.sort] || "Trending")}</span>`;
+      } else if (viewIsDubbed) {
+        title = `Dubbed <span class="accent">· ${escapeHtml(SORT_LABELS[state.sort] || "Trending")}</span>`;
+      } else if (viewIsMovie) {
+        title = `Movies <span class="accent">· ${escapeHtml(SORT_LABELS[state.sort] || "")}</span>`;
+      } else if (viewFormat) {
+        title = `${escapeHtml(VIEW_LABEL[view] || state.format)} <span class="accent">· ${escapeHtml(SORT_LABELS[state.sort] || "Trending")}</span>`;
       } else if (chips.length) {
         title = `${escapeHtml(chips[0])} <span class="accent">· ${escapeHtml(SORT_LABELS[state.sort] || "Trending")}</span>`;
       } else {
@@ -2009,6 +2158,27 @@
         subheadingEl.textContent = bits.join(" · ");
       }
     }
+
+    /* ---- the honest per-view note ----
+       Subbed and Dubbed make claims about audio that the catalog has to back,
+       so each says exactly what is true: every title streams with subtitles;
+       dub availability is VERIFIED for catalog titles only (a live title has
+       no dub data and is never listed as dubbed). */
+    function updateViewNote() {
+      const note = document.getElementById("browse-view-note");
+      if (!note) return;
+      let text = "";
+      if (viewIsSubbed) text = "Every title streams with subtitles.";
+      else if (viewIsDubbed) text = "Dub status is verified for catalog titles only.";
+      if (!text) {
+        note.hidden = true;
+        note.textContent = "";
+        return;
+      }
+      note.textContent = text;
+      note.hidden = false;
+    }
+    updateViewNote();
 
     /* ---- pagination (AniList page numbers, windowed) ---- */
     function renderPagination(pageInfo) {
@@ -2125,6 +2295,11 @@
       } else {
         const qs = new URLSearchParams();
         qs.set("sort", state.sort);
+        /* The view preset must ride the request: ?view=dubbed is a DIFFERENT
+           shelf (catalog titles with a verified dub), not a sorted AniList
+           list. */
+        if (view) qs.set("view", view);
+        if (kind) qs.set("kind", kind);
         if (state.genre) qs.set("genre", state.genre);
         if (state.format) qs.set("format", state.format);
         if (state.status) qs.set("status", state.status);
@@ -2673,6 +2848,10 @@
       { id: "live-top-upcoming-grid", path: "/api/browse?sort=popular&status=NOT_YET_RELEASED&page=1", mode: "browse" },
       { id: "live-trending-grid", path: "/api/browse?sort=trending&page=1", mode: "browse" },
       { id: "live-top-rated-grid", path: "/api/browse?sort=top&page=1", mode: "browse" },
+      /* New On Aniverse: the most recently STARTED titles. Distinct from
+         Latest Episodes (the airing schedule) — this is a title list, not an
+         episode feed. */
+      { id: "live-new-on-grid", path: "/api/browse?sort=newest&page=1", mode: "browse" },
       { id: "live-latest-episodes-grid", path: "/api/airing?page=1", mode: "airing" },
     ];
 
@@ -2798,12 +2977,24 @@
     life: { icon: "🍜", kanji: "日常", label: "Slice of Life", desc: "Cozy noodle bars after hours, quiet afternoon walks, nostalgic memories, and everyday companionship." },
   };
 
+  /* Display labels for the rest of AniList's genre list. GENRE_META already
+     carries the catalog's own shelves (icon / kanji / flavour); this covers
+     the genres AniList has beyond them, spelled the way AniList spells them
+     ("Sci-Fi", "Mahou Shoujo", "Slice of Life"). */
+  const GENRE_LABELS = {
+    action: "Action", adventure: "Adventure", comedy: "Comedy", drama: "Drama",
+    ecchi: "Ecchi", fantasy: "Fantasy", horror: "Horror", "mahou shoujo": "Mahou Shoujo",
+    mecha: "Mecha", music: "Music", mystery: "Mystery", psychological: "Psychological",
+    romance: "Romance", "sci-fi": "Sci-Fi", "slice of life": "Slice of Life",
+    sports: "Sports", supernatural: "Supernatural", thriller: "Thriller",
+  };
+
   /* One display label per genre everywhere: the curated label when known
      ("life" -> "Slice of Life"), otherwise capitalised ("drama" -> "Drama").
      Raw lowercase keys must never leak into chips/tooltips. */
   function genreLabel(g) {
     const k = String(g || "").toLowerCase();
-    return (GENRE_META[k] && GENRE_META[k].label) || k.charAt(0).toUpperCase() + k.slice(1);
+    return (GENRE_META[k] && GENRE_META[k].label) || GENRE_LABELS[k] || k.charAt(0).toUpperCase() + k.slice(1);
   }
 
   async function initGenresPage() {
@@ -2811,28 +3002,50 @@
     if (!grid) return;
 
     const res = await api("/api/genres");
-    if (!res.ok || !res.data || !res.data.counts) return;
-    const counts = res.data.counts;
+    if (!res.ok || !res.data) return;
+    const counts = res.data.counts || {};
+    /* EVERY AniList genre (GenreCollection, cached server-side). The local
+       counts are the fallback list, so the page still renders while AniList
+       is unreachable. */
+    const all = Array.isArray(res.data.allGenres) && res.data.allGenres.length
+      ? res.data.allGenres
+      : Object.keys(counts);
+    /* The local catalog spells one genre "life" where AniList says "Slice of
+       Life" — that count is real, so it is attached to the AniList spelling
+       instead of being dropped. A genre with no local count shows no number
+       at all (never an invented one). */
+    const countKeyFor = (name) => {
+      const k = String(name).toLowerCase();
+      if (counts[k] != null) return k;
+      const alias = Object.keys(GENRE_ALIASES).find((a) => GENRE_ALIASES[a].toLowerCase() === k);
+      return alias && counts[alias] != null ? alias : null;
+    };
 
-    const keys = Object.keys(counts).sort(
-      (a, b) => counts[b] - counts[a] || a.localeCompare(b)
-    );
+    const keys = all.slice().sort((a, b) => {
+      const ca = counts[countKeyFor(a)] || 0;
+      const cb = counts[countKeyFor(b)] || 0;
+      return cb - ca || a.localeCompare(b);
+    });
 
     grid.innerHTML = keys
       .map((key) => {
-        const meta = GENRE_META[key] || {
+        const meta = GENRE_META[key.toLowerCase()] || {
           icon: "🎬",
           kanji: "棚",
-          label: key.charAt(0).toUpperCase() + key.slice(1),
+          label: genreLabel(key),
           desc: "Explore this curated shelf of titles.",
         };
-        const cnt = counts[key];
+        const countKey = countKeyFor(key);
+        const cnt = countKey ? counts[countKey] : null;
+        const countHtml = cnt != null
+          ? `<span class="genre-card-count">${cnt} ${cnt === 1 ? "Title" : "Titles"}</span>`
+          : `<span class="genre-card-count genre-card-count-none">—</span>`;
         return `
-          <a class="genre-shelf-card" href="browse.html?genre=${encodeURIComponent(key)}" data-genre="${key}">
+          <a class="genre-shelf-card" href="browse.html?genre=${encodeURIComponent(key)}" data-genre="${escapeHtml(key)}">
             <div class="genre-card-watermark">${meta.kanji}</div>
             <div class="genre-card-top">
               <div class="genre-card-icon-pill">${meta.icon}</div>
-              <span class="genre-card-count">${cnt} ${cnt === 1 ? "Title" : "Titles"}</span>
+              ${countHtml}
             </div>
             <div>
               <div class="genre-card-title">
@@ -5679,18 +5892,10 @@
       }
     }
 
-    /* Recommendations: live titles from the same genres. */
-    const recWrap = document.getElementById("detail-recommendations");
-    if (recWrap) {
-      const genre = (t.genres || [])[0] || "";
-      const recRes = await api(`/api/browse?sort=popular${genre ? `&genre=${encodeURIComponent(genre)}` : ""}&page=1`);
-      const recs = (recRes.ok && recRes.data && Array.isArray(recRes.data.results))
-        ? recRes.data.results.filter((o) => o.anilistId !== t.anilistId).slice(0, 6)
-        : [];
-      recWrap.innerHTML = recs.length
-        ? recs.map((o) => renderLiveCard(o)).join("")
-        : `<p style="color:var(--text-muted);">No similar titles yet.</p>`;
-    }
+    /* "More Like This": AniList's own recommendation edges, already fetched
+       with the detail payload and adult-screened server-side. ONE renderer
+       shared with the catalog detail page; an empty set hides the section. */
+    fillRecommendations(t.recommendations);
 
     if (loadingEl) loadingEl.hidden = true;
     if (errorEl) errorEl.hidden = true;
@@ -5899,7 +6104,8 @@
       epList.classList.toggle("single-episode", episodes.length === 1);
     }
 
-    // Recommendations: up to 6 same-genre titles.
+    // Recommendations: up to 6 same-genre catalog titles, rendered by the
+    // ONE shared "More Like This" renderer the live detail page also uses.
     const recWrap = document.getElementById("detail-recommendations");
     if (recWrap) {
       const allRes = await api("/api/titles?limit=100");
@@ -5910,27 +6116,10 @@
           .map((o) => ({ o, shared: (o.genres || []).filter((g) => myGenres.has(g.toLowerCase())).length }))
           .filter((x) => x.shared > 0)
           .sort((a, b) => b.shared - a.shared || (b.o.score || 0) - (a.o.score || 0))
-          .slice(0, 6)
           .map((x) => x.o);
-        recWrap.innerHTML = recs.length
-          ? recs
-              .map((o) => `
-                <div class="zoro-card" data-slug="${o.slug}">
-                  <a class="zoro-card-poster" href="${detailHref(o.slug)}">
-                    <img src="${coverOf(o)}" alt="${escapeHtml(o.name)}" loading="lazy" decoding="async">
-                    <div class="zoro-play-overlay"><div class="zoro-play-circle">▶</div></div>
-                    <div class="zoro-poster-badges">
-                      <div class="badges-left">${subBadge(o)}${dubBadge(o)}</div>
-                    </div>
-                  </a>
-                  <div class="zoro-card-info">
-                    <a class="zoro-card-title" href="${detailHref(o.slug)}">${escapeHtml(o.name)}</a>
-                    <div class="zoro-card-submeta"><span>${o.kind}</span> • <span>${o.year}</span></div>
-                  </div>
-                </div>
-              `)
-              .join("")
-          : `<p style="color:var(--text-muted);">No similar titles yet.</p>`;
+        fillRecommendations(recs);
+      } else {
+        fillRecommendations([]);
       }
     }
 
@@ -6145,7 +6334,8 @@
        queueing behind one another (that chain was the 15s "empty boxes"). */
     const authReady = checkAuthSession();
     initSpotlightSlider();
-    initTrendingAndColumns();
+    initHomeCatalogColumns();
+    initTopTenTabs();
     initMainCatalogGrid();
     initLiveRails();
     initGenresPage();

@@ -11,8 +11,8 @@
   <!-- Loaded async: a slow Google Fonts response must never block the app script or render. -->
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
   <noscript><link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet"></noscript>
-  <link rel="preload" href="css/zoro-aizen.css?v=13" as="style">
-  <link rel="preload" href="js/zoro-aizen.js?v=14" as="script">
+  <link rel="preload" href="css/zoro-aizen.css?v=14" as="style">
+  <link rel="preload" href="js/zoro-aizen.js?v=15" as="script">
   <script>
     /* Warm the API while the app script is still downloading: this removes a
        full round trip from the critical path. The app script adopts these
@@ -34,7 +34,7 @@
           });
       });
     })();
-  </script>  <link rel="stylesheet" href="css/zoro-aizen.css?v=13">
+  </script>  <link rel="stylesheet" href="css/zoro-aizen.css?v=14">
 </head>
 <body>
 
@@ -57,7 +57,11 @@
         <a class="nav-link" href="browse.html">Browse</a>
         <a class="nav-link" href="genres.html">Genres</a>
         <a class="nav-link" href="schedule.html">Schedule</a>
-        <a class="nav-link" href="browse.html?kind=film">Movies</a>
+        <a class="nav-link" href="browse.html?view=subbed">Subbed</a>
+        <a class="nav-link" href="browse.html?view=dubbed">Dubbed</a>
+        <a class="nav-link" href="browse.html?view=movie">Movies</a>
+        <a class="nav-link" href="browse.html?view=ona">ONAs</a>
+        <a class="nav-link" href="browse.html?view=special">Specials</a>
         <a class="nav-link" href="browse.html?view=top-airing">Top Airing</a>
         <a class="nav-link" href="browse.html?view=top-upcoming">Top Upcoming</a>
         <a class="nav-link" href="az-list.html">A-Z List</a>
@@ -184,19 +188,23 @@
       <div class="cards-grid-zoro" id="continue-watching-row"></div>
     </section>
 
-    <!-- Zoro Trending Top 10 Rail -->
+    <!-- Top 10 tabs (live AniList): Trending / Most Popular / Top Rated.
+         AniList has no historical trending window, so the tabs are named
+         after the sort they really are — never "Today / This Week". -->
     <section class="section-trending container-main">
       <div class="section-header-zoro">
         <div>
-          <h2 class="section-title">Trending <span class="accent">Anime</span></h2>
-          <span style="font-size: 0.85rem; color: var(--text-muted); font-family: var(--font-mono);">TOP 10 TODAY</span>
+          <h2 class="section-title">Top <span class="accent">10</span></h2>
+          <span class="top10-tabs" id="top10-tabs" role="tablist" aria-label="Top 10 category">
+            <!-- Rendered by zoro-aizen.js -->
+          </span>
         </div>
         <div class="trending-nav">
-          <button class="trending-arrow" id="trending-prev" type="button" aria-label="Previous Trending Anime">‹</button>
-          <button class="trending-arrow" id="trending-next" type="button" aria-label="Next Trending Anime">›</button>
+          <button class="trending-arrow" id="top10-prev" type="button" aria-label="Previous Top 10">‹</button>
+          <button class="trending-arrow" id="top10-next" type="button" aria-label="Next Top 10">›</button>
         </div>
       </div>
-      <div class="trending-rail" id="trending-rail-container">
+      <div class="trending-rail" id="top10-rail">
         <!-- Rendered dynamically -->
       </div>
     </section>
@@ -291,6 +299,17 @@
       <div class="cards-grid-zoro" id="live-top-rated-grid"></div>
     </section>
 
+    <section class="container-main live-rail-section" id="live-new-on-section">
+      <div class="section-header-zoro">
+        <div>
+          <h2 class="section-title">New On <span class="accent">Aniverse</span></h2>
+          <span style="font-size: 0.85rem; color: var(--text-muted); font-family: var(--font-mono);">MOST RECENTLY STARTED</span>
+        </div>
+        <a href="browse.html?sort=newest" style="font-size: 0.85rem; color: var(--zoro-lime); font-weight: 600;">View All →</a>
+      </div>
+      <div class="cards-grid-zoro" id="live-new-on-grid"></div>
+    </section>
+
     <section class="container-main live-rail-section" id="live-latest-episodes-section" style="margin-bottom: 4rem;">
       <div class="section-header-zoro">
         <div>
@@ -326,6 +345,6 @@
     </div>
   </footer>
 
-  <script src="js/zoro-aizen.js?v=14"></script>
+  <script src="js/zoro-aizen.js?v=15"></script>
 </body>
 </html>
