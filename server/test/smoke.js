@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { buildEmbedUrl, ZOKO_SOURCES } from "../src/zoko.js";
-import { ZOKO_EMBED_ORIGIN } from "../src/config.js";
+import { ZOKO_EMBED_ORIGIN, ANIVEXA_BASE_URL } from "../src/config.js";
+import { episodeSetFromAnivexa, pickAnimeggStreamUrl } from "../src/animegg.js";
 
 console.log("=== Running ZokoAnime Unit / Smoke Tests ===");
 
@@ -168,6 +169,64 @@ test("buildEmbedUrl resume emits time= alongside t=", () => {
   });
   assert.ok(url.includes("&t=185"), `Expected &t=185, got: ${url}`);
   assert.ok(url.includes("&time=185"), `Expected &time=185, got: ${url}`);
+});
+
+/* ==========================================================================
+   animegg fallback (Anivexa proxy) — the shipped pure helpers, no network.
+   The route-level tests (live stub server) live in e2e.js.
+   ========================================================================== */
+
+// 12. Anivexa base URL defaults to the production loopback port.
+test("ANIVEXA_BASE_URL defaults to http://127.0.0.1:4100", () => {
+  assert.equal(ANIVEXA_BASE_URL, "http://127.0.0.1:4100");
+});
+
+// 13. Availability parsing: the per-provider route lists episodes under sub.
+test("animegg episode list reads the per-provider /episodes response", () => {
+  const listed = episodeSetFromAnivexa({
+    animegg: { episodes: { sub: [{ number: 1 }, { number: 2 }], dub: [] } },
+  });
+  assert.deepEqual([...listed].sort(), [1, 2]);
+  assert.equal(listed.has(1), true);
+  assert.equal(listed.has(3), false);
+
+  /* The bare provider object (no `animegg` wrapper) is accepted too. */
+  const bare = episodeSetFromAnivexa({ episodes: { sub: [{ episode: 4 }] } });
+  assert.deepEqual([...bare], [4]);
+
+  /* Nothing listed -> empty set, never a throw. */
+  assert.deepEqual([...episodeSetFromAnivexa({ animegg: { error: "no match" } })], []);
+  assert.deepEqual([...episodeSetFromAnivexa(null)], []);
+});
+
+// 14. Stream selection: the iframe-able embed URL wins over a direct mp4.
+test("animegg stream selection prefers the embed URL, falls back to mp4", () => {
+  const embed = pickAnimeggStreamUrl([
+    { type: "mp4", url: "https://cdn.test/video.mp4?for=1", server: "Animegg" },
+    { type: "embed", embed: "https://www.animegg.org/embed/119601", server: "Animegg-embed" },
+  ]);
+  assert.deepEqual(embed, {
+    ok: true,
+    embedUrl: "https://www.animegg.org/embed/119601",
+    url: "https://www.animegg.org/embed/119601",
+  });
+
+  const mp4Only = pickAnimeggStreamUrl([
+    { type: "mp4", url: "https://www.animegg.org/play/119601/video.mp4?for=101795376258733" },
+  ]);
+  assert.equal(mp4Only.ok, true);
+  assert.equal(mp4Only.embedUrl, null, "no embed -> embedUrl stays null");
+  assert.ok(mp4Only.url.includes("animegg.org/play/119601/video.mp4"));
+
+  /* embedUrl alias is honoured as well. */
+  const alias = pickAnimeggStreamUrl([{ embedUrl: "https://www.animegg.org/embed/123714" }]);
+  assert.equal(alias.embedUrl, "https://www.animegg.org/embed/123714");
+
+  /* No usable stream -> ok:false, never a throw. */
+  assert.deepEqual(pickAnimeggStreamUrl([]), { ok: false, embedUrl: null, url: null });
+  assert.deepEqual(pickAnimeggStreamUrl([{ type: "mp4" }]), { ok: false, embedUrl: null, url: null });
+  /* A relative/invalid URL is rejected rather than handed to an iframe. */
+  assert.deepEqual(pickAnimeggStreamUrl([{ url: "not a url" }]), { ok: false, embedUrl: null, url: null });
 });
 
 console.log(`\nAll ${passed} smoke / unit tests passed successfully!\n`);

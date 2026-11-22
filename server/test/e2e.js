@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import http from "node:http";
 import { fileURLToPath } from "node:url";
 /* Self-contained test database: a temporary seeded + enriched DB (see
    setup-db.js). `npm test` needs no manual seed/metadata steps and never
@@ -152,6 +153,102 @@ function mockAniList({ mediaList = [], allMedia = null, alwaysFull = false, medi
     }
     return jsonResponse({ data: { Page: { pageInfo, media } } });
   };
+}
+
+/* ==========================================================================
+   ANIMEGG STUB (Anivexa-API stand-in)
+   There is NO Anivexa instance on a dev VM, so these tests run a local stub
+   on an ephemeral port and point ANIVEXA_BASE_URL at it. config.js reads the
+   env at import time, so the app module is imported AFTER the env is set.
+   The stub answers ONLY the two routes the module uses.
+   ========================================================================== */
+
+let animeggStub = null;
+let animeggStubPort = 0;
+let animeggStubCalls = [];
+let animeggStubHandler = null;
+
+function startAnimeggStub(handler) {
+  animeggStubCalls = [];
+  animeggStubHandler = handler;
+  animeggStub = http.createServer((req, res) => {
+    const url = new URL(req.url, `http://127.0.0.1:${animeggStubPort}`);
+    animeggStubCalls.push(url.pathname);
+    const body = animeggStubHandler(url.pathname, url.searchParams);
+    if (body === null) {
+      res.writeHead(500, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "stub: unrouted" }));
+      return;
+    }
+    res.writeHead(body.status || 200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify(body.payload));
+  });
+  return new Promise((resolve, reject) => {
+    animeggStub.once("error", reject);
+    animeggStub.listen(0, "127.0.0.1", () => {
+      animeggStubPort = animeggStub.address().port;
+      resolve();
+    });
+  });
+}
+
+function animeggStubBase() {
+  return `http://127.0.0.1:${animeggStubPort}`;
+}
+
+function stopAnimeggStub() {
+  return new Promise((resolve) => {
+    if (!animeggStub) return resolve();
+    animeggStub.close(() => resolve());
+    animeggStub = null;
+  });
+}
+
+/* Module-level helper: an app instance created while ANIVEXA_BASE_URL points
+   at the stub, listening on its own ephemeral port.
+
+   config.js reads the env once at import time, and every app in this process
+   shares that one config module — so a query-string-fresh import of the app is
+   NOT enough (its animegg module resolves to the same cached config). The
+   animegg module therefore exposes a test seam, `_setAnivexaBaseUrlForTests`,
+   which points the SHARED module at the stub for the duration of the callback.
+   Production never calls it. */
+let routeServer = null;
+let routeBase = "";
+
+async function withAnimeggRoute(handler, fn) {
+  /* The stub must be listening (its port known) before the base URL is set. */
+  await startAnimeggStub(handler);
+  const { _setAnivexaBaseUrlForTests } = await import("../src/animegg.js");
+  _setAnivexaBaseUrlForTests(animeggStubBase());
+  try {
+    const fresh = await import("../src/animegg.js");
+    const routeApp = (await import(`./setup-db.js?route=${Date.now()}`)).app;
+    await new Promise((resolve, reject) => {
+      routeServer = routeApp.listen(0, "127.0.0.1", () => {
+        routeBase = `http://127.0.0.1:${routeServer.address().port}`;
+        resolve();
+      });
+      routeServer.once("error", reject);
+    });
+    return await fn({ baseUrl: routeBase, fresh });
+  } finally {
+    if (routeServer) await new Promise((resolve) => routeServer.close(resolve));
+    routeServer = null;
+    /* Restore the default so later tests in this process are not pointed at a
+       closed stub. */
+    _setAnivexaBaseUrlForTests(null);
+    await stopAnimeggStub();
+  }
+}
+
+/* A catalog title whose AniList id is 10563 (animegg-covered in the live
+   probe: Space Pirate Captain Harlock: Riddle of the Arcadia Episode). */
+function insertAnimeggTitle(slug, name, anilistId) {
+  db.prepare(`
+    INSERT OR REPLACE INTO titles (slug, name, kind, year, episodes, runtime_min, mal_id, anilist_id, created_at)
+    VALUES (?, ?, 'Movie', 1979, 1, 100, NULL, ?, datetime('now'))
+  `).run(slug, name, anilistId);
 }
 
 function resetAniListMock() {
@@ -2140,6 +2237,239 @@ async function runTests() {
       const row = db.prepare("SELECT name, old_title FROM titles WHERE slug = ?").get("sea-of-stars");
       assert.equal(row.name, "Naruto", "an unenriched row is upgraded to the real catalog name");
       assert.equal(row.old_title, "Sea of Stars", "the fictional name is preserved in old_title");
+    });
+
+    /* ======================================================================
+       ANIMEGG FALLBACK (Anivexa proxy) — stubbed, offline, deterministic.
+       There is no Anivexa instance on this VM; a local stub on port 4199
+       answers the two routes the server module calls.
+       ====================================================================== */
+
+    // 67. Unreachable Anivexa -> the route still answers, available:false,
+    //     never a 500 (the other players are unaffected).
+    await test("GET /api/animegg/:anilistId/:ep degrades to available:false when Anivexa is down", async () => {
+      /* Point a FRESH app instance at a port with nothing listening. */
+      process.env.ANIVEXA_BASE_URL = "http://127.0.0.1:4198";
+      const downApp = (await import(`./setup-db.js?down=${Date.now()}`)).app;
+      let downServer = null;
+      let downBase = "";
+      try {
+        await new Promise((resolve) => {
+          downServer = downApp.listen(0, "127.0.0.1", () => {
+            downBase = `http://127.0.0.1:${downServer.address().port}`;
+            resolve();
+          });
+        });
+        const res = await fetch(`${downBase}/api/animegg/10563/1`);
+        assert.equal(res.status, 200, "an Anivexa outage must not surface as a 500");
+        const data = await res.json();
+        assert.equal(data.ok, true);
+        assert.equal(data.anilistId, 10563);
+        assert.equal(data.ep, 1);
+        assert.equal(data.available, false);
+        assert.equal(data.embedUrl, null);
+        assert.equal(data.url, null);
+
+        /* The slug route degrades the same way. */
+        const slug = await fetch(`${downBase}/api/animegg/by-slug/sea-of-stars/1`);
+        assert.equal(slug.status, 200);
+        assert.equal((await slug.json()).available, false);
+      } finally {
+        if (downServer) await new Promise((resolve) => downServer.close(resolve));
+        delete process.env.ANIVEXA_BASE_URL;
+      }
+    });
+
+    // 68. A listed episode resolves a live stream URL (embed preferred).
+    await test("animegg availability + live /watch resolution (stub)", async () => {
+      const stub = (pathname) => {
+        if (pathname === "/episodes/animegg/10563") {
+          return { payload: { animegg: { episodes: { sub: [{ number: 1 }], dub: [] } } } };
+        }
+        if (pathname === "/watch/animegg/10563/sub/animegg-1") {
+          return {
+            payload: {
+              streams: [
+                { type: "mp4", url: "https://www.animegg.org/play/119601/video.mp4?for=101795376258733", server: "Animegg" },
+                { type: "embed", embed: "https://www.animegg.org/embed/119601", server: "Animegg-embed" },
+              ],
+            },
+          };
+        }
+        return null;
+      };
+
+      /* The route runs against the app instance whose animegg module is
+         pointed at the stub (via the module's test seam). */
+      await withAnimeggRoute(stub, async ({ baseUrl: stubBase, fresh }) => {
+        const res = await fetch(`${stubBase}/api/animegg/10563/1`);
+        assert.equal(res.status, 200);
+        const data = await res.json();
+        assert.equal(data.ok, true);
+        assert.equal(data.available, true);
+        assert.equal(data.anilistId, 10563);
+        assert.equal(data.ep, 1);
+        assert.equal(data.embedUrl, "https://www.animegg.org/embed/119601", "the embed URL is preferred");
+        assert.equal(data.url, "https://www.animegg.org/embed/119601");
+
+        /* The module's own helpers agree (same base URL, same stub). */
+        const direct = await fresh.resolveAnimegg(10563, 1);
+        assert.equal(direct.available, true);
+        assert.equal(direct.embedUrl, "https://www.animegg.org/embed/119601");
+
+        /* The /watch call is LIVE per request: the route call and the direct
+           call each performed their own /watch (rotating tokens). */
+        assert.equal(animeggStubCalls.filter((p) => p.startsWith("/watch/")).length, 2);
+      });
+    });
+
+    // 69. An episode the provider does not list is honestly unavailable (no
+    //     /watch call is wasted), and the availability cache serves the second
+    //     ask without a second upstream call. Also: with no embed in the
+    //     /watch payload, the direct mp4 is used (embedUrl stays null).
+    await test("animegg: unlisted episode -> available:false, no /watch call", async () => {
+      const stub = (pathname) => {
+        if (pathname === "/episodes/animegg/10563") {
+          return { payload: { animegg: { episodes: { sub: [{ number: 1 }], dub: [] } } } };
+        }
+        if (pathname === "/watch/animegg/10563/sub/animegg-1") {
+          return {
+            payload: {
+              streams: [
+                { type: "mp4", url: "https://www.animegg.org/play/119601/video.mp4?for=101795376258733", server: "Animegg" },
+              ],
+            },
+          };
+        }
+        return null; // a /watch call for ep 2 would be a test failure
+      };
+
+      await withAnimeggRoute(stub, async ({ baseUrl: stubBase }) => {
+        const res = await fetch(`${stubBase}/api/animegg/10563/2`);
+        assert.equal(res.status, 200);
+        const data = await res.json();
+        assert.equal(data.available, false);
+        assert.equal(data.embedUrl, null);
+        assert.ok(
+          !animeggStubCalls.some((p) => p.startsWith("/watch/")),
+          "an unlisted episode must not trigger a /watch call"
+        );
+
+        /* Availability is cached: a repeat ask costs no upstream call. */
+        const before = animeggStubCalls.length;
+        const again = await fetch(`${stubBase}/api/animegg/10563/2`);
+        assert.equal((await again.json()).available, false);
+        assert.equal(animeggStubCalls.length, before, "a cached availability answer makes no upstream call");
+
+        /* mp4-only /watch payload: ok, embedUrl null, url is the mp4. */
+        const mp4 = await fetch(`${stubBase}/api/animegg/10563/1`);
+        const mp4Data = await mp4.json();
+        assert.equal(mp4Data.available, true);
+        assert.equal(mp4Data.embedUrl, null, "no embed -> embedUrl stays null");
+        assert.ok(mp4Data.url.includes("animegg.org/play/119601/video.mp4"));
+      });
+    });
+
+    // 70. Slug-keyed route: the catalog title's anilist_id resolves the same
+    //     answer, and a title with no AniList id is honestly unavailable.
+    await test("GET /api/animegg/by-slug/:slug/:ep resolves the catalog anilist_id", async () => {
+      insertAnimeggTitle("animegg-test-title", "Harlock Arcadia", 10563);
+      try {
+        const stub = (pathname) => {
+          if (pathname === "/episodes/animegg/10563") {
+            return { payload: { animegg: { episodes: { sub: [{ number: 1 }], dub: [] } } } };
+          }
+          if (pathname === "/watch/animegg/10563/sub/animegg-1") {
+            return { payload: { streams: [{ type: "embed", embedUrl: "https://www.animegg.org/embed/119601" }] } };
+          }
+          return null;
+        };
+        await withAnimeggRoute(stub, async ({ baseUrl: stubBase }) => {
+          const res = await fetch(`${stubBase}/api/animegg/by-slug/animegg-test-title/1`);
+          assert.equal(res.status, 200);
+          const data = await res.json();
+          assert.equal(data.ok, true);
+          assert.equal(data.slug, "animegg-test-title");
+          assert.equal(data.anilistId, 10563);
+          assert.equal(data.available, true);
+          assert.equal(data.embedUrl, "https://www.animegg.org/embed/119601");
+        });
+
+        /* No AniList id -> no-anilist-id, no upstream call. */
+        db.prepare(`
+          INSERT OR REPLACE INTO titles (slug, name, kind, year, episodes, runtime_min, mal_id, anilist_id, created_at)
+          VALUES ('animegg-no-id', 'No AniList Id', 'Movie', 1979, 1, 100, NULL, NULL, datetime('now'))
+        `).run();
+        await withAnimeggRoute(() => null, async ({ baseUrl: stubBase }) => {
+          const res = await fetch(`${stubBase}/api/animegg/by-slug/animegg-no-id/1`);
+          assert.equal(res.status, 200);
+          const data = await res.json();
+          assert.equal(data.available, false);
+          assert.equal(data.reason, "no-anilist-id");
+          assert.deepEqual(animeggStubCalls, [], "no upstream call without an AniList id");
+        });
+
+        /* Unknown slug -> 404, same as the other title routes. */
+        const missing = await fetch(`${baseUrl}/api/animegg/by-slug/no-such-title-xyz/1`);
+        assert.equal(missing.status, 404);
+      } finally {
+        db.prepare("DELETE FROM titles WHERE slug IN ('animegg-test-title', 'animegg-no-id')").run();
+      }
+    });
+
+    // 71. Malformed input: a non-numeric id/ep is a 400, never a crash.
+    await test("animegg routes reject a non-numeric id/episode with 400", async () => {
+      const res = await fetch(`${baseUrl}/api/animegg/abc/1`);
+      assert.equal(res.status, 400);
+      assert.equal((await res.json()).ok, false);
+      const res2 = await fetch(`${baseUrl}/api/animegg/10563/xyz`);
+      assert.equal(res2.status, 400);
+      const res3 = await fetch(`${baseUrl}/api/animegg/0/1`);
+      assert.equal(res3.status, 400, "a zero id is invalid");
+      /* The slug route's episode is validated through the same resolver. */
+      const res4 = await fetch(`${baseUrl}/api/animegg/by-slug/sea-of-stars/xyz`);
+      assert.equal(res4.status, 200, "the slug route degrades, it never 400s on a bad ep");
+      assert.equal((await res4.json()).available, false);
+    });
+
+    // 72. The shipped frontend treats animegg as a manual-only, sub-only 4th
+    //     server: pill in watch.html, switch support, ?player hook, no
+    //     auto-switch, and no client-side stream URL.
+    await test("animegg is a manual-only sub-only 4th server in the shipped client", async () => {
+      const src = readFileSync(ZORO_JS_PATH, "utf8");
+      const html = readFileSync(fileURLToPath(new URL("../../ani-verse/watch.html", import.meta.url)), "utf8");
+
+      /* 4th server button, same pattern as the other three. */
+      assert.ok(
+        html.includes('data-server="animegg"'),
+        "watch.html must carry the animegg server pill"
+      );
+      /* switchServer + sessionStorage + ?player hook. */
+      assert.ok(src.includes('server !== ANIMEGG_SERVER_ID'), "switchServer accepts animegg");
+      assert.ok(src.includes("storedServer === ANIMEGG_SERVER_ID"), "the session choice persists");
+      assert.ok(src.includes('playerHook === ANIMEGG_SERVER_ID'), "the ?player=animegg hook exists");
+      /* Sub-only: the track pills are disabled on animegg and the label is SUB. */
+      assert.ok(src.includes("animegg is sub only"), "the Dub/Hard-sub pills carry an honest sub-only tooltip");
+      assert.ok(src.includes('activeServer === ANIMEGG_SERVER_ID') && src.includes('label.textContent = "SUB"'), "the track label is SUB on animegg");
+      /* Manual only: nothing auto-switches TO animegg, and the failure offer
+         never switches away either. */
+      const autoSwitchTo = (src.match(/activeServer\s*=\s*ANIMEGG_SERVER_ID/g) || []).length;
+      assert.equal(autoSwitchTo, 0, "the site must never auto-switch to animegg");
+      assert.ok(
+        !/showFallbackOffer\(\)[\s\S]{0,80}switchServer\(ANIMEGG_SERVER_ID\)/.test(src),
+        "no failure path switches to animegg"
+      );
+      /* The URL is never built client-side: it comes from the server route.
+         Checked on executable lines only — a comment may name the host. */
+      const codeLines = src
+        .split("\n")
+        .filter((l) => !l.trim().startsWith("*") && !l.trim().startsWith("/*") && !l.trim().startsWith("//"))
+        .join("\n");
+      assert.ok(
+        !codeLines.includes("animegg.org/embed/") && !codeLines.includes("animegg.org/play/"),
+        "the client must never build an animegg URL (tokens rotate per /watch call)"
+      );
+      assert.ok(src.includes("/api/animegg/"), "the client calls the server proxy route");
     });
 
     console.log(`\nAll ${passed} E2E integration tests passed successfully!\n`);

@@ -63,6 +63,14 @@ export const ZOKO_DEFAULT_SOURCE = process.env.ZOKO_DEFAULT_SOURCE || "mal";
 export const ZOKO_DEFAULT_TRACK = process.env.ZOKO_DEFAULT_TRACK || "sub";
 export const ZOKO_DEFAULT_COLOR = (process.env.ZOKO_DEFAULT_COLOR || "cae962").replace(/^#/, "");
 
+/* animegg fallback provider, resolved through the self-hosted Anivexa-API
+   (server/src/animegg.js). The instance is NOT reachable from the browser —
+   every call goes through this server. */
+export const ANIVEXA_BASE_URL = (process.env.ANIVEXA_BASE_URL || "http://127.0.0.1:4100").replace(/\/+$/, "");
+export const ANIVEXA_EPISODES_TIMEOUT_MS = Number(process.env.ANIVEXA_EPISODES_TIMEOUT_MS || 8000);
+export const ANIVEXA_WATCH_TIMEOUT_MS = Number(process.env.ANIVEXA_WATCH_TIMEOUT_MS || 12000);
+export const ANIVEXA_AVAIL_CACHE_MS = Number(process.env.ANIVEXA_AVAIL_CACHE_MS || 10 * 60 * 1000);
+
 export const HISTORY_LIMIT = 50;
 export const HISTORY_PER_USER_CAP = 500;
 export const CONTINUE_LIMIT = 12;

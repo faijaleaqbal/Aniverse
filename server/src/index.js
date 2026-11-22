@@ -30,6 +30,7 @@ import {
 import { db } from "./db.js";
 import { buildEmbedUrl, ZOKO_SOURCES, ZOKO_TRACKS } from "./zoko.js";
 import { checkDubAvailability } from "./dub-check.js";
+import { resolveAnimegg } from "./animegg.js";
 import { createRateLimiter } from "./ratelimit.js";
 import {
   AniListBusyError,
@@ -1044,6 +1045,79 @@ app.get("/api/dub-availability/:slug/:ep", async (req, res, next) => {
     res.json({ ok: true, slug, ep: epNum, ...result });
   } catch (err) {
     next(err);
+  }
+});
+
+/* ==========================================================================
+   ANIMEGG FALLBACK (Anivexa-API proxy)
+   ========================================================================== */
+
+/* animegg is the 4th, manual-only fallback player. The browser CANNOT reach
+   the self-hosted Anivexa instance (127.0.0.1:4100 on the production box), so
+   the server proxies: one cheap availability check + one LIVE /watch call
+   per request. Stream URLs carry a rotating `?for=` token and are NEVER
+   cached or persisted; the availability list (which episodes the provider
+   has) IS cached server-side, so repeated episode loads stay cheap.
+
+   Availability + LIVE stream resolution: the watch page calls this on every
+   episode — once in the background to decide whether the animegg pill is
+   offered, and once for real when the viewer picks the player. Each call
+   costs one cached /episodes check plus one LIVE /watch, so the URL is
+   always fresh. */
+app.get("/api/animegg/:anilistId/:ep", async (req, res, next) => {
+  try {
+    const anilistId = toInt(req.params.anilistId, null);
+    const epNum = toInt(req.params.ep, null);
+    if (anilistId == null || anilistId <= 0 || epNum == null || epNum <= 0) {
+      return res.status(400).json({ ok: false, error: "A numeric AniList id and episode number are required." });
+    }
+    const result = await resolveAnimegg(anilistId, epNum);
+    return res.json({ ok: true, ...result });
+  } catch (err) {
+    /* Anivexa unreachable must degrade to "not available", never a 500. */
+    return res.json({
+      ok: true,
+      anilistId: toInt(req.params.anilistId, 0),
+      ep: toInt(req.params.ep, 0),
+      available: false,
+      embedUrl: null,
+      url: null,
+      reason: "unavailable",
+    });
+  }
+});
+
+/* Slug-keyed availability, for the catalog titles whose AniList id lives in
+   the DB (same resolution /api/stream uses). */
+app.get("/api/animegg/by-slug/:slug/:ep", async (req, res, next) => {
+  try {
+    const epNum = toInt(req.params.ep, null);
+    const title = db.prepare("SELECT anilist_id FROM titles WHERE slug = ?").get(req.params.slug);
+    if (!title) throw notFound("Title not found.");
+    if (!title.anilist_id) {
+      return res.json({
+        ok: true,
+        slug: req.params.slug,
+        ep: epNum,
+        available: false,
+        embedUrl: null,
+        url: null,
+        reason: "no-anilist-id",
+      });
+    }
+    const result = await resolveAnimegg(title.anilist_id, epNum == null ? 1 : epNum);
+    return res.json({ ok: true, slug: req.params.slug, ...result });
+  } catch (err) {
+    if (err instanceof ApiError) return next(err);
+    return res.json({
+      ok: true,
+      slug: req.params.slug,
+      ep: toInt(req.params.ep, 0),
+      available: false,
+      embedUrl: null,
+      url: null,
+      reason: "unavailable",
+    });
   }
 });
 

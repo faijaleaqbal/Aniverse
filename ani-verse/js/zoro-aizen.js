@@ -82,11 +82,13 @@
   /* __AUTONEXT_LOGIC_START__ */
   /* Auto-next decision — ONE pure function for every player that reports an
      end-of-episode event (Zoko `ended`, MegaPlay `complete`). The TVplus
-     backup emits no such event, so it never reaches here. totalEps is the
-     title's real count (the AIRED count for a live title); 0 = unknown, and
-     an unknown count must NEVER invent a next episode. */
+     backup and the animegg embed emit no such event, so they never reach
+     here. totalEps is the title's real count (the AIRED count for a live
+     title); 0 = unknown, and an unknown count must NEVER invent a next
+     episode. */
   function autoNextAction({ server, currentEp, totalEps, autonext }) {
     if (server === "backup") return { action: "none" };
+    if (server === "animegg") return { action: "none" };
     if (!autonext) return { action: "none" };
     const total = Number(totalEps) || 0;
     const current = Number(currentEp) || 0;
@@ -3369,23 +3371,29 @@
     preferredTrack = readPreferredTrack();
 
     /* ------------------------------------------------------------------
-       SERVER STATE — Zoko is PRIMARY; TVplus and MegaPlay are alternates
-       the viewer chooses (never auto-switched to). The choice is
+       SERVER STATE — Zoko is PRIMARY; TVplus, MegaPlay and animegg are
+       alternates the viewer chooses (never auto-switched to). The choice is
        session-scoped (sessionStorage): a fresh tab always starts on Zoko,
        a reload inside the same tab keeps the choice. ?player=backup /
-       ?player=megaplay are harmless test hooks (loadEpisode's replaceState
-       strips the param from the URL after load).
+       ?player=megaplay / ?player=animegg are harmless test hooks
+       (loadEpisode's replaceState strips the param from the URL after load).
        ------------------------------------------------------------------ */
     const SS_SERVER_KEY = "av_player_server";
     const BACKUP_ORIGIN = "https://embed.animetvplus.site";
     const MEGAPLAY_ORIGIN = "https://megaplay.buzz";
+    /* animegg needs no origin constant: its URL is handed over by the server
+       route (a live /watch call per view, rotating token), so the client
+       never builds one itself. */
+    const ANIMEGG_SERVER_ID = "animegg";
     let activeServer = "zoko";
     try {
       const storedServer = sessionStorage.getItem(SS_SERVER_KEY);
-      if (storedServer === "backup" || storedServer === "megaplay") activeServer = storedServer;
+      if (storedServer === "backup" || storedServer === "megaplay" || storedServer === ANIMEGG_SERVER_ID) {
+        activeServer = storedServer;
+      }
     } catch {}
     const playerHook = params.get("player");
-    if (playerHook === "backup" || playerHook === "megaplay") {
+    if (playerHook === "backup" || playerHook === "megaplay" || playerHook === ANIMEGG_SERVER_ID) {
       activeServer = playerHook;
       try { sessionStorage.setItem(SS_SERVER_KEY, playerHook); } catch {}
     }
@@ -3402,6 +3410,72 @@
        episode events belong to the dying player and are ignored. */
     let megaPlayTrack = null;
     let megaPlayFrameLoaded = false;
+
+    /* ------------------------------------------------------------------
+       animegg (4th server, manual-only fallback). Its URL is NOT built
+       client-side: the server proxies the self-hosted Anivexa-API and
+       resolves a LIVE /watch on every request, because the returned
+       `?for=` token rotates per call. The client only ever holds the URL
+       for the current load — never a cache, never sessionStorage.
+
+       animeggState: "unknown" | "available" | "unavailable" per episode, so
+       the pill can be honest before the viewer asks for it. No URL is kept
+       here — the stream URL is resolved per load and lives only in the
+       caller's local variable.
+       ------------------------------------------------------------------ */
+    let animeggState = "unknown";
+    let animeggLoadToken = 0;
+    let animeggFailTimer = null;
+    const ANIMEGG_NO_PLAY_TIMEOUT_MS = 20000;
+
+    /* The AniList id this page's title carries (live: the ?live id; catalog:
+       titleData.anilistId). Null = the server cannot be asked. */
+    function animeggAniListId() {
+      if (isLive) return liveId || null;
+      return (titleData && titleData.anilistId) || null;
+    }
+
+    /* Resolve the stream URL for THIS load's episode. One place, so the
+       animegg route is hit exactly once per load and never from the pill's
+       background probe (that probe only feeds the pill). The URL is
+       deliberately NOT stored: the `?for=` token rotates per /watch call, so
+       a later episode or a reload must resolve a fresh one.
+
+       @returns {Promise<string|null>} the URL to hand to the iframe, or null
+       when the provider has no stream for this episode. */
+    async function resolveAnimeggStreamUrl(epNum) {
+      const id = animeggAniListId();
+      if (!id) {
+        animeggState = "unavailable";
+        return null;
+      }
+      animeggState = "unknown";
+      const url = await probeAnimegg(epNum);
+      return url || null;
+    }
+
+    /* GET /api/animegg/:anilistId/:ep — availability + (when available) a
+       freshly resolved stream URL. Never auto-switches anything; the caller
+       only learns whether the pill should be offered. */
+    async function probeAnimegg(epNum) {
+      const id = animeggAniListId();
+      if (!id) {
+        animeggState = "unavailable";
+        return null;
+      }
+      try {
+        const res = await api(`/api/animegg/${encodeURIComponent(id)}/${encodeURIComponent(epNum)}`);
+        const d = res && res.data;
+        const ok = !!(d && d.available && (d.embedUrl || d.url));
+        animeggState = ok ? "available" : "unavailable";
+        /* The URL is returned to the caller, never stored: it carries a
+           rotating token and belongs to exactly one load. */
+        return ok ? (d.embedUrl || d.url) : null;
+      } catch {
+        animeggState = "unavailable";
+        return null;
+      }
+    }
 
     /* animeTVplus embed URLs. IDs come from the catalog (titleData.malId /
        titleData.anilistId) — never invented — with three LIVE-VERIFIED
@@ -3546,6 +3620,7 @@
       if (zokoFailTimer) { clearTimeout(zokoFailTimer); zokoFailTimer = null; }
       if (backupFailTimer) { clearTimeout(backupFailTimer); backupFailTimer = null; }
       if (megaplayFailTimer) { clearTimeout(megaplayFailTimer); megaplayFailTimer = null; }
+      if (animeggFailTimer) { clearTimeout(animeggFailTimer); animeggFailTimer = null; }
       if (settleWatchdog) { clearTimeout(settleWatchdog); settleWatchdog = null; }
       if (probeController) {
         try { probeController.abort(); } catch {}
@@ -3600,6 +3675,7 @@
         if (coverOverlay) coverOverlay.style.display = "none";
         if (server === "backup") showBackupNote("TVplus player isn't responding.");
         else if (server === "megaplay") showMegaPlayFailureOffer("MegaPlay isn't responding.");
+        else if (server === ANIMEGG_SERVER_ID) showAnimeggFailureOffer("The animegg player isn't responding.");
         else showFallbackOffer();
       }, SWITCH_SETTLE_TIMEOUT_MS);
     }
@@ -3673,6 +3749,38 @@
       if (dismissBtn) dismissBtn.addEventListener("click", hideFallbackNote);
     }
 
+    /* animegg-context failure OFFER: same component and same rule (manual
+       only — the viewer picks the way back, nothing auto-switches). */
+    function showAnimeggFailureOffer(message) {
+      if (!fallbackNote || activeServer !== ANIMEGG_SERVER_ID) return;
+      fallbackOfferVisible = true;
+      fallbackNote.innerHTML = `
+        <span class="zoko-fallback-text">${escapeHtml(message)}</span>
+        <button class="btn-zoro-primary" id="fallback-try-btn" type="button">Try Zoko player</button>
+        <button class="fallback-dismiss" id="fallback-dismiss-btn" type="button" aria-label="Dismiss notice">✕</button>`;
+      fallbackNote.hidden = false;
+      const tryBtn = fallbackNote.querySelector("#fallback-try-btn");
+      if (tryBtn) tryBtn.addEventListener("click", () => switchServer("zoko"));
+      const dismissBtn = fallbackNote.querySelector("#fallback-dismiss-btn");
+      if (dismissBtn) dismissBtn.addEventListener("click", hideFallbackNote);
+    }
+
+    /* animegg status note when the episode simply is not on the provider: the
+       honest not-available state, offering the way back. */
+    function showAnimeggUnavailableNote(message) {
+      if (!fallbackNote || activeServer !== ANIMEGG_SERVER_ID) return;
+      fallbackOfferVisible = false;
+      fallbackNote.innerHTML = `
+        <span class="zoko-fallback-text">${escapeHtml(message)}</span>
+        <button class="btn-zoro-primary" id="fallback-back-btn" type="button">Back to Zoko</button>
+        <button class="fallback-dismiss" id="fallback-dismiss-btn" type="button" aria-label="Dismiss notice">✕</button>`;
+      fallbackNote.hidden = false;
+      const backBtn = fallbackNote.querySelector("#fallback-back-btn");
+      if (backBtn) backBtn.addEventListener("click", () => switchServer("zoko"));
+      const dismissBtn = fallbackNote.querySelector("#fallback-dismiss-btn");
+      if (dismissBtn) dismissBtn.addEventListener("click", hideFallbackNote);
+    }
+
     function armZokoFailureDetection(streamUrl, token) {
       if (zokoFailTimer) clearTimeout(zokoFailTimer);
       zokoFailTimer = setTimeout(() => {
@@ -3742,6 +3850,22 @@
       }, MEGAPLAY_NO_PLAY_TIMEOUT_MS);
     }
 
+    /* animegg failure detection: the embed emits no documented postMessage
+       events, so the ONLY honest signal is elapsed time without the iframe
+       producing anything. 20s: the embed is a plain page (animegg.org embed)
+       that loads its player quickly; the site never auto-switches. */
+    function armAnimeggFailureDetection(token) {
+      if (animeggFailTimer) clearTimeout(animeggFailTimer);
+      animeggFailTimer = setTimeout(() => {
+        animeggFailTimer = null;
+        if (token !== loadToken || activeServer !== ANIMEGG_SERVER_ID) return;
+        markPlayerSettled();
+        if (spinner) spinner.hidden = true;
+        if (coverOverlay) coverOverlay.style.display = "none";
+        showAnimeggFailureOffer("The animegg player isn't responding.");
+      }, ANIMEGG_NO_PLAY_TIMEOUT_MS);
+    }
+
     /* Swap the iframe in place — no page reload, no lost comment draft, no
        lost resume notice. The last observable position travels with the
        switch (Zoko and MegaPlay report time events; TVplus exposes none, so
@@ -3760,7 +3884,7 @@
        the viewer's own click — that lock used to make the server pills dead
        for up to 40s on a failed MegaPlay load). */
     function switchServer(server) {
-      if (server !== "zoko" && server !== "backup" && server !== "megaplay") return;
+      if (server !== "zoko" && server !== "backup" && server !== "megaplay" && server !== ANIMEGG_SERVER_ID) return;
       if (server === activeServer) return;
       /* Cancel the in-flight load/probes BEFORE swapping: the token bump
          makes every awaiting loadEpisode abort at its next guard. */
@@ -3779,13 +3903,14 @@
       lastZokoErrorAt = 0;
       lastMegaPlayErrorAt = 0;
       playerSettled = false;
+      /* The stream URL is resolved per load; nothing to clear here beyond
+         the state (loadEpisode re-resolves it). */
       clearPlayerToasts();
       applyServerUI();
-      if (server === "backup") {
-        showBackupNote("TVplus player active — audio depends on the source file. Press Play inside the player.");
-      } else {
-        hideFallbackNote();
-      }
+      /* The note is recomputed by loadEpisode for the server now active:
+         backup shows its status note, animegg re-resolves availability and
+         shows the honest state, Zoko/MegaPlay clear it. */
+      hideFallbackNote();
       pendingSwitchWatchdog = true;
       loadEpisode(currentEp, null, false, pos);
     }
@@ -3796,12 +3921,30 @@
     function applyServerUI() {
       const onBackup = activeServer === "backup";
       const onMegaPlay = activeServer === "megaplay";
+      const onAnimegg = activeServer === ANIMEGG_SERVER_ID;
       if (serverSwitcher) {
         serverSwitcher.querySelectorAll(".server-pill").forEach((p) => {
           p.classList.toggle("active", p.dataset.server === activeServer);
-        });
+          /* animegg is offered ONLY for an episode the provider actually
+             lists: the pill is disabled with an honest tooltip otherwise,
+             exactly like the other players' unavailable states. Unknown
+             (probe still in flight) stays enabled but unhighlighted — the
+             click itself re-resolves and shows the honest state. */
+          if (p.dataset.server === ANIMEGG_SERVER_ID) {
+            const off = animeggState === "unavailable";
+            p.disabled = off;
+            p.classList.toggle("is-disabled", off);
+            p.title = off
+              ? "animegg doesn't carry this episode"
+              : "animegg — sub only, SD. Manual fallback; no track switch.";
+          }        });
       }
-      if (iframe) iframe.title = onMegaPlay ? "MegaPlay player" : onBackup ? "TVplus player" : "ZokoAnime player";
+      if (iframe) {
+        iframe.title = onMegaPlay ? "MegaPlay player"
+          : onBackup ? "TVplus player"
+          : onAnimegg ? "animegg player"
+          : "ZokoAnime player";
+      }
       if (trackSwitcher) {
         trackSwitcher.querySelectorAll(".server-pill").forEach((p) => {
           const t = p.dataset.track || "sub";
@@ -3816,6 +3959,18 @@
             p.classList.toggle("is-disabled", t !== "sub");
             p.title = t === "dub" ? "Track switching isn't available on TVplus — audio depends on the source file"
                     : t === "hsub" ? "Track switching isn't available on TVplus — subs depend on the source file"
+                    : "";
+          } else if (onAnimegg) {
+            /* animegg is SUB-ONLY (verified: 0 dub episodes across the
+               covered titles). Same treatment as the backup: Sub active,
+               Dub/Hard-sub disabled with an honest tooltip, and the stored
+               av_zoko_track preference is never touched — it returns when
+               the viewer goes back to Zoko. */
+            p.classList.toggle("active", t === "sub");
+            p.disabled = t !== "sub";
+            p.classList.toggle("is-disabled", t !== "sub");
+            p.title = t === "dub" ? "animegg is sub only — there is no English dub track"
+                    : t === "hsub" ? "animegg is sub only — hard-sub isn't available either"
                     : "";
           } else if (onMegaPlay) {
             /* MegaPlay serves REAL dubs and its availability differs from
@@ -3833,22 +3988,25 @@
           }
         });
         if (onMegaPlay) applyTrackPill(currentTrack === "dub" ? "dub" : "sub");
-        else if (!onBackup) applyTrackPill(currentTrack);
+        else if (!onBackup && !onAnimegg) applyTrackPill(currentTrack);
       }
       if (settingToggles) {
         settingToggles.querySelectorAll("input[data-setting]").forEach((cb) => {
           /* Zoko embed settings stay disabled on the alternates — except
              auto-next on MegaPlay, which is SITE-driven (the complete event
              loads the next episode), so that toggle genuinely works there.
-             MegaPlay always auto-plays and has no intro/outro skip. */
+             MegaPlay always auto-plays and has no intro/outro skip.
+             animegg has no documented postMessage control bridge and no
+             parent-driven end event, so all three toggles are disabled. */
           const key = cb.dataset.setting;
-          const disabled = onBackup || (onMegaPlay && key !== "autonext");
+          const disabled = onBackup || onAnimegg || (onMegaPlay && key !== "autonext");
           cb.disabled = disabled;
           const label = cb.closest(".zoko-toggle");
           if (label) {
             label.classList.toggle("is-disabled", disabled);
             label.title = !disabled ? ""
               : onBackup ? "Not available on the TVplus player"
+              : onAnimegg ? "Not available on the animegg player"
               : key === "autoplay" ? "MegaPlay always auto-plays"
               : "Not available on the MegaPlay player";
           }
@@ -3860,6 +4018,8 @@
           ? '<span style="color: var(--zoro-lime);">⚡</span> Stream with MegaPlay (Auto-Play)'
           : onBackup
           ? '<span style="color: var(--zoro-lime);">⚡</span> Stream with TVplus (press Play)'
+          : onAnimegg
+          ? '<span style="color: var(--zoro-lime);">⚡</span> Stream with animegg (Sub, SD)'
           : '<span style="color: var(--zoro-lime);">⚡</span> Stream with ZokoAnime (Auto-Skip)';
       }
       updateTrackLabel();
@@ -4372,8 +4532,9 @@
       resumeNoteArmOnPlay = true;
       /* Restart stays on Zoko/TVplus only: MegaPlay's internal resume store
          cannot be disabled (?t=0 / resume=0 live-tested — both ignored), so
-         a Restart button there would be a fake control. */
-      const restartBtnHtml = activeServer === "megaplay" ? "" :
+         a Restart button there would be a fake control. animegg is the same
+         (no documented start-offset param, its own player chrome). */
+      const restartBtnHtml = (activeServer === "megaplay" || activeServer === ANIMEGG_SERVER_ID) ? "" :
         `<button class="btn-zoro-primary" id="resume-restart-btn" type="button" style="margin-left: 0.5rem; font-size: 0.75rem;">Restart</button>`;
       resumeNote.innerHTML = `
         Resumed from ${formatTime(seconds)}
@@ -4444,6 +4605,10 @@
       durationIsReal = false;
       playerReady = false;
       playerSettled = false;
+      /* New episode: animegg availability is re-resolved (the pill's probe
+         runs in the background below; an animegg load resolves its own URL). */
+      animeggState = "unknown";
+      animeggLoadToken++;
 
       /* ------------------------------------------------------------------
          TRACK RESET — IMMEDIATELY, BEFORE ANY AWAIT.
@@ -4466,6 +4631,13 @@
            cannot know the file's track); preferredTrack / av_zoko_track are
            deliberately untouched so the viewer's Dub choice returns when
            they go back to Zoko. */
+        currentTrack = "sub";
+        applyTrackPill("sub");
+        updateTrackLabel();
+      } else if (activeServer === ANIMEGG_SERVER_ID) {
+        /* animegg is SUB-ONLY, so the track is forced to Sub (no dub claim,
+           no preference write — av_zoko_track keeps the viewer's choice for
+           the return to Zoko). */
         currentTrack = "sub";
         applyTrackPill("sub");
         updateTrackLabel();
@@ -4509,6 +4681,18 @@
          never leak into this one. Zoko-only: the backup has no dub.
          Live titles are never probed — they have no dub data at all. */
       const probePromise = activeServer === "zoko" && !isLive ? probeDubAvailability(epNum) : null;
+
+      /* New episode: re-resolve animegg availability in the background, so
+         the pill is honest (offered only when the provider lists the
+         episode) without blocking the load. Only the pill state is fed from
+         here — the URL used for an actual animegg load is resolved again in
+         the stream-URL step below (never reused). Never auto-switches. */
+      if (activeServer !== ANIMEGG_SERVER_ID) {
+        const bgToken = animeggLoadToken;
+        probeAnimegg(epNum).then(() => {
+          if (bgToken === animeggLoadToken) applyAnimeggPill();
+        }).catch(() => {});
+      }
 
       // Clear episode-search filter and input box on every episode change (Bug 5)
       const epSearchInput = document.getElementById("ep-search-input");
@@ -4619,6 +4803,10 @@
          surfaced honestly by the fallback resume notice. Position tracking
          still runs on MegaPlay, so switching back to Zoko resumes correctly. */
       if (activeServer === "megaplay") resumeTime = 0;
+      /* animegg ignores start-offset params too (the embed keeps its own
+         position), so the site never claims a resume it cannot deliver —
+         same honest treatment as MegaPlay. */
+      if (activeServer === ANIMEGG_SERVER_ID) resumeTime = 0;
       resumeTimeForLoad = resumeTime;
       /* The notice is for a MEANINGFUL resume only (>=5s — the same floor
          the resumable window uses). A server switch carrying a 1-4s
@@ -4675,12 +4863,32 @@
         updateTrackLabel();
       }
 
-      // Build the stream URL for the ACTIVE server (Zoko primary, TVplus / MegaPlay alternates)
+      // Build the stream URL for the ACTIVE server (Zoko primary, TVplus / MegaPlay / animegg alternates)
       let streamUrl;
       if (activeServer === "backup") {
         streamUrl = getBackupEmbedUrl(currentEp, resumeTime, startFromBeginning === true);
       } else if (activeServer === "megaplay") {
         streamUrl = getMegaPlayEmbedUrl(currentEp, currentTrack);
+      } else if (activeServer === ANIMEGG_SERVER_ID) {
+        /* animegg: the URL comes from the server route, resolved LIVE for
+           THIS load (the `?for=` token rotates per /watch call). No resume
+           offset is applied — the embed keeps its own position and the site
+           surfaces that honestly rather than claiming a resume it cannot
+           deliver. */
+        const url = await resolveAnimeggStreamUrl(currentEp);
+        if (token !== loadToken || currentEp !== epNum) return; // superseded while resolving
+        if (!url) {
+          /* Honest not-available state, same notice component as the other
+             players. Manual only: no auto-switch. */
+          loadInFlight = false;
+          animeggState = "unavailable";
+          applyAnimeggPill();
+          if (spinner) spinner.hidden = true;
+          if (coverOverlay) coverOverlay.style.display = "none";
+          showAnimeggUnavailableNote("This episode isn't available on the animegg player.");
+          return;
+        }
+        streamUrl = url;
       } else {
         /* Determine the player id: the MAL id is preferred (it is what every
            player maps best). A live title WITHOUT a MAL id can never be served
@@ -4726,7 +4934,10 @@
 
       if (iframe) {
         iframe.src = streamUrl;
-        iframe.title = activeServer === "megaplay" ? "MegaPlay player" : activeServer === "backup" ? "TVplus player" : "ZokoAnime player";
+        iframe.title = activeServer === "megaplay" ? "MegaPlay player"
+          : activeServer === "backup" ? "TVplus player"
+          : activeServer === ANIMEGG_SERVER_ID ? "animegg player"
+          : "ZokoAnime player";
         /* playerEp flips when the NEW player reports `ready` — until then,
            in-flight events from the old document still belong to playerEp. */
       }
@@ -4738,6 +4949,8 @@
         armZokoFailureDetection(streamUrl, token);
       } else if (activeServer === "megaplay") {
         armMegaPlayFailureDetection(token);
+      } else if (activeServer === ANIMEGG_SERVER_ID) {
+        armAnimeggFailureDetection(token);
       } else {
         armBackupFailureDetection(token);
       }
@@ -4848,6 +5061,20 @@
       });
     }
 
+    /* animegg server pill state — the "offered only when the episode is
+       listed" rule lives here (the same single owner as the track pill). */
+    function applyAnimeggPill() {
+      if (!serverSwitcher) return;
+      const pill = serverSwitcher.querySelector('.server-pill[data-server="animegg"]');
+      if (!pill) return;
+      const off = animeggState === "unavailable";
+      pill.disabled = off;
+      pill.classList.toggle("is-disabled", off);
+      pill.title = off
+        ? "animegg doesn't carry this episode"
+        : "animegg — sub only, SD. Manual fallback; no track switch.";
+    }
+
     /* Update the track label in the episode list header to reflect the true
        state of dub availability for the current episode. */
     function updateTrackLabel() {
@@ -4857,7 +5084,12 @@
          never advertise a specific track (SUB or DUB) there. TVplus: the
          source file decides. MegaPlay: both tracks are always offered, but
          per-episode availability differs from Zoko's probes and is unknown
-         to the site (a miss surfaces via the failure notice). */
+         to the site (a miss surfaces via the failure notice). animegg is
+         SUB-ONLY, so the label says exactly that (no dub claim). */
+      if (activeServer === ANIMEGG_SERVER_ID) {
+        label.textContent = "SUB";
+        return;
+      }
       if (activeServer === "backup" || activeServer === "megaplay") {
         label.textContent = "—";
         return;
@@ -4875,8 +5107,9 @@
       trackSwitcher.querySelectorAll(".server-pill").forEach((pill) => {
         pill.addEventListener("click", async () => {
           /* On the backup the Dub/Hard-sub pills are disabled; this guard
-             keeps any stray activation from touching the track state. */
-          if (activeServer === "backup") return;
+             keeps any stray activation from touching the track state.
+             animegg is sub-only for the same reason. */
+          if (activeServer === "backup" || activeServer === ANIMEGG_SERVER_ID) return;
           const requestedTrack = pill.dataset.track || "sub";
           const epAtClick = currentEp;
 
@@ -5639,6 +5872,16 @@
     function bindIframeListeners() {
       if (!iframe) return;
       iframe.addEventListener("load", () => {
+        /* The iframe load commit is the attribution boundary for the
+           players that emit no reliable ready event (MegaPlay) — and for
+           animegg, whose embed page emits no documented postMessage events
+           at all. Nothing is auto-switched either way. */
+        if (activeServer === ANIMEGG_SERVER_ID) {
+          markPlayerSettled();
+          playerEp = currentEp;
+          if (animeggFailTimer) { clearTimeout(animeggFailTimer); animeggFailTimer = null; }
+          return;
+        }
         if (activeServer !== "megaplay") return;
         megaPlayFrameLoaded = true;
         playerEp = currentEp;
@@ -5763,8 +6006,10 @@
       try {
         showPlaceholder("Loading episode…");
         /* Reflect the session's server choice (or the ?player=backup /
-           ?player=megaplay test hook) BEFORE the first load: pills, toggles
-           and badge must be honest from the first frame. */
+           ?player=megaplay / ?player=animegg test hook) BEFORE the first
+           load: pills, toggles and badge must be honest from the first
+           frame. The note itself is recomputed by loadEpisode — animegg
+           needs a live availability answer before it can say anything. */
         applyServerUI();
         if (activeServer === "backup") {
           showBackupNote("TVplus player active — audio depends on the source file. Press Play inside the player.");

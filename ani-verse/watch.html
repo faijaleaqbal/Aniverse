@@ -205,16 +205,18 @@
           </div>
         </div>
 
-        <!-- Server switcher: Zoko stays the PRIMARY player; TVplus and
-             MegaPlay are alternates the viewer chooses (or is offered when
-             a player fails). Session-scoped choice; swaps the iframe src
-             in place. -->
+        <!-- Server switcher: Zoko stays the PRIMARY player; TVplus,
+             MegaPlay and animegg are alternates the viewer chooses (or is
+             offered when a player fails). Session-scoped choice; swaps the
+             iframe src in place. animegg is enabled only for episodes the
+             provider actually lists. -->
         <div class="servers-bar-zoro zoko-server-bar" id="zoko-server-bar">
           <span class="zoko-bar-label">SERVER:</span>
           <div class="zoko-track-switcher" id="zoko-server-switcher" role="group" aria-label="Streaming server">
             <button class="server-pill active" data-server="zoko" type="button" title="ZokoAnime — primary player (Sub / Hard-sub / Dub)">Zoko</button>
             <button class="server-pill" data-server="backup" type="button" title="TVplus — audio &amp; subs depend on the source file; the site can't switch tracks. Press Play inside the player.">TVplus</button>
             <button class="server-pill" data-server="megaplay" type="button" title="MegaPlay — Sub &amp; Dub, auto-play. Hard-sub isn't a MegaPlay track.">MegaPlay</button>
+            <button class="server-pill" data-server="animegg" type="button" title="animegg — sub only, SD. Manual fallback; no track switch.">animegg</button>
           </div>
         </div>
 
