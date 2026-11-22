@@ -67,8 +67,8 @@ export const ZOKO_DEFAULT_COLOR = (process.env.ZOKO_DEFAULT_COLOR || "cae962").r
    (server/src/animegg.js). The instance is NOT reachable from the browser —
    every call goes through this server. */
 export const ANIVEXA_BASE_URL = (process.env.ANIVEXA_BASE_URL || "http://127.0.0.1:4100").replace(/\/+$/, "");
-export const ANIVEXA_EPISODES_TIMEOUT_MS = Number(process.env.ANIVEXA_EPISODES_TIMEOUT_MS || 8000);
-export const ANIVEXA_WATCH_TIMEOUT_MS = Number(process.env.ANIVEXA_WATCH_TIMEOUT_MS || 12000);
+export const ANIVEXA_EPISODES_TIMEOUT_MS = Number(process.env.ANIVEXA_EPISODES_TIMEOUT_MS || 25000);
+export const ANIVEXA_WATCH_TIMEOUT_MS = Number(process.env.ANIVEXA_WATCH_TIMEOUT_MS || 20000);
 export const ANIVEXA_AVAIL_CACHE_MS = Number(process.env.ANIVEXA_AVAIL_CACHE_MS || 10 * 60 * 1000);
 
 export const HISTORY_LIMIT = 50;
