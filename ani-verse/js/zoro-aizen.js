@@ -3433,6 +3433,13 @@
     let animeggFailTimer = null;
     const ANIMEGG_NO_PLAY_TIMEOUT_MS = 20000;
 
+    /* Playback kill-switch (2026-11-23): the embed player never starts in
+       live-browser checks — it hangs on "Please wait", then "Could not load
+       player" — even though the mp4 files are alive, so the pill must not be
+       offered as available until playback is confirmed on a real device.
+       Server routes stay live; flip this to true to re-enable. */
+    const ANIMEGG_ENABLED = false;
+
     /* The AniList id this page's title carries (live: the ?live id; catalog:
        titleData.anilistId). Null = the server cannot be asked. */
     function animeggAniListId() {
@@ -3464,6 +3471,10 @@
        only learns whether the pill should be offered. */
     async function probeAnimegg(epNum) {
       const id = animeggAniListId();
+      if (!ANIMEGG_ENABLED) {
+        animeggState = "unavailable";
+        return null;
+      }
       if (!id) {
         animeggState = "unavailable";
         return null;
