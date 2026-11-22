@@ -226,8 +226,13 @@
       /* A failed prefetch falls through to the normal path below. */
     }
 
+    /* Per-call timeout override: some routes are legitimately slow on a cold
+       lookup (the animegg probe can take 15–25s while Anivexa resolves the
+       title). Default stays 10s for everything else. */
+    const timeoutMs =
+      Number(options.timeoutMs) > 0 ? Number(options.timeoutMs) : API_TIMEOUT_MS;
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
       const res = await fetch(path, Object.assign({}, options, { signal: controller.signal }));
@@ -3464,7 +3469,11 @@
         return null;
       }
       try {
-        const res = await api(`/api/animegg/${encodeURIComponent(id)}/${encodeURIComponent(epNum)}`);
+        /* 45s budget: the server resolves availability (up to 25s on a cold
+           Anivexa lookup) and then a live /watch (up to 20s) in sequence.
+           The generic 10s api() timeout aborts both attempts on a cold
+           lookup and wrongly marks the title unavailable. */
+        const res = await api(`/api/animegg/${encodeURIComponent(id)}/${encodeURIComponent(epNum)}`, { timeoutMs: 45000 });
         const d = res && res.data;
         const ok = !!(d && d.available && (d.embedUrl || d.url));
         animeggState = ok ? "available" : "unavailable";
