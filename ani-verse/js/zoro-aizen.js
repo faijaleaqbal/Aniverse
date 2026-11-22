@@ -5734,12 +5734,14 @@
            /stream/anilist/ route is dead upstream). Start it on the WORKING
            TVplus AniList route instead — this is the initial server for a
            title Zoko cannot serve, not an auto-switch away from a failing
-           player, and the viewer can still pick any server manually. */
+           player, and the viewer can still pick any server manually.
+           sessionStorage is deliberately NOT written here: that store is the
+           viewer's own server choice, and a title-level default must not leak
+           onto the next title they open. */
         if (!(titleData && titleData.malId)) {
           const tvp = getBackupEmbedUrl(currentEp, 0, true);
           if (tvp) {
             activeServer = "backup";
-            try { sessionStorage.setItem(SS_SERVER_KEY, "backup"); } catch {}
             applyServerUI();
             showBackupNote("This title has no MAL id, so it streams on the TVplus player (Zoko has no AniList route).");
           }
