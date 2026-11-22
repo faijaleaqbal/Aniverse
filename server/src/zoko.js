@@ -4,6 +4,10 @@
  * Embed URL format (official spec):
  *   https://zokoanime.video/stream/{source}/{id}/{episode}/{track}
  *
+ * `source` is always "mal": the /stream/anilist/... route does not exist
+ * upstream (HTTP 404 for every id probed), so the builder refuses it rather
+ * than emitting a guaranteed-404 embed.
+ *
  * Optional query params (the only ones that exist):
  *   ?color=<hex without #>  ?autoplay=0|1  ?autoskip=0|1  ?autonext=0|1  ?t=<seconds>
  *
@@ -14,7 +18,7 @@
  * Both are emitted: `time` for the player, `t` for spec compatibility.
  */
 
-export const ZOKO_SOURCES = ["mal", "anilist"];
+export const ZOKO_SOURCES = ["mal"];
 export const ZOKO_TRACKS = ["sub", "hsub", "dub"];
 
 function clampHex(color) {

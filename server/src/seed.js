@@ -16,19 +16,45 @@ export async function seed() {
   const now = nowIso();
 
   const insertTitle = db.prepare(`
-    INSERT INTO titles (slug, name, kind, year, episodes, runtime_min, genres, tone, studio, tagline, synopsis, mal_id, anilist_id, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO titles (slug, name, kind, year, episodes, runtime_min, genres, tone, studio, tagline, synopsis, mal_id, anilist_id, old_title, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(slug) DO UPDATE SET
-      name = excluded.name,
+      /* Enriched metadata is PRESERVED on a re-seed. scripts/fetch-metadata.mjs
+         writes the real title (name), the fictional placeholder (old_title),
+         romaji/native, score, status, studios and the cover/banner art. A plain
+         "overwrite everything from the catalog" upsert would silently wipe all
+         of that back to the codenames — so the ENRICHED fields (name, synopsis,
+         score, status, studios, real_title, romaji/native, art) are only
+         written when the STORED row is still unenriched (its enrichment
+         markers score/studios are NULL). The marker test is intentionally
+         "any enrichment present": a row with a real synopsis but no score yet
+         is still treated as enriched, so a later run can never roll it back.
+         The structural fields (kind/episodes/ids/genres/tone) always track
+         the catalog, which is the streamable truth. */
+      name = CASE WHEN titles.score IS NULL AND titles.studios IS NULL THEN excluded.name ELSE titles.name END,
+      old_title = CASE WHEN titles.old_title IS NULL THEN excluded.old_title ELSE titles.old_title END,
+      real_title = CASE WHEN titles.score IS NULL AND titles.studios IS NULL THEN excluded.name ELSE titles.real_title END,
+      romaji_title = CASE WHEN titles.score IS NULL AND titles.studios IS NULL THEN NULL ELSE titles.romaji_title END,
+      native_title = CASE WHEN titles.score IS NULL AND titles.studios IS NULL THEN NULL ELSE titles.native_title END,
+      synopsis = CASE WHEN titles.score IS NULL AND titles.studios IS NULL THEN excluded.synopsis ELSE titles.synopsis END,
+      score = CASE WHEN titles.score IS NULL THEN NULL ELSE titles.score END,
+      status = CASE WHEN titles.status IS NULL THEN NULL ELSE titles.status END,
+      studios = CASE WHEN titles.studios IS NULL THEN NULL ELSE titles.studios END,
+      anilist_genres = CASE WHEN titles.anilist_genres IS NULL THEN NULL ELSE titles.anilist_genres END,
+      anilist_episodes = CASE WHEN titles.anilist_episodes IS NULL THEN NULL ELSE titles.anilist_episodes END,
+      cover_local = CASE WHEN titles.cover_local IS NULL THEN NULL ELSE titles.cover_local END,
+      banner_local = CASE WHEN titles.banner_local IS NULL THEN NULL ELSE titles.banner_local END,
+      cover_remote = CASE WHEN titles.cover_remote IS NULL THEN NULL ELSE titles.cover_remote END,
+      banner_remote = CASE WHEN titles.banner_remote IS NULL THEN NULL ELSE titles.banner_remote END,
+      /* Structural fields always track the catalog (the streamable truth). */
       kind = excluded.kind,
-      year = excluded.year,
+      year = CASE WHEN titles.year IS NULL THEN excluded.year ELSE titles.year END,
       episodes = excluded.episodes,
       runtime_min = excluded.runtime_min,
       genres = excluded.genres,
       tone = excluded.tone,
-      studio = excluded.studio,
       tagline = excluded.tagline,
-      synopsis = excluded.synopsis,
+      studio = excluded.studio,
       mal_id = excluded.mal_id,
       anilist_id = excluded.anilist_id
   `);
@@ -65,6 +91,7 @@ export async function seed() {
         item.synopsis,
         malId,
         anilistId,
+        item.oldTitle || null,
         now
       );
       titleCount++;

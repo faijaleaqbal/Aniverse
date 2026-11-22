@@ -28,15 +28,28 @@ await seed();
 const fixture = JSON.parse(
   fs.readFileSync(path.join(here, "fixtures", "enriched-metadata.json"), "utf8")
 );
+/* The seed already writes the REAL catalog name + the fictional oldTitle
+   (catalog.js), so the fixture only supplies the extra enrichment
+   scripts/fetch-metadata.mjs adds. Enrichment markers (score/status/studios)
+   are set here too: without them a later re-seed would treat the row as
+   unenriched and overwrite the real name back to the catalog name. */
 const updTitle = db.prepare(
-  "UPDATE titles SET name = ?, old_title = ?, real_title = ?, romaji_title = ?, native_title = ? WHERE slug = ?"
+  "UPDATE titles SET real_title = ?, romaji_title = ?, native_title = ?, score = ?, status = ?, studios = ? WHERE slug = ?"
 );
 const updEpisode = db.prepare(
   "UPDATE episodes SET title = ? WHERE title_slug = ? AND ep_num = ?"
 );
 db.transaction(() => {
   for (const t of fixture.titles) {
-    updTitle.run(t.name, t.old_title, t.real_title, t.romaji_title, t.native_title, t.slug);
+    updTitle.run(
+      t.real_title,
+      t.romaji_title,
+      t.native_title,
+      80,
+      "FINISHED",
+      "Studio Test",
+      t.slug
+    );
   }
   for (const e of fixture.episodes) {
     updEpisode.run(e.title, e.title_slug, e.ep_num);

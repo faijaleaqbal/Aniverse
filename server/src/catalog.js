@@ -5,7 +5,8 @@
 export const CATALOG = [
   {
     slug: "kagerou-protocol",
-    name: "Kagerou Protocol",
+    name: "Jujutsu Kaisen",
+    oldTitle: "Kagerou Protocol",
     kind: "Series",
     year: 2026,
     episodes: 24, // JJK S1 = 24 (AniList); Zoko payload verified ep 13 & 24 (was 12)
@@ -21,7 +22,8 @@ export const CATALOG = [
   },
   {
     slug: "ronin-of-the-neon-ward",
-    name: "Ronin of the Neon Ward",
+    name: "One Piece",
+    oldTitle: "Ronin of the Neon Ward",
     kind: "Series",
     year: 2025,
     episodes: 1180, // One Piece (ongoing): provider max verified ep 1180 yes / 1181 no (was 1084)
@@ -37,7 +39,8 @@ export const CATALOG = [
   },
   {
     slug: "zero-gravity-club",
-    name: "Zero Gravity Club",
+    name: "Fruits Basket: The Final Season",
+    oldTitle: "Zero Gravity Club",
     kind: "Series",
     year: 2026,
     episodes: 13, // Fruits Basket The Final = 13 (AniList idMal 42938); Zoko ep 13 payload verified (was 12)
@@ -53,7 +56,8 @@ export const CATALOG = [
   },
   {
     slug: "the-fox-who-counted-rain",
-    name: "The Fox Who Counted Rain",
+    name: "Demon Slayer",
+    oldTitle: "The Fox Who Counted Rain",
     kind: "Series",
     year: 2024,
     episodes: 26,
@@ -69,7 +73,8 @@ export const CATALOG = [
   },
   {
     slug: "ghost-line-9",
-    name: "Ghost Line 9",
+    name: "Attack on Titan",
+    oldTitle: "Ghost Line 9",
     kind: "Series",
     year: 2025,
     episodes: 25, // AoT S1 (MAL 16498) = 25 (AniList); Zoko NO payload ep 26/75 (was 75 - 50 dead eps)
@@ -85,7 +90,8 @@ export const CATALOG = [
   },
   {
     slug: "iron-bloom",
-    name: "Iron Bloom",
+    name: "Fullmetal Alchemist: Brotherhood",
+    oldTitle: "Iron Bloom",
     kind: "Series",
     year: 2026,
     episodes: 64,
@@ -101,7 +107,8 @@ export const CATALOG = [
   },
   {
     slug: "sakura-static",
-    name: "Sakura Static",
+    name: "Kaguya-sama: Love Is War",
+    oldTitle: "Sakura Static",
     kind: "Series",
     year: 2024,
     episodes: 12, // Kaguya S1 (MAL 37999) = 12 (AniList); Zoko NO payload ep 13/24 (was 24 - 12 dead eps)
@@ -117,7 +124,8 @@ export const CATALOG = [
   },
   {
     slug: "cobalt-season",
-    name: "Cobalt Season",
+    name: "Frieren: Beyond Journey's End",
+    oldTitle: "Cobalt Season",
     kind: "Series",
     year: 2025,
     episodes: 28, // Frieren S1 = 28 (AniList); Zoko payload verified ep 26 & 28 (was 25)
@@ -133,7 +141,8 @@ export const CATALOG = [
   },
   {
     slug: "moonlit-ramen",
-    name: "Moonlit Ramen",
+    name: "Bocchi the Rock!",
+    oldTitle: "Moonlit Ramen",
     kind: "Series",
     year: 2025,
     episodes: 12,
@@ -149,7 +158,8 @@ export const CATALOG = [
   },
   {
     slug: "the-last-train-to-aomori",
-    name: "The Last Train to Aomori",
+    name: "Rascal Does Not Dream of Bunny Girl Senpai",
+    oldTitle: "The Last Train to Aomori",
     kind: "Series",
     year: 2026,
     episodes: 13,
@@ -165,7 +175,8 @@ export const CATALOG = [
   },
   {
     slug: "paper-cranes-at-dawn",
-    name: "Paper Cranes at Dawn",
+    name: "A Silent Voice",
+    oldTitle: "Paper Cranes at Dawn",
     kind: "Film",
     year: 2024,
     episodes: 1,
@@ -181,7 +192,8 @@ export const CATALOG = [
   },
   {
     slug: "sea-of-stars",
-    name: "Sea of Stars",
+    name: "Naruto",
+    oldTitle: "Sea of Stars",
     kind: "Series",
     year: 2025,
     episodes: 220, // Naruto = 220 (AniList); Zoko payload verified ep 25 & 220 (was 24)
@@ -197,7 +209,8 @@ export const CATALOG = [
   },
   {
     slug: "the-quiet-ward",
-    name: "The Quiet Ward",
+    name: "ERASED",
+    oldTitle: "The Quiet Ward",
     kind: "Series",
     year: 2024,
     episodes: 12, // ERASED = 12 (AniList); Zoko payload verified ep 9 & 12 (was 8 - 4 missing)
@@ -213,7 +226,8 @@ export const CATALOG = [
   },
   {
     slug: "second-wind",
-    name: "Second Wind",
+    name: "Solo Leveling",
+    oldTitle: "Second Wind",
     kind: "Series",
     year: 2026,
     episodes: 12,
@@ -229,7 +243,8 @@ export const CATALOG = [
   },
   {
     slug: "deep-frame",
-    name: "Deep Frame",
+    name: "Chainsaw Man",
+    oldTitle: "Deep Frame",
     kind: "Series",
     year: 2023,
     episodes: 12, // Chainsaw Man (MAL 44511) = 12 (AniList); Zoko NO payload ep 13/22 (was 22 - 10 dead eps)
@@ -245,7 +260,8 @@ export const CATALOG = [
   },
   {
     slug: "corner-store-hours",
-    name: "Corner Store Hours",
+    name: "Spy x Family",
+    oldTitle: "Corner Store Hours",
     kind: "Series",
     year: 2025,
     episodes: 12, // SPY x FAMILY S1 (MAL 50265) = 12 (AniList); Zoko NO payload ep 13/24 (was 24 - 12 dead eps)
@@ -261,7 +277,8 @@ export const CATALOG = [
   },
   {
     slug: "encore-one-more",
-    name: "Encore, One More",
+    name: "Kaguya-sama: Love Is War – Ultra Romantic",
+    oldTitle: "Encore, One More",
     /* Streams Kaguya-sama: Love is War -Ultra Romantic- (MAL 43608): a TV
        series of 13 episodes, ~24 min each — NOT a 101-minute film. Metadata
        must describe what the mapped mal_id actually plays. */
@@ -280,7 +297,8 @@ export const CATALOG = [
   },
   {
     slug: "salt-and-cinder",
-    name: "Salt and Cinder",
+    name: "Attack on Titan: The Final Season Part 2",
+    oldTitle: "Salt and Cinder",
     kind: "Series",
     year: 2024,
     episodes: 12, // MAL 48583 = AoT Final Season Part 2 = 12 (AniList 131681); Zoko NO payload ep 13/14/16 (was 16)

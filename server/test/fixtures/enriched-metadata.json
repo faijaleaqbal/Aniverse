@@ -1,146 +1,110 @@
 {
-  "_comment": "Offline snapshot of the real (enriched) metadata for the seeded catalog. test/setup-db.js applies this to a temporary seeded database so the E2E suite passes on a fresh clone with no network and no manual DB steps. Regenerate after catalog/metadata changes with: node test/make-fixture.mjs",
+  "_comment": "Offline snapshot of the real (enriched) metadata for the seeded catalog. test/setup-db.js applies this to a temporary seeded database so the E2E suite passes on a fresh clone with no network and no manual DB steps. Regenerate after catalog/metadata changes with: node test/make-fixture.mjs NOTE: name/old_title are NOT stored here — the seed itself now writes the real catalog name + fictional oldTitle (catalog.js), so this fixture only carries the extra enrichment the fetch script adds (real/romaji/native titles). score/status/studios/covers are seeded in setup-db.js.",
   "titles": [
     {
       "slug": "cobalt-season",
-      "name": "Frieren: Beyond Journey’s End",
-      "old_title": "Cobalt Season",
       "real_title": "Frieren: Beyond Journey’s End",
       "romaji_title": "Sousou no Frieren",
       "native_title": "葬送のフリーレン"
     },
     {
       "slug": "corner-store-hours",
-      "name": "SPY x FAMILY",
-      "old_title": "Corner Store Hours",
       "real_title": "SPY x FAMILY",
       "romaji_title": "SPY×FAMILY",
       "native_title": "SPY×FAMILY"
     },
     {
       "slug": "deep-frame",
-      "name": "Chainsaw Man",
-      "old_title": "Deep Frame",
       "real_title": "Chainsaw Man",
       "romaji_title": "Chainsaw Man",
       "native_title": "チェンソーマン"
     },
     {
       "slug": "encore-one-more",
-      "name": "Kaguya-sama: Love is War -Ultra Romantic-",
-      "old_title": "Encore, One More",
       "real_title": "Kaguya-sama: Love is War -Ultra Romantic-",
       "romaji_title": "Kaguya-sama wa Kokurasetai: Ultra Romantic",
       "native_title": "かぐや様は告らせたい-ウルトラロマンティック-"
     },
     {
       "slug": "ghost-line-9",
-      "name": "Attack on Titan",
-      "old_title": "Ghost Line 9",
       "real_title": "Attack on Titan",
       "romaji_title": "Shingeki no Kyojin",
       "native_title": "進撃の巨人"
     },
     {
       "slug": "iron-bloom",
-      "name": "Fullmetal Alchemist: Brotherhood",
-      "old_title": "Iron Bloom",
       "real_title": "Fullmetal Alchemist: Brotherhood",
       "romaji_title": "Hagane no Renkinjutsushi: FULLMETAL ALCHEMIST",
       "native_title": "鋼の錬金術師 FULLMETAL ALCHEMIST"
     },
     {
       "slug": "kagerou-protocol",
-      "name": "JUJUTSU KAISEN",
-      "old_title": "Kagerou Protocol",
       "real_title": "JUJUTSU KAISEN",
       "romaji_title": "Jujutsu Kaisen",
       "native_title": "呪術廻戦"
     },
     {
       "slug": "moonlit-ramen",
-      "name": "BOCCHI THE ROCK!",
-      "old_title": "Moonlit Ramen",
       "real_title": "BOCCHI THE ROCK!",
       "romaji_title": "Bocchi the Rock!",
       "native_title": "ぼっち・ざ・ろっく！"
     },
     {
       "slug": "paper-cranes-at-dawn",
-      "name": "A Silent Voice",
-      "old_title": "Paper Cranes at Dawn",
       "real_title": "A Silent Voice",
       "romaji_title": "Koe no Katachi",
       "native_title": "聲の形"
     },
     {
       "slug": "ronin-of-the-neon-ward",
-      "name": "ONE PIECE",
-      "old_title": "Ronin of the Neon Ward",
       "real_title": "ONE PIECE",
       "romaji_title": "ONE PIECE",
       "native_title": "ONE PIECE"
     },
     {
       "slug": "sakura-static",
-      "name": "Kaguya-sama: Love is War",
-      "old_title": "Sakura Static",
       "real_title": "Kaguya-sama: Love is War",
       "romaji_title": "Kaguya-sama wa Kokurasetai: Tensaitachi no Renai Zunousen",
       "native_title": "かぐや様は告らせたい～天才たちの恋愛頭脳戦～"
     },
     {
       "slug": "salt-and-cinder",
-      "name": "Attack on Titan Final Season Part 2",
-      "old_title": "Salt and Cinder",
       "real_title": "Attack on Titan Final Season Part 2",
       "romaji_title": "Shingeki no Kyojin: The Final Season Part 2",
       "native_title": "進撃の巨人 The Final Season Part 2"
     },
     {
       "slug": "sea-of-stars",
-      "name": "Naruto",
-      "old_title": "Sea of Stars",
       "real_title": "Naruto",
       "romaji_title": "NARUTO",
       "native_title": "NARUTO -ナルト-"
     },
     {
       "slug": "second-wind",
-      "name": "Solo Leveling",
-      "old_title": "Second Wind",
       "real_title": "Solo Leveling",
       "romaji_title": "Ore dake Level Up na Ken",
       "native_title": "俺だけレベルアップな件"
     },
     {
       "slug": "the-fox-who-counted-rain",
-      "name": "Demon Slayer: Kimetsu no Yaiba",
-      "old_title": "The Fox Who Counted Rain",
       "real_title": "Demon Slayer: Kimetsu no Yaiba",
       "romaji_title": "Kimetsu no Yaiba",
       "native_title": "鬼滅の刃"
     },
     {
       "slug": "the-last-train-to-aomori",
-      "name": "Rascal Does Not Dream of Bunny Girl Senpai",
-      "old_title": "The Last Train to Aomori",
       "real_title": "Rascal Does Not Dream of Bunny Girl Senpai",
       "romaji_title": "Seishun Buta Yarou wa Bunny Girl Senpai no Yume wo Minai",
       "native_title": "青春ブタ野郎はバニーガール先輩の夢を見ない"
     },
     {
       "slug": "the-quiet-ward",
-      "name": "ERASED",
-      "old_title": "The Quiet Ward",
       "real_title": "ERASED",
       "romaji_title": "Boku dake ga Inai Machi",
       "native_title": "僕だけがいない街"
     },
     {
       "slug": "zero-gravity-club",
-      "name": "Fruits Basket The Final Season",
-      "old_title": "Zero Gravity Club",
       "real_title": "Fruits Basket The Final Season",
       "romaji_title": "Fruits Basket: The Final",
       "native_title": "フルーツバスケットThe Final"

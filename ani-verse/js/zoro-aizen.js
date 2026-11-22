@@ -3930,14 +3930,21 @@
       return `${String(m).padStart(2, "0")}:${String(remainingSec).padStart(2, "0")}`;
     }
 
-    // Spec-compliant embed URL builder (ZokoAnime spec only)
-    /* `source` is "mal" for catalog titles and "anilist" for live titles
-       that have no MAL id — the embed supports both routes. */
+    // Spec-compliant embed URL builder (ZokoAnime spec only).
+    /* `source` is always "mal": Zoko's /stream/anilist/ route is dead upstream
+       (HTTP 404 for every id probed), so this builder never emits one. */
     function getEmbedUrl(malId, epNum, track, opts = {}) {
       const source = opts.source === "anilist" ? "anilist" : "mal";
       const id = opts.id != null ? opts.id : malId;
       if (!id) {
         showToast("No anime id mapped for this title");
+        return null;
+      }
+      /* Zoko's /stream/anilist/... route does not exist upstream (HTTP 404 for
+         every id probed). Never build one: a caller that still asks for the
+         anilist route gets null, and the caller routes the title to the
+         working TVplus AniList route instead. */
+      if (source === "anilist") {
         return null;
       }
       const color = "cae962";
@@ -4676,27 +4683,32 @@
         streamUrl = getMegaPlayEmbedUrl(currentEp, currentTrack);
       } else {
         /* Determine the player id: the MAL id is preferred (it is what every
-           player maps best); a live title WITHOUT a MAL id uses the AniList
-           route with the AniList id. The Zoko debug override only applies to
-           catalog titles. */
+           player maps best). A live title WITHOUT a MAL id can never be served
+           by Zoko (its /stream/anilist/... route is dead upstream), so such a
+           title starts on the WORKING TVplus AniList route — the initial
+           server for a title Zoko cannot serve, not an auto-switch away from
+           a failing player. The viewer can still pick any server manually,
+           and getEmbedUrl() refuses to build a Zoko anilist URL at all. */
         const useAnilistRoute = isLive && !(titleData && titleData.malId);
-        const playerId = useAnilistRoute
-          ? (titleData && titleData.anilistId)
-          : (getCustomMalId(progressKey) || (titleData && titleData.malId));
-        streamUrl = getEmbedUrl(playerId, currentEp, currentTrack, {
-          source: useAnilistRoute ? "anilist" : "mal",
-          autoplay: playerSettings.autoplay,
-          autoskip: playerSettings.autoskip,
-          autonext: playerSettings.autonext,
-          startTime: resumeTime,
-          /* The site's per-(slug,episode) store is the single source of truth
-             for resume. With no saved position, `resume=0` disables the embed's
-             OWN internal resume store so it can never start this episode at a
-             position the site does not know about. With a saved position the
-             explicit time= offset wins (the embed skips its internal resume
-             whenever a start point is given). */
-          noResume: startFromBeginning === true || resumeTime === 0,
-        });
+        if (useAnilistRoute) {
+          streamUrl = getBackupEmbedUrl(currentEp, resumeTime, startFromBeginning === true);
+        } else {
+          const playerId = getCustomMalId(progressKey) || (titleData && titleData.malId);
+          streamUrl = getEmbedUrl(playerId, currentEp, currentTrack, {
+            source: "mal",
+            autoplay: playerSettings.autoplay,
+            autoskip: playerSettings.autoskip,
+            autonext: playerSettings.autonext,
+            startTime: resumeTime,
+            /* The site's per-(slug,episode) store is the single source of truth
+               for resume. With no saved position, `resume=0` disables the embed's
+               OWN internal resume store so it can never start this episode at a
+               position the site does not know about. With a saved position the
+               explicit time= offset wins (the embed skips its internal resume
+               whenever a start point is given). */
+            noResume: startFromBeginning === true || resumeTime === 0,
+          });
+        }
       }
 
       if (!streamUrl) {
@@ -4706,7 +4718,7 @@
           overlay.hidden = false;
           if (overlayTitle) overlayTitle.textContent = "Stream unavailable";
           if (overlayText) overlayText.textContent = isLive
-            ? "This title has no playable id on the players yet."
+            ? "This title is not available on any player."
             : "No MAL ID mapped for this title, so the stream cannot be loaded.";
         }
         return;
@@ -4952,17 +4964,18 @@
             // The embed honours time= (t= alone is ignored), so every track
             // switch resumes where the viewer was — dub included.
             const resumePos = Math.floor(currentPosition || 0);
-            const useAnilistRoute = isLive && !(titleData && titleData.malId);
-            const playerId = useAnilistRoute
-              ? (titleData && titleData.anilistId)
-              : (getCustomMalId(progressKey) || (titleData && titleData.malId));
-            const newUrl = getEmbedUrl(playerId, currentEp, currentTrack, {
-              source: useAnilistRoute ? "anilist" : "mal",
-              autoplay: true,
-              autoskip: playerSettings.autoskip,
-              autonext: playerSettings.autonext,
-              startTime: resumePos > 0 ? resumePos : undefined,
-            });
+            /* A live title with no MAL id is on the TVplus player (Zoko has
+               no anilist route); a track switch there rebuilds the TVplus URL,
+               never a Zoko anilist one. */
+            const newUrl = activeServer === "backup"
+              ? getBackupEmbedUrl(currentEp, resumePos, false)
+              : getEmbedUrl(getCustomMalId(progressKey) || (titleData && titleData.malId), currentEp, currentTrack, {
+                  source: "mal",
+                  autoplay: true,
+                  autoskip: playerSettings.autoskip,
+                  autonext: playerSettings.autonext,
+                  startTime: resumePos > 0 ? resumePos : undefined,
+                });
             if (newUrl) iframe.src = newUrl;
           }
         });
@@ -5717,6 +5730,20 @@
       if (isLive) {
         const loaded = await loadTitleData();
         if (!loaded) return;
+        /* A live title with NO MAL id cannot play on Zoko at all (its
+           /stream/anilist/ route is dead upstream). Start it on the WORKING
+           TVplus AniList route instead — this is the initial server for a
+           title Zoko cannot serve, not an auto-switch away from a failing
+           player, and the viewer can still pick any server manually. */
+        if (!(titleData && titleData.malId)) {
+          const tvp = getBackupEmbedUrl(currentEp, 0, true);
+          if (tvp) {
+            activeServer = "backup";
+            try { sessionStorage.setItem(SS_SERVER_KEY, "backup"); } catch {}
+            applyServerUI();
+            showBackupNote("This title has no MAL id, so it streams on the TVplus player (Zoko has no AniList route).");
+          }
+        }
         await loadEpisode(currentEp, null);
         return;
       }

@@ -209,7 +209,9 @@ async function runTests() {
       assert.equal(data.ok, true);
       assert.ok(data.embed);
       assert.equal(data.embed.origin, "https://zokoanime.video");
-      assert.deepEqual(data.embed.sources, ["mal", "anilist"]);
+      /* Zoko's anilist route is dead upstream, so the site only ever offers
+         the mal route. */
+      assert.deepEqual(data.embed.sources, ["mal"]);
       assert.deepEqual(data.embed.tracks, ["sub", "hsub", "dub"]);
     });
 
@@ -2008,6 +2010,136 @@ async function runTests() {
       assert.equal(decisionCalls.length, 3, "one definition + the Zoko and MegaPlay handlers");
       assert.ok(src.includes('server: "zoko"'), "the Zoko ended handler uses the shared decision");
       assert.ok(src.includes('server: "megaplay"'), "the MegaPlay complete handler uses the shared decision");
+    });
+
+    // 62. MAL-id overrides: a live title whose AniList idMal is null is served
+    //     its server-side override (so the site can build a real player URL),
+    //     while a real AniList idMal always wins.
+    await test("MAL overrides fill a null idMal and never override a real one", async () => {
+      const { MAL_ID_OVERRIDES, malIdOverride } = await import("../src/mal-overrides.js");
+      const { mediaView } = await import("../src/anilist.js");
+      assert.equal(malIdOverride(149939), 210);
+      assert.equal(malIdOverride(206425), 56885);
+      assert.equal(malIdOverride(2627), 2627);
+      assert.equal(malIdOverride(999999), null, "an unknown id has no override");
+
+      /* A null idMal gets the override. */
+      const ranma = mediaView(fakeMedia({
+        id: 149939, idMal: null,
+        title: { romaji: "Ranma 1/2: Nettou-hen", english: "Ranma ½ (1989)", native: null },
+        format: "TV", episodes: 143,
+      }));
+      assert.equal(ranma.anilistId, 149939);
+      assert.equal(ranma.malId, 210, "Ranma's null idMal is filled from the override map");
+
+      /* A REAL idMal is never replaced, even for an id in the override map. */
+      const real = mediaView(fakeMedia({ id: 149939, idMal: 210 }));
+      assert.equal(real.malId, 210);
+      const other = mediaView(fakeMedia({ id: 149939, idMal: 777777 }));
+      assert.equal(other.malId, 777777, "a real AniList idMal always wins over the override");
+    });
+
+    // 63. /api/live serves the override to the site: Ranma ½ (anilistId 149939)
+    //     comes back with malId 210, so every surface can build a real stream.
+    await test("GET /api/live/:id serves the MAL override for a null-idMal title", async () => {
+      mockAniList({
+        mediaById: {
+          149939: fakeMedia({
+            id: 149939, idMal: null,
+            title: { romaji: "Ranma 1/2: Nettou-hen", english: "Ranma ½ (1989)", native: "らんま1/2 熱闘編" },
+            format: "TV", episodes: 143, status: "FINISHED", startDate: { year: 1989, month: 10, day: 20 },
+          }),
+        },
+      });
+      const res = await fetch(`${baseUrl}/api/live/149939`);
+      assert.equal(res.status, 200);
+      const data = await res.json();
+      assert.equal(data.title.anilistId, 149939);
+      assert.equal(data.title.malId, 210, "the live title carries the override MAL id");
+      resetAniListMock();
+    });
+
+    // 64. The dead Zoko AniList fallback is gone: the shipped frontend builder
+    //     never emits a /stream/anilist/ URL, and a no-MAL live title is routed
+    //     to the WORKING TVplus AniList route.
+    await test("no-MAL live title: no Zoko anilist URL, TVplus anilist primary", async () => {
+      const src = readFileSync(ZORO_JS_PATH, "utf8");
+      /* The only anilist URLs the frontend builds are TVplus ones. */
+      assert.ok(
+        !/zokoanime\.video\/stream\/anilist\//.test(src),
+        "the frontend must never build a Zoko /stream/anilist/ URL (route is dead upstream)"
+      );
+      assert.ok(
+        src.includes("${BACKUP_ORIGIN}/home/embed/${route}/${id}/${epNum}"),
+        "the TVplus embed route is still built (the anilist route works there)"
+      );
+      /* A no-MAL live title starts on the backup (TVplus) player. */
+      assert.ok(
+        src.includes("This title has no MAL id, so it streams on the TVplus player"),
+        "the no-MAL live title is handed to the working TVplus route"
+      );
+
+      /* The server-side builder also refuses the dead route. */
+      const { buildEmbedUrl } = await import("../src/zoko.js");
+      assert.throws(
+        () => buildEmbedUrl({ origin: "https://zokoanime.video", source: "anilist", id: 149939, episode: 1 }),
+        /Unsupported ZokoAnime source|anilist/i
+      );
+    });
+
+    // 65. Seed durability: a re-seed must never wipe enriched metadata back to
+    //     the catalog codenames, and catalog entries carry the REAL name + the
+    //     fictional oldTitle.
+    await test("re-seed preserves enriched names and writes old_title on insert", async () => {
+      const { CATALOG } = await import("../src/catalog.js");
+      /* Catalog source of truth: real name, fictional oldTitle, unchanged ids. */
+      const bySlug = Object.fromEntries(CATALOG.map((c) => [c.slug, c]));
+      assert.equal(bySlug["sea-of-stars"].name, "Naruto");
+      assert.equal(bySlug["sea-of-stars"].oldTitle, "Sea of Stars");
+      assert.equal(bySlug["paper-cranes-at-dawn"].name, "A Silent Voice");
+      assert.equal(bySlug["paper-cranes-at-dawn"].oldTitle, "Paper Cranes at Dawn");
+      assert.equal(bySlug["the-quiet-ward"].name, "ERASED");
+      assert.equal(bySlug["the-quiet-ward"].oldTitle, "The Quiet Ward");
+      assert.equal(bySlug["encore-one-more"].name, "Kaguya-sama: Love Is War – Ultra Romantic");
+      /* Pins never change. */
+      assert.equal(bySlug["paper-cranes-at-dawn"].malId, 28851);
+      assert.equal(bySlug["the-quiet-ward"].malId, 31043);
+      assert.equal(bySlug["sea-of-stars"].malId, 20);
+      assert.equal(bySlug["sea-of-stars"].episodes, 220);
+
+      /* A FRESH insert writes the real name + the fictional oldTitle. */
+      const before = db.prepare("SELECT name, old_title FROM titles WHERE slug = ?").get("sea-of-stars");
+      assert.equal(before.name, "Naruto");
+      assert.equal(before.old_title, "Sea of Stars");
+
+      /* Re-seed: the enrichment (real_title/score/studios) must survive. */
+      const { seed } = await import("../src/seed.js");
+      await seed();
+      const after = db.prepare(
+        "SELECT name, old_title, real_title, romaji_title, score, studios FROM titles WHERE slug = ?"
+      ).get("sea-of-stars");
+      assert.equal(after.name, "Naruto", "the real name survives a re-seed");
+      assert.equal(after.old_title, "Sea of Stars", "the fictional name stays in old_title");
+      assert.equal(after.real_title, "Naruto");
+      assert.equal(after.romaji_title, "NARUTO");
+      assert.equal(after.score, 80, "enriched score survives a re-seed");
+      assert.equal(after.studios, "Studio Test", "enriched studios survive a re-seed");
+      assert.equal(after.name, bySlug["sea-of-stars"].name);
+    });
+
+    // 66. An UNENRICHED row (the live DB state before fetch-metadata runs) is
+    //     brought up to the catalog's real name on re-seed, and its old_title
+    //     is recorded — so the coordinator's AWS enrichment run starts from the
+    //     real title, not the codename.
+    await test("re-seed enriches an unenriched row to the real catalog name", async () => {
+      db.prepare(
+        "UPDATE titles SET name = ?, old_title = NULL, real_title = NULL, romaji_title = NULL, native_title = NULL, score = NULL, studios = NULL WHERE slug = ?"
+      ).run("Sea of Stars", "sea-of-stars");
+      const { seed } = await import("../src/seed.js");
+      await seed();
+      const row = db.prepare("SELECT name, old_title FROM titles WHERE slug = ?").get("sea-of-stars");
+      assert.equal(row.name, "Naruto", "an unenriched row is upgraded to the real catalog name");
+      assert.equal(row.old_title, "Sea of Stars", "the fictional name is preserved in old_title");
     });
 
     console.log(`\nAll ${passed} E2E integration tests passed successfully!\n`);

@@ -13,6 +13,8 @@
  *     badge from that flag — it never decides by itself.
  */
 
+import { malIdOverride } from "./mal-overrides.js";
+
 const ANILIST_URL = (process.env.ANILIST_URL || "https://graphql.anilist.co").replace(/\/+$/, "");
 const TIMEOUT_MS = 8000;
 const DEFAULT_TTL_MS = 10 * 60 * 1000;
@@ -201,10 +203,14 @@ export function mediaView(media) {
   const genres = Array.isArray(media.genres) ? media.genres : [];
   const title = media.title || {};
   const name = title.english || title.romaji || title.native || "Unknown title";
+  /* A MAL id is only ever overridden when AniList has NONE. Every AniList
+     query carries idMal, so a real id always wins and this map can only fill
+     the genuine gaps (see mal-overrides.js). */
+  const malId = media.idMal != null ? Number(media.idMal) : malIdOverride(media.id);
   return {
     live: true,
     anilistId: media.id,
-    malId: media.idMal != null ? Number(media.idMal) : null,
+    malId: malId != null ? Number(malId) : null,
     name,
     englishTitle: title.english || null,
     romajiTitle: title.romaji || null,

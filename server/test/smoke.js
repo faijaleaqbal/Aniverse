@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { buildEmbedUrl } from "../src/zoko.js";
+import { buildEmbedUrl, ZOKO_SOURCES } from "../src/zoko.js";
 import { ZOKO_EMBED_ORIGIN } from "../src/config.js";
 
 console.log("=== Running ZokoAnime Unit / Smoke Tests ===");
@@ -61,16 +61,14 @@ test("buildEmbedUrl supports all official audio tracks (sub, hsub, dub)", () => 
   }
 });
 
-// 4. Source option (anilist)
-test("buildEmbedUrl supports AniList source", () => {
-  const url = buildEmbedUrl({
-    origin: "https://zokoanime.video",
-    source: "anilist",
-    id: 113415,
-    episode: 3,
-    track: "dub",
-  });
-  assert.ok(url.startsWith("https://zokoanime.video/stream/anilist/113415/3/dub?"));
+/* Zoko's /stream/anilist/ route is dead upstream (HTTP 404 for every id
+   probed), so the site only ever builds the mal route. */
+test("the only Zoko source is mal (the anilist route is dead upstream)", () => {
+  assert.deepEqual(ZOKO_SOURCES, ["mal"]);
+  assert.throws(
+    () => buildEmbedUrl({ origin: "https://zokoanime.video", source: "anilist", id: 113415, episode: 3, track: "dub" }),
+    /Unsupported ZokoAnime source/
+  );
 });
 
 // 5. Query param boolean flags 1/0
