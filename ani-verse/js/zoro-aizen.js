@@ -3665,6 +3665,11 @@
              player is alive.
        ------------------------------------------------------------------ */
     const ZOKO_NO_READY_TIMEOUT_MS = 45000;
+    /* Backstop for ready-without-playback (fix #1, 23 Nov audit): the embed
+       reported `ready` but never plays or errors (Doraemon). `ready` clears
+       every other timer, so without this the spinner stays forever. 30s: a
+       healthy embed starts within seconds. */
+    const ZOKO_NO_PLAY_AFTER_READY_MS = 30000;
     const ZOKO_PROBE_ABORT_MS = 20000;
     const BACKUP_NO_READY_TIMEOUT_MS = 45000;
     /* MegaPlay emits no reliable pre-play signal; a dead file (the 410 page)
@@ -3674,6 +3679,7 @@
     const MEGAPLAY_NO_PLAY_TIMEOUT_MS = 12000;
     let loadToken = 0;
     let zokoFailTimer = null;
+    let zokoNoPlayTimer = null; // backstop: ready fired but playback never started
     let backupFailTimer = null;
     let megaplayFailTimer = null;
     let fallbackOfferVisible = false;
@@ -3700,6 +3706,7 @@
 
     function clearPlayerTimersAndProbes() {
       if (zokoFailTimer) { clearTimeout(zokoFailTimer); zokoFailTimer = null; }
+      if (zokoNoPlayTimer) { clearTimeout(zokoNoPlayTimer); zokoNoPlayTimer = null; }
       if (backupFailTimer) { clearTimeout(backupFailTimer); backupFailTimer = null; }
       if (megaplayFailTimer) { clearTimeout(megaplayFailTimer); megaplayFailTimer = null; }
       if (animeggFailTimer) { clearTimeout(animeggFailTimer); animeggFailTimer = null; }
@@ -4707,6 +4714,18 @@
          runs in the background below; an animegg load resolves its own URL). */
       animeggState = "unknown";
       animeggLoadToken++;
+
+      /* TEARDOWN-FIRST (fix #2, 23 Nov audit): stop the OLD player in this
+         same frame, BEFORE any await. The new stream URL is only resolved
+         after async fetches below (episode data, subtitles, dub probe) —
+         without this the old document keeps PLAYING (audio included)
+         through the whole gap, and longest when the new player never loads
+         at all (switching to a dead player). Blanking the src kills it
+         immediately; the new src is assigned later in this same load. The
+         initial page load is a no-op (src is already about:blank). */
+      if (iframe && iframe.src && iframe.src !== "about:blank") {
+        iframe.src = "about:blank";
+      }
 
       /* ------------------------------------------------------------------
          TRACK RESET — IMMEDIATELY, BEFORE ANY AWAIT.
@@ -5748,6 +5767,21 @@
            any failure offer (a slow load is NOT a failure). */
         if (zokoFailTimer) { clearTimeout(zokoFailTimer); zokoFailTimer = null; }
         if (fallbackOfferVisible) hideFallbackNote();
+        /* Arm the ready-without-playback backstop (fix #1): if no play /
+           time event arrives within 30s, the embed is up but the stream is
+           not — hide the spinner and offer the fallback instead of sitting
+           on "Loading stream…" forever. Cleared on play, first time event,
+           error, and every teardown. */
+        if (zokoNoPlayTimer) clearTimeout(zokoNoPlayTimer);
+        const readyToken = loadToken;
+        zokoNoPlayTimer = setTimeout(() => {
+          zokoNoPlayTimer = null;
+          if (readyToken !== loadToken || activeServer !== "zoko") return;
+          markPlayerSettled();
+          if (spinner) spinner.hidden = true;
+          if (coverOverlay) coverOverlay.style.display = "none";
+          showFallbackOffer();
+        }, ZOKO_NO_PLAY_AFTER_READY_MS);
         /* "ready" means the player chrome is up — NOT that the stream is
            playing. Keep the loading overlay until playback actually starts
            (play / first time event) so the embed's placeholder duration is
@@ -5763,6 +5797,8 @@
       if (data.type === "play") {
         if (!eventIsForCurrentLoad) return;
         markPlayerSettled();
+        /* Playback started — retire the ready-without-playback backstop. */
+        if (zokoNoPlayTimer) { clearTimeout(zokoNoPlayTimer); zokoNoPlayTimer = null; }
         isPaused = false;
         if (playPauseBtn) playPauseBtn.textContent = "❚❚";
         /* Playback has actually started: the stream (and its real duration)
@@ -5861,6 +5897,9 @@
         /* Playback is demonstrably running (real position from the player):
            the loading overlay AND the loading poster are done. */
         if (cur > 0) {
+          /* First time event with a real position — retire the
+             ready-without-playback backstop. */
+          if (zokoNoPlayTimer) { clearTimeout(zokoNoPlayTimer); zokoNoPlayTimer = null; }
           if (spinner) spinner.hidden = true;
           if (coverOverlay) coverOverlay.style.display = "none";
           /* Sustained playback after an error = genuine recovery (see the
@@ -5917,6 +5956,9 @@
       // Event: error
       if (data.type === "error") {
         markPlayerSettled();
+        /* An error is a definitive answer — retire the
+           ready-without-playback backstop. */
+        if (zokoNoPlayTimer) { clearTimeout(zokoNoPlayTimer); zokoNoPlayTimer = null; }
         /* Errors are always surfaced — including failures while the new
            player is still initialising (before `ready` flips playerEp). */
         if (spinner) spinner.hidden = true;
@@ -6810,6 +6852,76 @@
     const nowLocal = new Date();
     const currentDayName = dayNames[nowLocal.getDay()];
 
+    /* REMINDERS — real, persisted, this-device only (fix #9, 23 Nov audit).
+       The old button only changed its own label + toast while the page copy
+       promised "in-app notifications" — nothing was stored. A reminder is
+       now a {slug, name} in localStorage, and the schedule page lists
+       reminded titles with their weekly airing time in the "Your Reminders"
+       section above the timeline. There is NO push/browser notification
+       (no service worker) — the copy promises none. */
+    const LS_REMINDERS_KEY = "av_reminders";
+    const BELL_SVG = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>`;
+    function readReminders() {
+      try {
+        const raw = localStorage.getItem(LS_REMINDERS_KEY);
+        const list = raw ? JSON.parse(raw) : [];
+        return Array.isArray(list) ? list.filter((r) => r && r.slug && r.name) : [];
+      } catch { return []; }
+    }
+    function writeReminders(list) {
+      try { localStorage.setItem(LS_REMINDERS_KEY, JSON.stringify(list)); } catch {}
+    }
+    function isReminded(slug) {
+      return readReminders().some((r) => r.slug === slug);
+    }
+    /* Toggle: returns true when the reminder was ADDED, false when removed. */
+    function toggleReminder(slug, name) {
+      const list = readReminders();
+      const i = list.findIndex((r) => r.slug === slug);
+      if (i >= 0) { list.splice(i, 1); writeReminders(list); return false; }
+      list.push({ slug, name });
+      writeReminders(list);
+      return true;
+    }
+    function activeDayKey() {
+      const active = document.querySelector(".schedule-day-tab.active");
+      return (active && active.dataset.day) || currentDayName;
+    }
+    function renderReminders() {
+      const box = document.getElementById("schedule-reminders");
+      if (!box) return;
+      const list = readReminders();
+      if (!list.length) { box.innerHTML = ""; box.hidden = true; return; }
+      /* Airing day/time come from the same weekly grid as the timeline. */
+      const slotBySlug = {};
+      for (const [day, slots] of Object.entries(SCHEDULE_DATA)) {
+        for (const s of slots) slotBySlug[s.slug] = { day, time: s.time };
+      }
+      const rows = list.map((r) => {
+        const s = slotBySlug[r.slug];
+        const when = s
+          ? `${s.day.charAt(0).toUpperCase() + s.day.slice(1)} ${escapeHtml(s.time)} JST`
+          : "Not scheduled this week";
+        return `<div class="reminder-row">
+          <span class="reminder-name">${escapeHtml(r.name)}</span>
+          <span class="reminder-when">${when}</span>
+          <a class="btn-zoro-primary reminder-watch" href="${watchHref(r.slug, 1)}">Watch</a>
+          <button class="reminder-remove" type="button" data-slug="${escapeHtml(r.slug)}" aria-label="Remove reminder for ${escapeHtml(r.name)}">✕</button>
+        </div>`;
+      }).join("");
+      box.innerHTML = `<h3 class="surface-title">Your Reminders</h3><div class="reminder-list">${rows}</div>`;
+      box.hidden = false;
+      box.querySelectorAll(".reminder-remove").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          writeReminders(readReminders().filter((r) => r.slug !== btn.dataset.slug));
+          renderReminders();
+          renderScheduleForDay(activeDayKey()); // refresh the slot buttons
+          showToast("Reminder removed");
+        });
+      });
+    }
+    renderReminders();
+
     function renderScheduleForDay(dayKey) {
       const slots = SCHEDULE_DATA[dayKey] || [];
       if (!Object.keys(titleMap).length) {
@@ -6854,9 +6966,8 @@
             </div>
           </div>
           <div class="schedule-item-right">
-            <button class="btn-remind-slot" type="button" data-title="${escapeHtml(name)}">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-              Remind Me
+            <button class="btn-remind-slot${isReminded(slot.slug) ? " is-set" : ""}" type="button" data-slug="${escapeHtml(slot.slug)}" data-title="${escapeHtml(name)}">
+              ${isReminded(slot.slug) ? "✓ Alert Set" : `${BELL_SVG} Remind Me`}
             </button>
             <a class="btn-zoro-primary" href="${wHref}" style="padding: 0.55rem 1rem;">
               ${watchLabel}
@@ -6866,14 +6977,22 @@
       `;
       }).join("");
 
-      // Remind buttons
+      // Remind buttons — toggle a real persisted reminder (fix #9)
       timelineEl.querySelectorAll(".btn-remind-slot").forEach((btn) => {
         btn.addEventListener("click", () => {
+          const slug = btn.dataset.slug;
           const t = btn.dataset.title;
-          btn.innerHTML = `✓ Alert Set`;
-          btn.style.borderColor = "var(--zoro-lime)";
-          btn.style.color = "var(--zoro-lime)";
-          showToast(`Reminder alert registered for ${t}!`);
+          const added = toggleReminder(slug, t);
+          if (added) {
+            btn.classList.add("is-set");
+            btn.innerHTML = `✓ Alert Set`;
+            showToast(`Reminder saved for ${t} — see Your Reminders above.`);
+          } else {
+            btn.classList.remove("is-set");
+            btn.innerHTML = `${BELL_SVG} Remind Me`;
+            showToast(`Reminder removed for ${t}`);
+          }
+          renderReminders();
         });
       });
     }
