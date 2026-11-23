@@ -3253,7 +3253,16 @@
     /* The iframe node is rebuilt by the switch watchdog when a player never
        settles, so the reference is mutable (listeners are re-bound in
        bindIframeListeners). */
+    /* __PLAYER_IFRAME_SANDBOX_START__ */
+    /* Sandbox value for the shared #zoko-embed-frame iframe (Zoko, TVplus,
+       MegaPlay, animegg): keeps scripts, same-origin, forms and
+       presentation, while blocking popups, top-navigation, modals and
+       downloads (the popup-ad vector). PLAYER_IFRAME_SANDBOX is the source
+       of truth; watch.html mirrors the same literal. */
+    const PLAYER_IFRAME_SANDBOX = "allow-scripts allow-same-origin allow-forms allow-presentation";
+    /* __PLAYER_IFRAME_SANDBOX_END__ */
     let iframe = document.getElementById("zoko-embed-frame");
+    iframe.setAttribute("sandbox", PLAYER_IFRAME_SANDBOX);
     const coverOverlay = document.getElementById("video-cover-overlay");
     const spinner = document.getElementById("zoko-player-spinner");
     const overlay = document.getElementById("zoko-player-overlay");
@@ -3666,6 +3675,7 @@
       fresh.title = iframe.title;
       fresh.setAttribute("allow", iframe.getAttribute("allow") || "fullscreen; autoplay");
       fresh.setAttribute("allowfullscreen", "");
+      fresh.setAttribute("sandbox", PLAYER_IFRAME_SANDBOX);
       fresh.src = "about:blank";
       iframe.parentNode.replaceChild(fresh, iframe);
       iframe = fresh;

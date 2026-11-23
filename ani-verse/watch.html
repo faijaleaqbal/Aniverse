@@ -141,11 +141,17 @@
       <div class="watch-player-column">
         <!-- Video Player Stage (ZokoAnime Embed) -->
         <div class="player-theater-wrapper" id="player-wrap">
+          <!-- Sandboxed shared embed: the value below mirrors the literal
+               PLAYER_IFRAME_SANDBOX in js/zoro-aizen.js (source of truth).
+               allow-scripts allow-same-origin allow-forms allow-presentation
+               (no allow-popups / allow-top-navigation / allow-modals /
+               allow-downloads) — fullscreen is unaffected. -->
           <iframe
             id="zoko-embed-frame"
             class="player-stage-video"
             src="about:blank"
             title="ZokoAnime player"
+            sandbox="allow-scripts allow-same-origin allow-forms allow-presentation"
             allow="fullscreen; autoplay"
             allowfullscreen
           ></iframe>

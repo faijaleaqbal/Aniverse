@@ -2544,6 +2544,40 @@ async function runTests() {
       assert.ok(src.includes("/api/animegg/"), "the client calls the server proxy route");
     });
 
+    // 73. The shared #zoko-embed-frame iframe is sandboxed to block popup ads:
+    //     scripts, same-origin, forms and presentation stay on; popups,
+    //     top-navigation, modals and downloads are deliberately absent.
+    await test("the shared player iframe carries the popup-blocking sandbox", async () => {
+      const html = readFileSync(fileURLToPath(new URL("../../ani-verse/watch.html", import.meta.url)), "utf8");
+      const frame = html.match(/<iframe\b[^>]*id="zoko-embed-frame"[^>]*>/s);
+      assert.ok(frame, "watch.html must contain the #zoko-embed-frame iframe");
+      const tag = frame[0];
+      const sandbox = tag.match(/\bsandbox="([^"]*)"/);
+      assert.ok(sandbox, "the #zoko-embed-frame iframe must carry a sandbox attribute");
+      const value = sandbox[1];
+      assert.ok(value.includes("allow-scripts"), "sandbox keeps allow-scripts (the player's own JS must run)");
+      assert.ok(value.includes("allow-same-origin"), "sandbox keeps allow-same-origin (same-origin iframe + allow-scripts is safe here)");
+      for (const denied of ["allow-popups", "allow-top-navigation", "allow-modals", "allow-downloads"]) {
+        assert.ok(!value.includes(denied), `sandbox must NOT contain ${denied}`);
+      }
+      /* Fullscreen must keep working. */
+      assert.ok(tag.includes("allowfullscreen"), "the iframe keeps allowfullscreen");
+      assert.ok(tag.includes('allow="fullscreen; autoplay"'), "the iframe keeps allow=fullscreen; autoplay");
+    });
+
+    // 74. PLAYER_IFRAME_SANDBOX is the source of truth and matches watch.html:
+    //     the exact literal, no extra tokens.
+    await test("PLAYER_IFRAME_SANDBOX is the exact literal mirrored in watch.html", async () => {
+      const { PLAYER_IFRAME_SANDBOX } = evalZoroBlock("PLAYER_IFRAME_SANDBOX", ["PLAYER_IFRAME_SANDBOX"]);
+      const expected = "allow-scripts allow-same-origin allow-forms allow-presentation";
+      assert.equal(PLAYER_IFRAME_SANDBOX, expected, "the JS const is the exact sandbox literal");
+      const html = readFileSync(fileURLToPath(new URL("../../ani-verse/watch.html", import.meta.url)), "utf8");
+      const frame = html.match(/<iframe\b[^>]*id="zoko-embed-frame"[^>]*>/s);
+      const sandbox = frame && frame[0].match(/\bsandbox="([^"]*)"/);
+      assert.ok(sandbox, "watch.html's #zoko-embed-frame must carry a sandbox attribute");
+      assert.equal(sandbox[1], expected, "watch.html's sandbox literal equals PLAYER_IFRAME_SANDBOX");
+    });
+
     console.log(`\nAll ${passed} E2E integration tests passed successfully!\n`);
   } finally {
     if (server) {
