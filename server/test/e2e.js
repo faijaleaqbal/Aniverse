@@ -471,13 +471,14 @@ async function runTests() {
       }
     });
 
-    await test("GET /dmca, /privacy, /contact point to Discord (invite placeholder)", async () => {
+    await test("GET /dmca, /privacy, /contact point to Discord (live invite link)", async () => {
       for (const route of ["/dmca", "/privacy", "/contact"]) {
         const res = await fetch(`${baseUrl}${route}`);
         assert.equal(res.status, 200, `${route} must 200`);
         const body = await res.text();
         assert.ok(body.includes("Discord"), `${route} must mention Discord`);
-        assert.ok(body.includes("invite link coming soon"), `${route} must show the Discord invite placeholder`);
+        assert.ok(body.includes("https://discord.com/invite/48yKxyar5g"), `${route} must link the live Discord invite`);
+        assert.ok(!body.includes("invite link coming soon"), `${route} must not show the invite placeholder anymore`);
       }
     });
 
