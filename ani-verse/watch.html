@@ -12,7 +12,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
   <noscript><link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet"></noscript>
   <link rel="preload" href="css/zoro-aizen.css?v=17" as="style">
-  <link rel="preload" href="js/zoro-aizen.js?v=18" as="script">
+  <link rel="preload" href="js/zoro-aizen.js?v=19" as="script">
   <script>
     /* Warm the API while the app script is still downloading: this removes a
        full round trip from the critical path. The app script adopts these
@@ -141,17 +141,20 @@
       <div class="watch-player-column">
         <!-- Video Player Stage (ZokoAnime Embed) -->
         <div class="player-theater-wrapper" id="player-wrap">
-          <!-- Sandboxed shared embed: the value below mirrors the literal
-               PLAYER_IFRAME_SANDBOX in js/zoro-aizen.js (source of truth).
-               allow-scripts allow-same-origin allow-forms allow-presentation
-               (no allow-popups / allow-top-navigation / allow-modals /
-               allow-downloads) — fullscreen is unaffected. -->
+          <!-- Shared embed iframe. The sandbox is applied PER PLAYER by
+               js/zoro-aizen.js (applyIframeSandbox / PLAYER_IFRAME_SANDBOX_BY_SERVER):
+               Zoko — the default player — is UNSANDBOXED because it refuses to
+               run inside a sandboxed iframe ("EMBED BLOCKED: This player does
+               not run inside a sandboxed iframe"); TVplus (backup), MegaPlay
+               and animegg get the sandboxed value (allow-scripts
+               allow-same-origin allow-forms allow-presentation — no
+               allow-popups / allow-top-navigation / allow-modals /
+               allow-downloads). Fullscreen is unaffected. -->
           <iframe
             id="zoko-embed-frame"
             class="player-stage-video"
             src="about:blank"
             title="ZokoAnime player"
-            sandbox="allow-scripts allow-same-origin allow-forms allow-presentation"
             allow="fullscreen; autoplay"
             allowfullscreen
           ></iframe>
@@ -382,6 +385,6 @@
     </div>
   </footer>
 
-  <script src="js/zoro-aizen.js?v=18"></script>
+  <script src="js/zoro-aizen.js?v=19"></script>
 </body>
 </html>

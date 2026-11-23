@@ -3254,15 +3254,38 @@
        settles, so the reference is mutable (listeners are re-bound in
        bindIframeListeners). */
     /* __PLAYER_IFRAME_SANDBOX_START__ */
-    /* Sandbox value for the shared #zoko-embed-frame iframe (Zoko, TVplus,
-       MegaPlay, animegg): keeps scripts, same-origin, forms and
-       presentation, while blocking popups, top-navigation, modals and
-       downloads (the popup-ad vector). PLAYER_IFRAME_SANDBOX is the source
-       of truth; watch.html mirrors the same literal. */
+    /* Sandbox value for the shared #zoko-embed-frame iframe. The sandbox is
+       PER PLAYER: Zoko (the default) REFUSES to run inside a sandboxed iframe
+       ("EMBED BLOCKED: This player does not run inside a sandboxed iframe"),
+       so it must get NO sandbox attribute at all; TVplus (backup), MegaPlay
+       and animegg run fine sandboxed and keep the popup-blocking value (no
+       allow-popups / allow-top-navigation / allow-modals / allow-downloads —
+       the popup-ad vector). PLAYER_IFRAME_SANDBOX is the source of truth for
+       the sandboxed players; watch.html ships the iframe unsandboxed and the
+       per-player map below decides at runtime. */
     const PLAYER_IFRAME_SANDBOX = "allow-scripts allow-same-origin allow-forms allow-presentation";
+    /* Per-player sandbox map. A null value means: remove the sandbox attribute
+       entirely (Zoko's hard requirement). */
+    const PLAYER_IFRAME_SANDBOX_BY_SERVER = {
+      zoko: null,
+      backup: PLAYER_IFRAME_SANDBOX,
+      megaplay: PLAYER_IFRAME_SANDBOX,
+      animegg: PLAYER_IFRAME_SANDBOX,
+    };
     /* __PLAYER_IFRAME_SANDBOX_END__ */
     let iframe = document.getElementById("zoko-embed-frame");
-    iframe.setAttribute("sandbox", PLAYER_IFRAME_SANDBOX);
+    /* Apply the per-player sandbox to the resolved iframe node: set the
+       attribute from the map, or REMOVE it when the map value is null (Zoko
+       hard-refuses a sandboxed iframe). The sandbox only takes effect when
+       the iframe navigates, so this must run before any src assignment. */
+    function applyIframeSandbox(server) {
+      if (!iframe) return;
+      const value = Object.prototype.hasOwnProperty.call(PLAYER_IFRAME_SANDBOX_BY_SERVER, server)
+        ? PLAYER_IFRAME_SANDBOX_BY_SERVER[server]
+        : null;
+      if (value === null) iframe.removeAttribute("sandbox");
+      else iframe.setAttribute("sandbox", value);
+    }
     const coverOverlay = document.getElementById("video-cover-overlay");
     const spinner = document.getElementById("zoko-player-spinner");
     const overlay = document.getElementById("zoko-player-overlay");
@@ -3411,6 +3434,10 @@
       activeServer = playerHook;
       try { sessionStorage.setItem(SS_SERVER_KEY, playerHook); } catch {}
     }
+    /* activeServer is now fully resolved (default + sessionStorage + ?player=
+       hook): apply its sandbox before the first load assigns the iframe src.
+       Zoko (the default) gets no sandbox — it refuses sandboxed iframes. */
+    applyIframeSandbox(activeServer);
     /* MegaPlay session state:
        megaPlayTrack — the last explicit track choice made ON MegaPlay.
        Session-only, NEVER persisted to av_zoko_track: MegaPlay's dub
@@ -3675,7 +3702,13 @@
       fresh.title = iframe.title;
       fresh.setAttribute("allow", iframe.getAttribute("allow") || "fullscreen; autoplay");
       fresh.setAttribute("allowfullscreen", "");
-      fresh.setAttribute("sandbox", PLAYER_IFRAME_SANDBOX);
+      /* The fresh node must carry the CURRENT server's sandbox: the sandbox
+         only takes effect on navigation, and this rebuild immediately
+         re-navigates in loadEpisode. */
+      const sandboxForFresh = Object.prototype.hasOwnProperty.call(PLAYER_IFRAME_SANDBOX_BY_SERVER, activeServer)
+        ? PLAYER_IFRAME_SANDBOX_BY_SERVER[activeServer]
+        : null;
+      if (sandboxForFresh !== null) fresh.setAttribute("sandbox", sandboxForFresh);
       fresh.src = "about:blank";
       iframe.parentNode.replaceChild(fresh, iframe);
       iframe = fresh;
@@ -3924,6 +3957,10 @@
       settleAttempt = 0;
       const pos = Math.floor(currentPosition || 0);
       activeServer = server;
+      /* Sandbox FIRST, before loadEpisode assigns the iframe src: the
+         sandbox attribute only takes effect when the iframe navigates, so it
+         must be in place for the navigation this switch triggers. */
+      applyIframeSandbox(server);
       try { sessionStorage.setItem(SS_SERVER_KEY, server); } catch {}
       clearPlayerTimersAndProbes();
       hideResumeNote();

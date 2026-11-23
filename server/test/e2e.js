@@ -2544,38 +2544,59 @@ async function runTests() {
       assert.ok(src.includes("/api/animegg/"), "the client calls the server proxy route");
     });
 
-    // 73. The shared #zoko-embed-frame iframe is sandboxed to block popup ads:
-    //     scripts, same-origin, forms and presentation stay on; popups,
-    //     top-navigation, modals and downloads are deliberately absent.
-    await test("the shared player iframe carries the popup-blocking sandbox", async () => {
+    // 73. The shared #zoko-embed-frame iframe ships UNSANDBOXED (the default
+    //     player is Zoko, which refuses sandboxed iframes); the per-player
+    //     sandbox map in zoro-aizen.js gives Zoko null and the exact
+    //     popup-blocking literal to TVplus (backup), MegaPlay and animegg.
+    //     (Former tests 73 + 74, merged into the per-player behaviour.)
+    await test("the player iframe sandbox is per-player (Zoko unsandboxed)", async () => {
+      const { PLAYER_IFRAME_SANDBOX, PLAYER_IFRAME_SANDBOX_BY_SERVER } = evalZoroBlock(
+        "PLAYER_IFRAME_SANDBOX",
+        ["PLAYER_IFRAME_SANDBOX", "PLAYER_IFRAME_SANDBOX_BY_SERVER"]
+      );
+      const expected = "allow-scripts allow-same-origin allow-forms allow-presentation";
+
+      /* watch.html ships the iframe with NO sandbox attribute: the default
+         player (Zoko) is unsandboxed. */
       const html = readFileSync(fileURLToPath(new URL("../../ani-verse/watch.html", import.meta.url)), "utf8");
       const frame = html.match(/<iframe\b[^>]*id="zoko-embed-frame"[^>]*>/s);
       assert.ok(frame, "watch.html must contain the #zoko-embed-frame iframe");
       const tag = frame[0];
       const sandbox = tag.match(/\bsandbox="([^"]*)"/);
-      assert.ok(sandbox, "the #zoko-embed-frame iframe must carry a sandbox attribute");
-      const value = sandbox[1];
-      assert.ok(value.includes("allow-scripts"), "sandbox keeps allow-scripts (the player's own JS must run)");
-      assert.ok(value.includes("allow-same-origin"), "sandbox keeps allow-same-origin (same-origin iframe + allow-scripts is safe here)");
-      for (const denied of ["allow-popups", "allow-top-navigation", "allow-modals", "allow-downloads"]) {
-        assert.ok(!value.includes(denied), `sandbox must NOT contain ${denied}`);
-      }
+      assert.ok(!sandbox, "watch.html's #zoko-embed-frame must NOT carry a sandbox attribute (Zoko is the default and refuses one)");
       /* Fullscreen must keep working. */
       assert.ok(tag.includes("allowfullscreen"), "the iframe keeps allowfullscreen");
       assert.ok(tag.includes('allow="fullscreen; autoplay"'), "the iframe keeps allow=fullscreen; autoplay");
-    });
 
-    // 74. PLAYER_IFRAME_SANDBOX is the source of truth and matches watch.html:
-    //     the exact literal, no extra tokens.
-    await test("PLAYER_IFRAME_SANDBOX is the exact literal mirrored in watch.html", async () => {
-      const { PLAYER_IFRAME_SANDBOX } = evalZoroBlock("PLAYER_IFRAME_SANDBOX", ["PLAYER_IFRAME_SANDBOX"]);
-      const expected = "allow-scripts allow-same-origin allow-forms allow-presentation";
+      /* The map: Zoko null, every other server the exact sandbox literal. */
       assert.equal(PLAYER_IFRAME_SANDBOX, expected, "the JS const is the exact sandbox literal");
-      const html = readFileSync(fileURLToPath(new URL("../../ani-verse/watch.html", import.meta.url)), "utf8");
-      const frame = html.match(/<iframe\b[^>]*id="zoko-embed-frame"[^>]*>/s);
-      const sandbox = frame && frame[0].match(/\bsandbox="([^"]*)"/);
-      assert.ok(sandbox, "watch.html's #zoko-embed-frame must carry a sandbox attribute");
-      assert.equal(sandbox[1], expected, "watch.html's sandbox literal equals PLAYER_IFRAME_SANDBOX");
+      assert.equal(PLAYER_IFRAME_SANDBOX_BY_SERVER.zoko, null, "zoko (default) maps to null — no sandbox attribute");
+      assert.equal(PLAYER_IFRAME_SANDBOX_BY_SERVER.backup, expected, "backup (TVplus) maps to the sandbox literal");
+      assert.equal(PLAYER_IFRAME_SANDBOX_BY_SERVER.megaplay, expected, "megaplay maps to the sandbox literal");
+      assert.equal(PLAYER_IFRAME_SANDBOX_BY_SERVER.animegg, expected, "animegg maps to the sandbox literal");
+
+      /* The sandbox literal itself: the player's own JS must run, and the
+         popup-ad vectors stay blocked. */
+      assert.ok(PLAYER_IFRAME_SANDBOX.includes("allow-scripts"), "sandbox keeps allow-scripts (the player's own JS must run)");
+      assert.ok(PLAYER_IFRAME_SANDBOX.includes("allow-same-origin"), "sandbox keeps allow-same-origin (same-origin iframe + allow-scripts is safe here)");
+      for (const denied of ["allow-popups", "allow-top-navigation", "allow-modals", "allow-downloads"]) {
+        assert.ok(!PLAYER_IFRAME_SANDBOX.includes(denied), `sandbox must NOT contain ${denied}`);
+      }
+
+      /* Source-level: switchServer and rebuildIframe must apply the sandbox
+         per player (not a single unconditional setAttribute). */
+      const js = readFileSync(ZORO_JS_PATH, "utf8");
+      const switchSrc = js.match(/function switchServer\(server\)\s*\{[\s\S]*?\n    \}/);
+      assert.ok(switchSrc, "zoro-aizen.js must define switchServer(server)");
+      assert.ok(/applyIframeSandbox\(server\)/.test(switchSrc[0]), "switchServer must call applyIframeSandbox(server)");
+      assert.ok(
+        switchSrc[0].indexOf("applyIframeSandbox(server)") < switchSrc[0].indexOf("loadEpisode("),
+        "switchServer must apply the sandbox BEFORE loadEpisode (the sandbox takes effect on navigation)"
+      );
+      const rebuildSrc = js.match(/function rebuildIframe\(\)\s*\{[\s\S]*?\n    \}/);
+      assert.ok(rebuildSrc, "zoro-aizen.js must define rebuildIframe()");
+      assert.ok(/PLAYER_IFRAME_SANDBOX_BY_SERVER/.test(rebuildSrc[0]), "rebuildIframe must look up the sandbox per activeServer");
+      assert.ok(/activeServer/.test(rebuildSrc[0]), "rebuildIframe must read the current activeServer");
     });
 
     console.log(`\nAll ${passed} E2E integration tests passed successfully!\n`);
