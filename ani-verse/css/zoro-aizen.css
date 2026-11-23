@@ -92,6 +92,22 @@ button, input, select, textarea {
   outline: none;
 }
 
+/* Keyboard focus (fix #3, 23 Nov audit): the reset above removes outlines so
+   mouse users never see a focus ring on click — but keyboard users still
+   need one. :focus-visible restores a visible lime ring for keyboard
+   navigation on every interactive element. (The live browser check found
+   lime outlines on the search box and selects already; this extends the
+   same treatment to links, pills, buttons and tabs that had none.) */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--zoro-lime);
+  outline-offset: 2px;
+}
+
 ul {
   list-style: none;
 }
@@ -312,6 +328,8 @@ img {
   display: flex;
   align-items: center;
   justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
   padding: 6px;
   border-radius: 6px;
   transition: all 0.2s ease;
@@ -422,6 +440,11 @@ img {
   cursor: pointer;
   display: flex;
   align-items: center;
+  justify-content: center;
+  /* The icon alone is ~18px — stretch to the search box height and give it
+     a 44px-wide touch area (fix #13). */
+  min-width: 44px;
+  align-self: stretch;
   transition: color 0.2s;
 }
 
@@ -514,8 +537,8 @@ img {
 .icon-action-btn {
   background: none;
   color: var(--text-sub);
-  width: 38px;
-  height: 38px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -555,6 +578,33 @@ img {
    visible. Same pattern as .btn-watch-now[hidden] below. */
 .btn-zoro-primary[hidden] {
   display: none;
+}
+
+/* Secondary button (fix #6, 23 Nov audit): this class was used by
+   genres.html ("Browse All Titles") and schedule.html ("Explore Full
+   Catalog") but had NO definition anywhere, so both rendered as unstyled
+   plain-text links. Ghost/outlined sibling of the lime primary pill. */
+.btn-zoro-secondary {
+  background: transparent;
+  color: var(--text-main);
+  font-weight: 700;
+  font-size: 0.875rem;
+  padding: 0.5rem 1.25rem;
+  border-radius: 999px;
+  border: 1px solid var(--border-active);
+  cursor: pointer;
+  transition: all 0.25s var(--ease-spring);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 44px;
+  white-space: nowrap;
+}
+
+.btn-zoro-secondary:hover {
+  border-color: var(--zoro-lime);
+  color: var(--zoro-lime);
 }
 
 .btn-zoro-primary:hover {
@@ -969,8 +1019,8 @@ img {
 }
 
 .trending-arrow {
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   border-radius: 8px;
   background: rgba(21, 23, 30, 0.7);
   backdrop-filter: blur(12px);
@@ -1749,6 +1799,11 @@ main.grid-is-empty .zoro-empty-state {
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
+  /* 44px minimum tap target (fix #13): pills were ~33px tall. */
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* Hover must NOT look like the active track: the old rule gave :hover the
@@ -1854,8 +1909,8 @@ main.grid-is-empty .zoro-empty-state {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  height: 38px;
-  min-height: 38px;
+  height: 44px;
+  min-height: 44px;
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
@@ -2663,12 +2718,63 @@ body.drawer-open .zoro-header {
   align-items: center;
   gap: 0.4rem;
   transition: all 0.2s ease;
+  min-height: 44px;
 }
 
 .btn-remind-slot:hover {
   border-color: var(--zoro-lime);
   color: var(--zoro-lime);
 }
+
+/* A reminder that is SET (fix #9): lime, same as the old inline style but
+   classed so the toggle can switch it on and off. */
+.btn-remind-slot.is-set {
+  border-color: var(--zoro-lime);
+  color: var(--zoro-lime);
+}
+
+/* "Your Reminders" section on the schedule page (fix #9). */
+#schedule-reminders {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  padding: 1.5rem 1.75rem;
+  margin-bottom: 1.75rem;
+}
+#schedule-reminders[hidden] { display: none; }
+.reminder-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-top: 0.9rem;
+}
+.reminder-row {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  flex-wrap: wrap;
+  padding: 0.6rem 0.75rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+}
+.reminder-name { font-weight: 700; color: var(--text-main); flex: 1 1 auto; min-width: 140px; }
+.reminder-when { font-family: var(--font-mono); font-size: 0.8rem; color: var(--text-muted); }
+.reminder-watch { padding: 0.35rem 1rem; min-height: 44px; }
+.reminder-remove {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.9rem;
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+}
+.reminder-remove:hover { color: var(--text-main); }
 
 .sort-control-wrap {
   display: flex;
@@ -3153,8 +3259,8 @@ body.drawer-open .zoro-header {
   display: none;
 }
 .page-btn {
-  min-width: 40px;
-  height: 40px;
+  min-width: 44px;
+  height: 44px;
   padding: 0 0.8rem;
   display: inline-flex;
   align-items: center;
@@ -3316,6 +3422,10 @@ body.drawer-open .zoro-header {
   border: 1px solid var(--border-subtle);
   cursor: pointer;
   transition: all 0.15s ease;
+  /* 44px minimum tap target (fix #13). */
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
 }
 
 .filter-tag-chip:hover { border-color: var(--border-active); color: #fff; }
@@ -3348,8 +3458,8 @@ body.drawer-open .zoro-header {
 }
 
 .az-chip {
-  min-width: 2rem;
-  height: 2rem;
+  min-width: 2.75rem;
+  height: 2.75rem;
   padding: 0 0.5rem;
   display: inline-flex;
   align-items: center;
@@ -3614,6 +3724,17 @@ body.drawer-open .zoro-header {
 [data-theme="light"] .discussions-empty,
 [data-theme="light"] .ep-grid-status { color: var(--text-muted); }
 
+/* Light-mode contrast holes (fix #4, 23 Nov audit): these rules hardcode
+   white or lime text that is invisible on light surfaces. */
+[data-theme="light"] .server-pill:hover,
+[data-theme="light"] .page-btn:hover:not(:disabled):not(.active) { color: var(--text-main); }
+[data-theme="light"] .schedule-slot-time {
+  color: #4d7c0f;
+  background: rgba(77, 124, 15, 0.1);
+  border-color: rgba(77, 124, 15, 0.35);
+}
+[data-theme="light"] .live-result-group-title { color: var(--text-main); }
+
 /* ==========================================================================
    PHASE 3b — GUEST COMMENTS
    ========================================================================== */
@@ -3702,4 +3823,21 @@ body.drawer-open .zoro-header {
   .discussion-box { padding: 1rem; }
   .comment-input-area { gap: 0.75rem; }
   .user-comment-avatar { width: 38px; height: 38px; }
+}
+
+/* Shared loading spinner ring (fix #7, 23 Nov audit): moved here from
+   zoko-player.css, which only watch.html loads — the detail page uses the
+   same .zoko-spinner-ring class but never loaded that stylesheet, so its
+   loading spinner was invisible (confirmed by the live-browser check). */
+.zoko-spinner-ring {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  border: 3px solid rgba(202, 233, 98, 0.18);
+  border-top-color: var(--zoro-lime);
+  animation: zoko-spin 0.9s linear infinite;
+}
+
+@keyframes zoko-spin {
+  to { transform: rotate(360deg); }
 }

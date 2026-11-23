@@ -46,18 +46,9 @@
   display: none;
 }
 
-.zoko-spinner-ring {
-  width: 46px;
-  height: 46px;
-  border-radius: 50%;
-  border: 3px solid rgba(202, 233, 98, 0.18);
-  border-top-color: var(--zoro-lime);
-  animation: zoko-spin 0.9s linear infinite;
-}
-
-@keyframes zoko-spin {
-  to { transform: rotate(360deg); }
-}
+/* The spinner ring itself (.zoko-spinner-ring + @keyframes zoko-spin) lives
+   in zoro-aizen.css now — the shared stylesheet every page loads (fix #7:
+   the detail page never loaded this file, so its spinner was invisible). */
 
 /* Error / finished overlay */
 .zoko-player-overlay {
@@ -249,7 +240,13 @@
   cursor: pointer;
   font-size: 0.9rem;
   line-height: 1;
-  padding: 2px 4px;
+  /* 44px minimum tap target (fix #13): was a ~20px bare ✕. */
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
 }
 
 .zoko-bar-label {
@@ -435,4 +432,21 @@
   display: block;
   height: 100%;
   background: var(--zoro-lime);
+}
+
+/* Light theme (fix #4, 23 Nov audit): this file had zero light overrides.
+   The overlay card sits on a light surface in light mode, so its hardcoded
+   white title was invisible (1.00:1); the lime resume note and amber
+   fallback note were ~1.2:1. Darkened to the same #4d7c0f / #92400e the
+   main stylesheet uses for light-mode accents. */
+[data-theme="light"] .zoko-overlay-card h3 { color: var(--text-main); }
+[data-theme="light"] .zoko-resume-note {
+  color: #4d7c0f;
+  background: rgba(77, 124, 15, 0.1);
+  border-color: rgba(77, 124, 15, 0.4);
+}
+[data-theme="light"] .zoko-fallback-note {
+  color: #92400e;
+  background: rgba(255, 176, 32, 0.12);
+  border-color: rgba(180, 120, 10, 0.45);
 }
