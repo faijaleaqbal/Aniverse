@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="referrer" content="no-referrer">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy Policy | AniVerse</title>
+  <meta name="description" content="How AniVerse collects, uses, and protects your data — accounts, sessions, cookies, and third-party services.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <!-- Loaded async: a slow Google Fonts response must never block the app script or render. -->
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+  <noscript><link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet"></noscript>
+  <link rel="preload" href="/css/zoro-aizen.css?v=21" as="style">
+  <link rel="preload" href="/js/zoro-aizen.js?v=23" as="script">
+  <script>
+    /* Warm the auth check while the app script is still downloading: the
+       header needs it to render the sign-in / account slot. */
+    window.__zoroPrefetch = {};
+    (function () {
+      var ctl = new AbortController();
+      var to = setTimeout(function () { ctl.abort(); }, 10000);
+      window.__zoroPrefetch["/api/auth/me"] = fetch("/api/auth/me", { credentials: "same-origin", signal: ctl.signal })
+        .then(function (r) {
+          clearTimeout(to);
+          return r.json().then(function (d) { return { ok: r.ok, status: r.status, data: d, error: null }; });
+        })
+        .catch(function (e) {
+          clearTimeout(to);
+          return { ok: false, status: 0, data: null, error: String((e && e.message) || e) };
+        });
+    })();
+  </script>  <script>
+    /* Set the theme before first paint (no flash of the wrong palette). The
+       shared app script owns the toggle; this only reads the stored choice. */
+    (function () {
+      try {
+        var t = localStorage.getItem("av_theme");
+        document.documentElement.setAttribute("data-theme", t === "light" ? "light" : "dark");
+      } catch (e) {
+        document.documentElement.setAttribute("data-theme", "dark");
+      }
+    })();
+  </script>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="stylesheet" href="/css/zoro-aizen.css?v=21">
+  <style>
+    .info-page { max-width: 860px; margin: 0 auto; padding: 2.5rem 1.5rem 3.5rem; }
+    .info-lede { color: var(--text-sub); font-size: 1rem; line-height: 1.65; margin-bottom: 2rem; }
+    .info-updated { color: var(--text-muted); font-size: 0.8rem; margin-bottom: 2rem; }
+    .info-section { margin-bottom: 2rem; }
+    .info-section h2 { font-size: 1.25rem; font-weight: 700; color: var(--text-main); margin-bottom: 0.75rem; padding-left: 0.75rem; border-left: 3px solid var(--zoro-lime); }
+    .info-section p, .info-section li { color: var(--text-sub); line-height: 1.7; font-size: 0.95rem; }
+    .info-section p { margin-bottom: 0.75rem; }
+    .info-section ul, .info-section ol { padding-left: 1.25rem; margin-bottom: 0.75rem; }
+    .info-section li { margin-bottom: 0.4rem; }
+    .info-section a { color: var(--zoro-lime); }
+    .faq-item { background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 12px; padding: 1.1rem 1.25rem; margin-bottom: 0.85rem; }
+    .faq-item h3 { font-size: 1rem; font-weight: 700; color: var(--text-main); margin-bottom: 0.4rem; }
+    .faq-item p { color: var(--text-sub); line-height: 1.7; font-size: 0.95rem; margin: 0; }
+    .faq-item p + p { margin-top: 0.6rem; }
+    .faq-item a { color: var(--zoro-lime); }
+    .info-note { background: var(--bg-surface); border: 1px solid var(--border-active); border-radius: 12px; padding: 1rem 1.25rem; color: var(--text-sub); line-height: 1.7; font-size: 0.95rem; margin-bottom: 2rem; }
+    .info-note strong { color: var(--text-main); }
+  </style>
+</head>
+<body>
+
+  <!-- Ambient Light Backdrop -->
+  <div class="ambient-glow"></div>
+
+  <!-- Zoro Top Navigation with Aizen Glass -->
+  <header class="zoro-header">
+    <div class="header-inner">
+      <div class="header-left">
+        <button class="menu-toggle-btn" type="button" aria-label="Toggle Menu">☰</button>
+        <a class="zoro-brand" href="/home">
+          <div class="zoro-brand-icon">Z</div>
+          <span>Ani<span class="verse">Verse</span></span>
+        </a>
+      </div>
+
+      <nav class="header-nav" aria-label="Main Navigation">
+        <a class="nav-link" href="/home">Home</a>
+        <a class="nav-link" href="/browse">Browse</a>
+        <a class="nav-link" href="/genres">Genres</a>
+        <a class="nav-link" href="/schedule">Schedule</a>
+        <a class="nav-link" href="/browse?view=subbed">Subbed</a>
+        <a class="nav-link" href="/browse?view=dubbed">Dubbed</a>
+        <a class="nav-link" href="/browse?view=movie">Movies</a>
+        <a class="nav-link" href="/browse?view=ona">ONAs</a>
+        <a class="nav-link" href="/browse?view=special">Specials</a>
+        <a class="nav-link" href="/browse?view=top-airing">Top Airing</a>
+        <a class="nav-link" href="/browse?view=top-upcoming">Top Upcoming</a>
+        <a class="nav-link" href="/az-list">A-Z List</a>
+      </nav>
+
+      <div class="search-wrapper">
+        <div class="search-box">
+          <input id="zoro-search-input" type="text" placeholder="Search anime, movie, series..." autocomplete="off">
+          <button class="search-btn" type="button" aria-label="Search">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          </button>
+        </div>
+        <div class="search-dropdown" id="zoro-search-dropdown"></div>
+      </div>
+
+      <div class="header-actions">
+        <button class="icon-action-btn" id="btn-random-anime" type="button" title="Shuffle / Random Anime">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 3h5v5M4 20l7-7m9-10-7 7M4 4l16 16M16 21h5v-5"/></svg>
+        </button>
+        <button class="icon-action-btn" id="btn-replay-intro" type="button" title="Replay Aizen Shutter Intro">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 12 7-7v4c7 0 11 4 11 11-2-5-6-7-11-7v4l-7-5z"/></svg>
+        </button>
+        <button class="icon-action-btn" id="btn-theme-toggle" type="button" title="Toggle light / dark theme" aria-label="Toggle light or dark theme" aria-pressed="false">
+          <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+        </button>
+        <div id="header-user-slot" aria-busy="true">
+          <button class="btn-zoro-primary" type="button" disabled style="opacity: 0.55;">···</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="container-main info-page">
+    <div class="section-header-zoro">
+      <div>
+        <h1 class="section-title">Privacy <span class="accent">Policy</span></h1>
+      </div>
+    </div>
+    <p class="info-lede">AniVerse is a free anime streaming site. This policy explains what data we collect, what we do not collect, and who else is involved when you use the site.</p>
+
+    <p class="info-updated">Last updated: 23 November 2026</p>
+    <div class="info-section">
+      <h2>What we collect</h2>
+      <p><strong>Account data (only if you create an account).</strong> Your email address, display name, and a password hash — never your password in plain text. If you sign in with Google, Discord, MyAnimeList, or AniList, we store the provider name and your provider account ID so we can recognise you next time; the provider only confirms your identity and returns your name and email.</p>
+      <p><strong>Your activity (only while logged in).</strong> Your watchlist, watch history, episode progress, reminders, and comments. Signed-out visitors generate none of this.</p>
+      <p><strong>Session records.</strong> When you log in, the server creates a session record holding a random token, your user ID, an expiry date, and the IP address and browser (user agent) seen at login. This is what keeps you logged in and lets us spot session abuse.</p>
+    </div>
+    <div class="info-section">
+      <h2>What we do not collect</h2>
+      <p>We do not run analytics trackers or advertising trackers on the site. We do not sell personal data, and we do not share your account data with advertisers. We do not collect payment information — the service is free and there is nothing to buy.</p>
+    </div>
+    <div class="info-section">
+      <h2>Cookies and local storage</h2>
+      <ul>
+        <li><strong>av_session</strong> (cookie): the random session token described above. It is set only when you log in, lasts 30 days, and is extended by another 30 days when you visit while fewer than 7 days remain. Logging out deletes the session immediately.</li>
+        <li><strong>av_theme</strong> (local storage): your light/dark theme choice, stored only in your own browser.</li>
+        <li><strong>av_reminders</strong> (local storage): episode reminders you set, stored only in your own browser.</li>
+      </ul>
+      <p>Clearing cookies or local storage removes these from your device; clearing the session cookie signs you out.</p>
+    </div>
+    <div class="info-section">
+      <h2>Third-party services</h2>
+      <p><strong>AniList.</strong> The catalog, search results, schedules, and title details come from the AniList API, queried by our server. Your browser does not send your personal data to AniList.</p>
+      <p><strong>Video players.</strong> Episodes play inside third-party player embeds (such as Zoko and TVplus). Those players are separate services with their own privacy policies; AniVerse cannot see what they collect. Their in-player ads are theirs, not ours.</p>
+      <p><strong>Social login providers.</strong> Google, Discord, MyAnimeList, and AniList verify your identity at sign-in. They never receive your AniVerse data — your watchlist, history, and comments stay in our database.</p>
+    </div>
+    <div class="info-section">
+      <h2>Data security</h2>
+      <p>Passwords are hashed with a one-way function, sessions use unguessable random tokens, and the site is served over HTTPS. No system is perfectly secure, so we keep the data we hold to the minimum needed to run the service.</p>
+    </div>
+    <div class="info-section">
+      <h2>Your choices and data requests</h2>
+      <p>You can log out at any time, which ends your session immediately. To ask about, correct, or delete your account data, write to <a href="mailto:dmca@vyapro.me">dmca@vyapro.me</a> from the email address on the account. We will confirm the request belongs to you before acting on it.</p>
+    </div>
+    <div class="info-section">
+      <h2>Changes to this policy</h2>
+      <p>If this policy changes, the &ldquo;Last updated&rdquo; date at the top will change with it. Continued use of the site after a change means you accept the updated policy.</p>
+    </div>
+
+  </main>
+
+  <!-- Zoro Footer with Aizen Cyber Accents -->
+  <footer style="background: var(--bg-darker); border-top: 1px solid var(--border-subtle); padding: 3.5rem 0 2rem;">
+    <div class="container-main">
+      <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 2rem; padding-bottom: 2rem; border-bottom: 1px solid rgba(255,255,255,0.06);">
+        <a class="zoro-brand" href="/home">
+          <div class="zoro-brand-icon">Z</div>
+          <span>Ani<span class="verse">Verse</span></span>
+        </a>
+        <div>
+          <div style="display: flex; gap: 1.5rem; font-size: 0.875rem; color: var(--text-sub); flex-wrap: wrap;">
+            <a href="/home">Home</a>
+            <a href="/browse">Catalog</a>
+            <a href="/schedule">Schedule</a>
+            <a href="/genres">Genres</a>
+            <a href="/browse">Watch</a>
+          </div>
+          <div style="display: flex; gap: 1.5rem; font-size: 0.875rem; color: var(--text-sub); flex-wrap: wrap; margin-top: 0.75rem;">
+            <a href="/faq">FAQ</a>
+            <a href="/about">About</a>
+            <a href="/privacy">Privacy</a>
+            <a href="/terms">Terms</a>
+            <a href="/dmca">DMCA</a>
+            <a href="/contact">Contact</a>
+          </div>
+        </div>
+      </div>
+      <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; margin-top: 1.5rem; font-size: 0.75rem; color: var(--text-muted);">
+        <p>Ani Verse does not store any files on its server. Combining Zoro.to UI components with Aizen-Verse cinematic animation engine.</p>
+        <p class="footer-engine">ZORO × AIZEN HYBRID ENGINE 2026</p>
+      </div>
+      <p style="margin-top: 1.25rem; font-size: 0.75rem; color: var(--text-muted);">© <span class="js-footer-year">2026</span> Ani Verse. All rights reserved.</p>
+    </div>
+  </footer>
+
+  <script src="/js/zoro-aizen.js?v=23"></script>
+</body>
+</html>

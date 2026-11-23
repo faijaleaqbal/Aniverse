@@ -415,6 +415,48 @@ async function runTests() {
       assert.equal(data.error.code, "NOT_FOUND");
     });
 
+    // 4c2. Named page routes (23 Nov): every clean URL serves its own page.
+    // Distinctive string per page is its <title> (home = index.html's).
+    const NAMED_PAGE_CHECKS = [
+      ["/home", "Ani Verse - Watch Anime Online Free with Zoro UI & Aizen Motion"],
+      ["/browse", "Browse Anime - Ani Verse (Zoro UI × Aizen Motion)"],
+      ["/watch", "Watch Anime - Ani Verse (Zoro UI × Aizen Engine)"],
+      ["/detail", "Anime Details - Ani Verse (Zoro UI × Aizen Motion)"],
+      ["/schedule", "Broadcast Schedule - Ani Verse (Zoro UI × Aizen Motion)"],
+      ["/genres", "Anime Genres - Ani Verse (Zoro UI × Aizen Motion)"],
+      ["/az-list", "A-Z Anime List - Ani Verse (Zoro UI × Aizen Motion)"],
+      ["/faq", "Frequently Asked Questions | AniVerse"],
+      ["/privacy", "Privacy Policy | AniVerse"],
+      ["/terms", "Terms of Service | AniVerse"],
+      ["/dmca", "DMCA & Copyright | AniVerse"],
+      ["/about", "About AniVerse | AniVerse"],
+      ["/contact", "Contact | AniVerse"],
+    ];
+    for (const [route, title] of NAMED_PAGE_CHECKS) {
+      await test(`GET ${route} serves its page (200, correct <title>)`, async () => {
+        const res = await fetch(`${baseUrl}${route}`);
+        assert.equal(res.status, 200, `${route} must 200`);
+        const body = await res.text();
+        assert.ok(body.includes(`<title>${title}</title>`), `${route} served the wrong page`);
+      });
+    }
+
+    await test("GET /home footer links to all six info pages", async () => {
+      const res = await fetch(`${baseUrl}/home`);
+      assert.equal(res.status, 200);
+      const body = await res.text();
+      for (const href of ["/faq", "/about", "/privacy", "/terms", "/dmca", "/contact"]) {
+        assert.ok(body.includes(`href="${href}"`), `/home footer missing link ${href}`);
+      }
+    });
+
+    await test("GET /faq.html (old .html URL) still works", async () => {
+      const res = await fetch(`${baseUrl}/faq.html`);
+      assert.equal(res.status, 200);
+      const body = await res.text();
+      assert.ok(body.includes("<title>Frequently Asked Questions | AniVerse</title>"));
+    });
+
     // 4d. Versioned assets are immutable, unversioned ones revalidate
     // (23 Nov audit fix #5 — exactly ONE Cache-Control header each).
     await test("GET /js/zoro-aizen.js?v=22 serves a single immutable Cache-Control", async () => {

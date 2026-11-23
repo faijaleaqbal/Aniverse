@@ -1455,6 +1455,33 @@ app.use(
   })
 );
 
+/* Named page routes (23 Nov): clean URLs — /home, /browse, /faq, … — with
+   one explicit route per page instead of relying on the generic /:page
+   fallback below. /home is new (the fallback can only serve /index);
+   /watch and /detail serve their pages bare — the client script reads the
+   query string (?live=…&ep=…), same as /watch.html does today. These sit
+   after all /api/* routes and the static handler, so neither is affected. */
+const NAMED_PAGES = {
+  home: "index.html",
+  browse: "browse.html",
+  watch: "watch.html",
+  detail: "detail.html",
+  schedule: "schedule.html",
+  genres: "genres.html",
+  "az-list": "az-list.html",
+  faq: "faq.html",
+  privacy: "privacy.html",
+  terms: "terms.html",
+  dmca: "dmca.html",
+  about: "about.html",
+  contact: "contact.html",
+};
+for (const [name, file] of Object.entries(NAMED_PAGES)) {
+  app.get(`/${name}`, (req, res) => {
+    res.sendFile(path.join(SITE_ROOT, file));
+  });
+}
+
 // Fallback for HTML routing if requested without extension
 app.get("/:page", (req, res, next) => {
   const pageFile = path.join(SITE_ROOT, `${req.params.page}.html`);
