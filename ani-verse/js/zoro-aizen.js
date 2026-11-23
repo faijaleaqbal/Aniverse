@@ -886,7 +886,7 @@
           </div>
           <div class="input-field-group">
             <label for="reg-email">Email Address</label>
-            <input id="reg-email" name="email" type="email" placeholder="you@domain.com" required>
+            <input id="reg-email" name="email" type="email" placeholder="Your email address" required>
           </div>
           <div class="input-field-group">
             <label for="reg-password">Password</label>

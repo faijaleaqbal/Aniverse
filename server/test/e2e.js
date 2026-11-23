@@ -457,6 +457,30 @@ async function runTests() {
       assert.ok(body.includes("<title>Frequently Asked Questions | AniVerse</title>"));
     });
 
+    // 4c3. No email support anywhere (24 Nov): contact is Discord-only.
+    // The placeholder dmca@vyapro.me was removed from every page; no
+    // info page may carry an email address or a mailto: link.
+    await test("GET /dmca, /privacy, /contact, /faq carry no email address", async () => {
+      for (const route of ["/dmca", "/privacy", "/contact", "/faq"]) {
+        const res = await fetch(`${baseUrl}${route}`);
+        assert.equal(res.status, 200, `${route} must 200`);
+        const body = await res.text();
+        assert.ok(!body.includes("mailto:"), `${route} still has a mailto: link`);
+        assert.ok(!body.includes("@vyapro.me"), `${route} still has the placeholder email`);
+        assert.ok(!/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/.test(body), `${route} still contains an email-shaped address`);
+      }
+    });
+
+    await test("GET /dmca, /privacy, /contact point to Discord (invite placeholder)", async () => {
+      for (const route of ["/dmca", "/privacy", "/contact"]) {
+        const res = await fetch(`${baseUrl}${route}`);
+        assert.equal(res.status, 200, `${route} must 200`);
+        const body = await res.text();
+        assert.ok(body.includes("Discord"), `${route} must mention Discord`);
+        assert.ok(body.includes("invite link coming soon"), `${route} must show the Discord invite placeholder`);
+      }
+    });
+
     // 4d. Versioned assets are immutable, unversioned ones revalidate
     // (23 Nov audit fix #5 — exactly ONE Cache-Control header each).
     await test("GET /js/zoro-aizen.js?v=22 serves a single immutable Cache-Control", async () => {
