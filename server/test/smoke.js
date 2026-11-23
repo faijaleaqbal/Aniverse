@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { buildEmbedUrl, ZOKO_SOURCES } from "../src/zoko.js";
 import { ZOKO_EMBED_ORIGIN, ANIVEXA_BASE_URL } from "../src/config.js";
 import { episodeSetFromAnivexa, pickAnimeggStreamUrl } from "../src/animegg.js";
+import { isMusicMedia, canonicalFormat } from "../src/anilist.js";
 
 console.log("=== Running ZokoAnime Unit / Smoke Tests ===");
 
@@ -227,6 +228,36 @@ test("animegg stream selection prefers the embed URL, falls back to mp4", () => 
   assert.deepEqual(pickAnimeggStreamUrl([{ type: "mp4" }]), { ok: false, embedUrl: null, url: null });
   /* A relative/invalid URL is rejected rather than handed to an iframe. */
   assert.deepEqual(pickAnimeggStreamUrl([{ url: "not a url" }]), { ok: false, embedUrl: null, url: null });
+});
+
+/* ==========================================================================
+   AniList content screens — MUSIC is excluded exactly like adult media.
+   ========================================================================== */
+
+// 15. isMusicMedia flags only the MUSIC format.
+test("isMusicMedia flags only AniList's MUSIC format", () => {
+  assert.equal(isMusicMedia(null), false);
+  assert.equal(isMusicMedia(undefined), false);
+  assert.equal(isMusicMedia({}), false);
+  assert.equal(isMusicMedia({ format: "MUSIC" }), true);
+  assert.equal(isMusicMedia({ format: "TV" }), false);
+  assert.equal(isMusicMedia({ format: "MOVIE" }), false);
+  assert.equal(isMusicMedia({ format: "music" }), false, "the enum is uppercase");
+  /* A genre named "Music" is not the media format. */
+  assert.equal(isMusicMedia({ format: "TV", genres: ["Music"] }), false);
+});
+
+// 16. canonicalFormat('MUSIC') is null so a format=MUSIC request can never
+//     ask AniList for Music titles.
+test("canonicalFormat('MUSIC') is null (MUSIC can never be requested)", () => {
+  assert.equal(canonicalFormat("MUSIC"), null);
+  assert.equal(canonicalFormat("music"), null);
+  assert.equal(canonicalFormat(" Music "), null);
+  assert.equal(canonicalFormat(""), null);
+  /* Other formats still canonicalise. */
+  assert.equal(canonicalFormat("movie"), "MOVIE");
+  assert.equal(canonicalFormat("TV"), "TV");
+  assert.equal(canonicalFormat("ona"), "ONA");
 });
 
 console.log(`\nAll ${passed} smoke / unit tests passed successfully!\n`);

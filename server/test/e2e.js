@@ -617,6 +617,77 @@ async function runTests() {
       resetAniListMock();
     });
 
+    // 18b. A direct link to a MUSIC title is 404, exactly like an adult title.
+    //      (On Your Mark — AniList 1047 / MAL 1047 — is AniList's MUSIC format.)
+    await test("GET /api/live/:id returns 404 not_available for a MUSIC title (On Your Mark, 1047)", async () => {
+      mockAniList({
+        mediaById: {
+          1047: fakeMedia({
+            id: 1047, idMal: 1047, format: "MUSIC",
+            title: { romaji: "On Your Mark: CHAGE & ASKA", english: "On Your Mark", native: null },
+          }),
+        },
+      });
+      const res = await fetch(`${baseUrl}/api/live/1047`);
+      assert.equal(res.status, 404);
+      const data = await res.json();
+      assert.equal(data.ok, false);
+      assert.equal(data.error, "not_available");
+      /* The query itself must ask AniList to exclude MUSIC. */
+      assert.ok(
+        anilistRequests.some((r) => /format_not:\s*MUSIC/.test(String(r.query || ""))),
+        "the live query must carry format_not: MUSIC"
+      );
+      resetAniListMock();
+    });
+
+    // 18c. Search and browse never return a MUSIC title, and both queries
+    //      carry format_not: MUSIC (the post-filter is the second layer).
+    await test("GET /api/search and /api/browse exclude MUSIC titles", async () => {
+      mockAniList({
+        mediaList: [
+          fakeMedia({
+            id: 200001, idMal: 200001, format: "MUSIC",
+            title: { romaji: "Music Video A", english: "Music Video A", native: null },
+          }),
+          fakeMedia({
+            id: 200002, idMal: 200002, format: "TV",
+            title: { romaji: "Clean Show", english: "Clean Show", native: null },
+          }),
+        ],
+      });
+
+      const search = await fetch(`${baseUrl}/api/search?q=Music`);
+      assert.equal(search.status, 200);
+      const searchData = await search.json();
+      assert.equal(
+        searchData.results.some((t) => t.format === "MUSIC"),
+        false,
+        "search must not return MUSIC titles"
+      );
+      assert.ok(searchData.results.some((t) => t.name === "Clean Show"), "clean titles still surface");
+      assert.ok(
+        anilistRequests.some((r) => /format_not:\s*MUSIC/.test(String(r.query || ""))),
+        "the search query must carry format_not: MUSIC"
+      );
+
+      anilistRequests.length = 0;
+      const browse = await fetch(`${baseUrl}/api/browse?sort=trending`);
+      assert.equal(browse.status, 200);
+      const browseData = await browse.json();
+      assert.equal(
+        browseData.results.some((t) => t.format === "MUSIC"),
+        false,
+        "browse must not return MUSIC titles"
+      );
+      assert.ok(browseData.results.some((t) => t.name === "Clean Show"), "clean titles still surface");
+      assert.ok(
+        anilistRequests.some((r) => /format_not:\s*MUSIC/.test(String(r.query || ""))),
+        "the browse query must carry format_not: MUSIC"
+      );
+      resetAniListMock();
+    });
+
     // 19. AniList down -> HTTP 502 search_busy (never a stack trace, never a
     //     500 that would break the page).
     await test("GET /api/browse returns 502 search_busy when AniList fails", async () => {

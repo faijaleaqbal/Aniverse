@@ -8,6 +8,10 @@
  *   - `isAdult: false` is added to every AniList query, and adult media are
  *     filtered again on the way out. Hentai is excluded from search, browse,
  *     airing and direct links.
+ *   - `format_not: MUSIC` is added to every AniList query, and MUSIC media are
+ *     filtered again on the way out. AniList's MUSIC format (music videos /
+ *     promotional clips) is not part of the anime catalog, so it is excluded
+ *     from search, browse, airing and direct links exactly like adult media.
  *   - `is18plus` is a SEPARATE rule: mature-but-not-hentai titles (the
  *     "Ecchi" genre) stay visible and are tagged 18+. The UI only renders the
  *     badge from that flag — it never decides by itself.
@@ -74,8 +78,9 @@ export function clearAniListCache() {
   genreCache = null;
 }
 
-/* Shared media fields for every query (spec). isAdult: false is added to
-   every AniList query — hentai is excluded everywhere. */
+/* Shared media fields for every query (spec). isAdult: false and
+   format_not: MUSIC are added to every AniList query — hentai and MUSIC
+   media are excluded everywhere. */
 export const MEDIA_FIELDS = `
   id idMal isAdult
   title { romaji english native }
@@ -175,6 +180,16 @@ export function isAdultMedia(media) {
   return ADULT_TITLE_PATTERN.test(String(media.description || ""));
 }
 
+/* True when a title is AniList's MUSIC format (music videos / promotional
+   clips). The site is an anime catalog, so MUSIC media are excluded exactly
+   like adult media: `format_not: MUSIC` on every query AND this screen on the
+   way out. The format is matched exactly (AniList's enum is uppercase), so a
+   genre named "Music" is not caught — only the media format. */
+export function isMusicMedia(media) {
+  if (!media) return false;
+  return media.format === "MUSIC";
+}
+
 /* AniList's image CDN (s4.anilist.co) refuses cross-site <img> requests, so
    hotlinked live posters never render and every card falls back to the
    placeholder. Live covers are therefore served through the site's OWN
@@ -269,8 +284,8 @@ export const LIVE_DETAIL_FIELDS = `
 /* Map a detail response onto the site shape: everything mediaView exposes,
    plus the live-detail metadata. Studios are animation studios only;
    characters are the top 6 by AniList's ROLE/RELEVANCE sort; relations are
-   ANIME only and adult-screened (a relation can point at an adult title even
-   when the parent query is isAdult: false). */
+   ANIME only and adult/MUSIC-screened (a relation can point at an excluded
+   title even when the parent query is isAdult: false, format_not: MUSIC). */
 export function liveDetailView(media) {
   const base = mediaView(media);
   if (!base) return null;
@@ -310,7 +325,7 @@ export function liveDetailView(media) {
       const node = edge && edge.node;
       if (!node) return null;
       if (node.type && node.type !== "ANIME") return null;
-      if (isAdultMedia(node)) return null;
+      if (isAdultMedia(node) || isMusicMedia(node)) return null;
       const title = node.title || {};
       return {
         relationType: edge.relationType || null,
@@ -336,8 +351,9 @@ export function liveDetailView(media) {
 
   /* Recommendations ("More Like This"). A node whose mediaRecommendation is
      null (deleted/unavailable media) or that points at the title itself is
-     dropped, and every survivor goes through the SAME adult screen as every
-     other title on the site — a recommendation edge is not a trusted source.
+     dropped, and every survivor goes through the SAME adult/MUSIC screen as
+     every other title on the site — a recommendation edge is not a trusted
+     source.
      `rating` is AniList's own score for the edge; it is kept because it is
      real data, but nothing is invented when it is absent. */
   const recommendationNodes = (media.recommendations && Array.isArray(media.recommendations.nodes))
@@ -348,7 +364,7 @@ export function liveDetailView(media) {
       const rec = node && node.mediaRecommendation;
       if (!rec) return null;
       if (rec.id != null && media.id != null && Number(rec.id) === Number(media.id)) return null;
-      if (isAdultMedia(rec)) return null;
+      if (isAdultMedia(rec) || isMusicMedia(rec)) return null;
       const title = rec.title || {};
       return {
         anilistId: rec.id != null ? Number(rec.id) : null,
@@ -381,7 +397,7 @@ const PAGE_INFO_FIELDS = `pageInfo { total currentPage lastPage hasNextPage }`;
 function pageResult(pageData) {
   const media = (pageData && Array.isArray(pageData.media)) ? pageData.media : [];
   return {
-    results: media.filter((m) => m && !isAdultMedia(m)).map(mediaView),
+    results: media.filter((m) => m && !isAdultMedia(m) && !isMusicMedia(m)).map(mediaView),
     pageInfo: (pageData && pageData.pageInfo) || { total: 0, currentPage: 1, lastPage: 1, hasNextPage: false },
   };
 }
@@ -417,7 +433,7 @@ const snapshotInFlight = new Map();
 async function buildSearchSnapshot(q) {
   const query = `query ($search: String, $page: Int, $perPage: Int) {
     Page(page: $page, perPage: $perPage) {
-      media(search: $search, type: ANIME, sort: SEARCH_MATCH, isAdult: false) { ${MEDIA_FIELDS} }
+      media(search: $search, type: ANIME, sort: SEARCH_MATCH, isAdult: false, format_not: MUSIC) { ${MEDIA_FIELDS} }
     }
   }`;
   /* The three pages are fetched in parallel — one slow page must not serialise
@@ -440,7 +456,7 @@ async function buildSearchSnapshot(q) {
   const items = [];
   for (const media of pages.flatMap((p) => p.media)) {
     if (!media || media.id == null || seen.has(media.id)) continue;
-    if (isAdultMedia(media)) continue;
+    if (isAdultMedia(media) || isMusicMedia(media)) continue;
     seen.add(media.id);
     items.push(mediaView(media));
   }
@@ -517,7 +533,7 @@ async function buildAzSnapshot(letter) {
   const query = `query ($search: String, $page: Int, $perPage: Int) {
     Page(page: $page, perPage: $perPage) {
       pageInfo { total lastPage }
-      media(search: $search, type: ANIME, sort: SEARCH_MATCH, isAdult: false) { ${MEDIA_FIELDS} }
+      media(search: $search, type: ANIME, sort: SEARCH_MATCH, isAdult: false, format_not: MUSIC) { ${MEDIA_FIELDS} }
     }
   }`;
   /* Pages in parallel; a failing page contributes fewer candidates. Only an
@@ -547,7 +563,7 @@ async function buildAzSnapshot(letter) {
   for (const media of pages.flatMap((p) => p.media)) {
     if (!media || media.id == null || seen.has(media.id)) continue;
     if (!azPrefixMatch(media, letter)) continue;
-    if (isAdultMedia(media)) continue;
+    if (isAdultMedia(media) || isMusicMedia(media)) continue;
     seen.add(media.id);
     items.push(mediaView(media));
   }
@@ -589,7 +605,7 @@ function isAzFallbackLetter(letter) {
 async function buildAzTitleRomajiSnapshot(letter) {
   const query = `query ($page: Int, $perPage: Int) {
     Page(page: $page, perPage: $perPage) {
-      media(type: ANIME, sort: TITLE_ROMAJI, isAdult: false) { ${MEDIA_FIELDS} }
+      media(type: ANIME, sort: TITLE_ROMAJI, isAdult: false, format_not: MUSIC) { ${MEDIA_FIELDS} }
     }
   }`;
   const target = String(letter).toLowerCase();
@@ -617,7 +633,7 @@ async function buildAzTitleRomajiSnapshot(letter) {
     for (const m of media) {
       if (!m || m.id == null || seen.has(m.id)) continue;
       if (!azPrefixMatch(m, letter)) continue;
-      if (isAdultMedia(m)) continue;
+      if (isAdultMedia(m) || isMusicMedia(m)) continue;
       seen.add(m.id);
       items.push(mediaView(m));
     }
@@ -738,7 +754,7 @@ function yearCountTtl(year) {
 }
 
 async function buildYearCount(year, genres, formats, statuses, tags = [], season = null, minScore = null, maxScore = null, startAfter = null, startBefore = null) {
-  const args = ["type: ANIME", "isAdult: false"];
+  const args = ["type: ANIME", "isAdult: false", "format_not: MUSIC"];
   const vars = { page: 1, perPage: YEAR_COUNT_PAGE_SIZE };
   if (genres.length) { args.push("genre_in: $genre"); vars.genre = genres; }
   if (formats.length) { args.push("format_in: $format"); vars.format = formats; }
@@ -775,7 +791,7 @@ async function buildYearCount(year, genres, formats, statuses, tags = [], season
     const media = (data && data.Page && Array.isArray(data.Page.media)) ? data.Page.media : [];
     for (const item of media) {
       if (!item || item.id == null || seen.has(item.id)) continue;
-      if (isAdultMedia(item)) continue;
+      if (isAdultMedia(item) || isMusicMedia(item)) continue;
       seen.add(item.id);
     }
     pages++;
@@ -846,7 +862,7 @@ export async function withRealYearTotal(pageInfo, opts = {}) {
 }
 
 /* GET /api/browse — one flexible list endpoint. Sort/filter mapping is
-   server-side; isAdult: false always. */
+   server-side; isAdult: false and format_not: MUSIC always. */
 export const BROWSE_SORTS = {
   trending: "TRENDING_DESC",
   popular: "POPULARITY_DESC",
@@ -1015,6 +1031,10 @@ const FORMAT_CANONICAL = {
 export function canonicalFormat(value) {
   const raw = String(value || "").trim();
   if (!raw) return null;
+  /* MUSIC is excluded site-wide (see isMusicMedia): a format=MUSIC request
+     must never be able to ask AniList for Music titles, so it canonicalises
+     to null and the format filter is simply dropped. */
+  if (raw.toLowerCase() === "music") return null;
   return FORMAT_CANONICAL[raw.toLowerCase()] || raw.toUpperCase();
 }
 
@@ -1102,7 +1122,7 @@ export async function browseAniList(opts = {}) {
     sort, genres, formats, statuses, tags, season, year,
     minScore, maxScore, startAfter, startBefore, page, perPage,
   } = normalizeBrowseArgs(opts);
-  const args = ["type: ANIME", "sort: " + sort, "isAdult: false"];
+  const args = ["type: ANIME", "sort: " + sort, "isAdult: false", "format_not: MUSIC"];
   const vars = { page, perPage };
   if (genres.length) { args.push("genre_in: $genre"); vars.genre = genres; }
   if (formats.length) { args.push("format_in: $format"); vars.format = formats; }
@@ -1140,9 +1160,10 @@ const LIVE_ID_ALIASES = {
   167728: 159042, // Reincarnated as a Sword S2 anime ID
 };
 
-/* GET /api/live/:anilistId — one title, 1-hour cache. The isAdult: false
-   filter means an adult title resolves to null -> the route answers 404
-   {error:"not_available"}, so adult titles cannot be opened by direct link. */
+/* GET /api/live/:anilistId — one title, 1-hour cache. The isAdult: false and
+   format_not: MUSIC filters mean an adult or MUSIC title resolves to null ->
+   the route answers 404 {error:"not_available"}, so excluded titles cannot be
+   opened by direct link. */
 export async function getLiveTitle(anilistId) {
   let id = Number(anilistId);
   if (!Number.isFinite(id) || id <= 0) return null;
@@ -1151,7 +1172,7 @@ export async function getLiveTitle(anilistId) {
      (studios / characters / relations / tags / banner). List endpoints never
      request these. */
   const query = `query ($id: Int) {
-    Media(id: $id, type: ANIME, isAdult: false) { ${LIVE_DETAIL_FIELDS} }
+    Media(id: $id, type: ANIME, isAdult: false, format_not: MUSIC) { ${LIVE_DETAIL_FIELDS} }
   }`;
   let data;
   try {
@@ -1163,12 +1184,13 @@ export async function getLiveTitle(anilistId) {
   }
   const media = data && data.Media;
   /* Not an anime (a manga id, for example) -> not available. */
-  if (!media || (media.type && media.type !== "ANIME") || isAdultMedia(media)) return null;
+  if (!media || (media.type && media.type !== "ANIME") || isAdultMedia(media) || isMusicMedia(media)) return null;
   return liveDetailView(media);
 }
 
 /* GET /api/airing — episodes aired in the last 7 days, newest first.
-   24 per page, 10-minute cache. Adult media are skipped server-side. */
+   24 per page, 10-minute cache. Adult and MUSIC media are skipped
+   server-side. */
 export async function getAiringSchedule(page = 1, nowSec = Math.floor(Date.now() / 1000)) {
   const pageNum = Number(page);
   const safePage = Number.isFinite(pageNum) && pageNum > 0 ? Math.floor(pageNum) : 1;
@@ -1192,7 +1214,7 @@ export async function getAiringSchedule(page = 1, nowSec = Math.floor(Date.now()
   const rows = (pageData && Array.isArray(pageData.airingSchedules)) ? pageData.airingSchedules : [];
   return {
     results: rows
-      .filter((r) => r && r.media && (!r.media.type || r.media.type === "ANIME") && !isAdultMedia(r.media))
+      .filter((r) => r && r.media && (!r.media.type || r.media.type === "ANIME") && !isAdultMedia(r.media) && !isMusicMedia(r.media))
       .map((r) => ({ airingAt: r.airingAt, episode: r.episode, media: mediaView(r.media) })),
     pageInfo: (pageData && pageData.pageInfo) || { total: 0, currentPage: 1, lastPage: 1, hasNextPage: false },
   };
