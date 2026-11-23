@@ -68,12 +68,33 @@ export function initSchema() {
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       email TEXT UNIQUE NOT NULL,
-      password_hash TEXT NOT NULL,
+      /* NULL for social-only accounts (Google/Discord/MAL/AniList) — they
+         have no local password and can never log in with one
+         (verifyPassword returns false for a NULL hash). Local accounts
+         always have a hash. Older databases are migrated by
+         migrateUsersForSocial() below. */
+      password_hash TEXT,
       name TEXT NOT NULL,
       avatar_tone INTEGER DEFAULT 1,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+
+    /* Social-login identities (HiAnime-style logins, Nov 2026). One row per
+       linked provider account; a user can link several providers. The
+       UNIQUE on (provider, provider_user_id) is what makes a returning
+       social login find the same account. */
+    CREATE TABLE IF NOT EXISTS linked_identities (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      provider TEXT NOT NULL,
+      provider_user_id TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      UNIQUE(provider, provider_user_id),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_linked_identities_user ON linked_identities(user_id);
 
     CREATE TABLE IF NOT EXISTS sessions (
       id TEXT PRIMARY KEY,
@@ -188,6 +209,52 @@ export function initSchema() {
   }
 
   migrateCommentsForGuests();
+  migrateUsersForSocial();
+}
+
+/* Social logins (Nov 2026) — older databases created `users` with
+   password_hash NOT NULL, but social-only accounts have no password.
+   SQLite cannot drop a NOT NULL in place, so the table is rebuilt once
+   (data copied verbatim, ids preserved). The standard SQLite procedure:
+   foreign keys OFF around the rebuild so the other tables' REFERENCES
+   users(id) keep pointing at the (rebuilt) users table by name.
+   Idempotent: a database that already has a nullable password_hash is
+   left untouched. */
+function migrateUsersForSocial() {
+  const cols = db.prepare("PRAGMA table_info(users)").all();
+  if (!cols.length) return;
+  const hashCol = cols.find((c) => c.name === "password_hash");
+  if (!hashCol || Number(hashCol.notnull) === 0) return;
+
+  db.pragma("foreign_keys = OFF");
+  try {
+    db.transaction(() => {
+      db.exec(`
+        CREATE TABLE users_new (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          email TEXT UNIQUE NOT NULL,
+          password_hash TEXT,
+          name TEXT NOT NULL,
+          avatar_tone INTEGER DEFAULT 1,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        )
+      `);
+      db.exec(`
+        INSERT INTO users_new (id, email, password_hash, name, avatar_tone, created_at, updated_at)
+        SELECT id, email, password_hash, name, avatar_tone, created_at, updated_at
+        FROM users
+      `);
+      db.exec("DROP TABLE users");
+      db.exec("ALTER TABLE users_new RENAME TO users");
+    })();
+  } finally {
+    db.pragma("foreign_keys = ON");
+  }
+  const violations = db.prepare("PRAGMA foreign_key_check").all();
+  if (violations.length) {
+    console.error("migrateUsersForSocial: foreign key violations after rebuild:", violations);
+  }
 }
 
 /* Phase 3b — guest comments. Older databases created `comments` with

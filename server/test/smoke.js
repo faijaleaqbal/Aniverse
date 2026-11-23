@@ -3,6 +3,15 @@ import { buildEmbedUrl, ZOKO_SOURCES } from "../src/zoko.js";
 import { ZOKO_EMBED_ORIGIN, ANIVEXA_BASE_URL } from "../src/config.js";
 import { episodeSetFromAnivexa, pickAnimeggStreamUrl } from "../src/animegg.js";
 import { isMusicMedia, canonicalFormat } from "../src/anilist.js";
+import {
+  pkceChallenge,
+  buildRedirectUri,
+  placeholderEmail,
+  isPlaceholderEmail,
+  cleanSocialName,
+  providerConfig,
+  OAUTH_PROVIDER_IDS,
+} from "../src/oauth-providers.js";
 
 console.log("=== Running ZokoAnime Unit / Smoke Tests ===");
 
@@ -258,6 +267,64 @@ test("canonicalFormat('MUSIC') is null (MUSIC can never be requested)", () => {
   assert.equal(canonicalFormat("movie"), "MOVIE");
   assert.equal(canonicalFormat("TV"), "TV");
   assert.equal(canonicalFormat("ona"), "ONA");
+});
+
+// 17. PKCE S256 challenge matches the RFC 7636 test vector.
+test("pkceChallenge matches the RFC 7636 S256 test vector", () => {
+  assert.equal(
+    pkceChallenge("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"),
+    "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
+  );
+});
+
+// 18. OAuth redirect URIs follow the BASE_URL + /auth/<provider>/callback pattern.
+test("buildRedirectUri builds the exact callback URL per provider", () => {
+  assert.equal(
+    buildRedirectUri("google"),
+    "https://aniversetesting.duckdns.org/auth/google/callback"
+  );
+  assert.equal(buildRedirectUri("mal"), "https://aniversetesting.duckdns.org/auth/mal/callback");
+  assert.equal(
+    buildRedirectUri("anilist"),
+    "https://aniversetesting.duckdns.org/auth/anilist/callback"
+  );
+});
+
+// 19. Placeholder emails for no-email providers are clearly fake (.invalid)
+//     and unique per provider identity.
+test("placeholderEmail is an obviously-fake .invalid address, unique per identity", () => {
+  assert.equal(placeholderEmail("mal", "123"), "no-email-mal-123@aniverse.invalid");
+  assert.equal(placeholderEmail("anilist", "456"), "no-email-anilist-456@aniverse.invalid");
+  assert.notEqual(placeholderEmail("mal", "123"), placeholderEmail("mal", "124"));
+  assert.ok(isPlaceholderEmail("no-email-mal-123@aniverse.invalid"));
+  assert.ok(!isPlaceholderEmail("user@example.com"));
+  /* Unsafe characters in a provider id are sanitised out of the local part. */
+  assert.equal(placeholderEmail("google", "a/b c"), "no-email-google-a-b-c@aniverse.invalid");
+});
+
+// 20. Social display names are cleaned and capped at the 40-char limit.
+test("cleanSocialName cleans and caps provider names at 40 chars", () => {
+  assert.equal(cleanSocialName("  Zoro Fan  "), "Zoro Fan");
+  assert.equal(cleanSocialName("x".repeat(100)).length, 40);
+  assert.equal(cleanSocialName(""), "AniVerse User");
+  assert.equal(cleanSocialName("   "), "AniVerse User");
+});
+
+// 21. All four providers exist and are DISABLED with no credentials set
+//     (the test environment has none — same as a fresh deploy).
+test("all four OAuth providers are defined and disabled without credentials", () => {
+  assert.deepEqual([...OAUTH_PROVIDER_IDS].sort(), ["anilist", "discord", "google", "mal"]);
+  for (const id of OAUTH_PROVIDER_IDS) {
+    const cfg = providerConfig(id);
+    assert.ok(cfg, `${id} must have a provider definition`);
+    assert.equal(cfg.enabled, false, `${id} must be disabled with no credentials`);
+    assert.ok(cfg.authorizeUrl.startsWith("https://"), `${id} authorize URL is HTTPS`);
+    assert.ok(cfg.tokenUrl.startsWith("https://"), `${id} token URL is HTTPS`);
+  }
+  /* MAL requires PKCE — the flow must never start without it. */
+  assert.equal(providerConfig("mal").pkce, true, "MAL requires PKCE");
+  assert.equal(providerConfig("google").pkce, true, "Google uses PKCE too");
+  assert.equal(providerConfig("unknown"), null, "unknown provider ids resolve to null");
 });
 
 console.log(`\nAll ${passed} smoke / unit tests passed successfully!\n`);

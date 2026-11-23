@@ -2176,6 +2176,55 @@ main.grid-is-empty .zoro-empty-state {
   background: rgba(202, 233, 98, 0.12);
 }
 
+/* Social logins (Google / Discord / MAL / AniList) in the auth modal.
+   Brand colours, fixed in both themes; the block is hidden entirely when
+   no provider is configured. */
+.social-login-divider {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 1.25rem 0 0.9rem;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.social-login-divider::before,
+.social-login-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border-subtle);
+}
+
+.social-login-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.btn-social {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 44px;
+  padding: 0.65rem 1rem;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  font-weight: 600;
+  font-size: 0.9rem;
+  text-decoration: none;
+  cursor: pointer;
+  transition: filter 0.15s ease;
+}
+
+.btn-social:hover { filter: brightness(1.08); }
+
+.btn-social-google { background: #ffffff; color: #1f1f1f; border-color: #dadce0; }
+.btn-social-discord { background: #5865f2; color: #ffffff; }
+.btn-social-mal { background: #2e51a2; color: #ffffff; }
+.btn-social-anilist { background: #02a9ff; color: #ffffff; }
+
 /* ==========================================================================
    TOAST NOTIFICATION SYSTEM
    ========================================================================== */

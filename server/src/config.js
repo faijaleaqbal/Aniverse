@@ -12,6 +12,11 @@ export const IS_PROD = NODE_ENV === "production";
 export const HOST = process.env.HOST || "127.0.0.1";
 export const PORT = Number(process.env.PORT || 4000);
 
+/* Public base URL of the site — used for OAuth redirect URIs
+   (https://<base>/auth/<provider>/callback). Override with BASE_URL when the
+   real domain replaces the DuckDNS test host; no code change needed. */
+export const BASE_URL = (process.env.BASE_URL || "https://aniversetesting.duckdns.org").replace(/\/+$/, "");
+
 export const DATA_DIR = process.env.DATA_DIR
   ? path.resolve(process.env.DATA_DIR)
   : path.join(SERVER_ROOT, "data");

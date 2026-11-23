@@ -11,6 +11,10 @@ import { fileURLToPath } from "node:url";
 process.env.ANIVERSE_TRUST_PROXY = "1";
 const { app, db } = await import("./setup-db.js");
 const { clearAniListCache } = await import("../src/anilist.js");
+/* Dynamic import AFTER setup-db (like anilist.js above): oauth.js pulls in
+   db.js, which reads DB_PATH at import time — a static import here would
+   open the live database instead of the temp test one. */
+const { linkOrCreateAccount } = await import("../src/oauth.js");
 
 /* The shipped frontend logic lives in a plain browser script (no module
    exports), so these tests extract its marked pure-function blocks and
@@ -2814,6 +2818,213 @@ async function runTests() {
       assert.ok(pillBlock[0].includes("color: #e5e7eb"), "the label pill text is light");
       /* The scrim stays dark in both themes (no light override lightens it). */
       assert.ok(!playerCss.includes('[data-theme="light"] .zoko-player-spinner'), "no light override must lighten the spinner scrim");
+    });
+
+    /* ======================================================================
+       OAUTH SOCIAL LOGINS (78–84, Nov 2026)
+       No provider credentials exist in the test environment — same as a
+       fresh deploy — so the disabled behaviour is tested first, then
+       Google is temporarily enabled via env vars (oauth.js reads them at
+       use time) for the live-flow tests, then the vars are removed again.
+       ====================================================================== */
+
+    // 78. Providers endpoint lists nothing when no credentials are set.
+    await test("OAuth: GET /api/auth/providers returns an empty list with no credentials", async () => {
+      const res = await fetch(`${baseUrl}/api/auth/providers`);
+      assert.equal(res.status, 200);
+      const data = await res.json();
+      assert.equal(data.ok, true);
+      assert.deepEqual(data.providers, []);
+    });
+
+    // 79. Every disabled provider's start route serves a clear error page
+    //     (503), not a redirect and not a crash.
+    await test("OAuth: disabled providers serve a clear 503 error page on /auth/<provider>", async () => {
+      for (const [id, name] of [["google", "Google"], ["discord", "Discord"], ["mal", "MyAnimeList"], ["anilist", "AniList"]]) {
+        const res = await fetch(`${baseUrl}/auth/${id}`, { redirect: "manual" });
+        assert.equal(res.status, 503, `${id} must be 503 while unconfigured`);
+        const body = await res.text();
+        assert.ok(body.includes(name), `${id} error page names the provider`);
+        assert.ok(body.includes("isn't set up yet"), `${id} error page says it is not set up`);
+        assert.ok(body.includes("Back to AniVerse"), `${id} error page links home`);
+      }
+    });
+
+    // 80. An unknown provider id falls through to the branded 404.
+    await test("OAuth: unknown provider id returns the branded 404", async () => {
+      const res = await fetch(`${baseUrl}/auth/myspace`);
+      assert.equal(res.status, 404);
+      const body = await res.text();
+      assert.ok(body.includes("drifted off the map"), "unknown provider gets the branded 404 page");
+    });
+
+    // 81. With Google credentials present (test env vars, removed after):
+    //     providers lists it, the start route redirects to Google with
+    //     PKCE, and the callback rejects incomplete/forged/denied attempts.
+    await test("OAuth: enabled Google redirects with PKCE; callback rejects bad attempts", async () => {
+      process.env.GOOGLE_CLIENT_ID = "test-google-client-id.apps.googleusercontent.com";
+      process.env.GOOGLE_CLIENT_SECRET = "test-google-secret";
+      try {
+        const prov = await fetch(`${baseUrl}/api/auth/providers`);
+        const provData = await prov.json();
+        assert.deepEqual(provData.providers, [{ id: "google", name: "Google" }]);
+
+        const start = await fetch(`${baseUrl}/auth/google`, { redirect: "manual" });
+        assert.equal(start.status, 302, "enabled provider redirects to the authorize URL");
+        const location = start.headers.get("location");
+        assert.ok(location.startsWith("https://accounts.google.com/o/oauth2/v2/auth?"), `redirect goes to Google, got: ${location}`);
+        const q = new URL(location).searchParams;
+        assert.equal(q.get("client_id"), "test-google-client-id.apps.googleusercontent.com");
+        assert.equal(q.get("redirect_uri"), "https://aniversetesting.duckdns.org/auth/google/callback");
+        assert.equal(q.get("response_type"), "code");
+        assert.ok(q.get("state"), "a state token is issued");
+        assert.ok(q.get("code_challenge"), "Google uses PKCE");
+        assert.equal(q.get("code_challenge_method"), "S256");
+
+        /* Callback with no code/state at all. */
+        const empty = await fetch(`${baseUrl}/auth/google/callback`);
+        assert.equal(empty.status, 400);
+        assert.ok((await empty.text()).includes("incomplete"));
+
+        /* Callback with a forged state (never issued). */
+        const forged = await fetch(`${baseUrl}/auth/google/callback?code=whatever&state=forged-state`);
+        assert.equal(forged.status, 400);
+        assert.ok((await forged.text()).includes("expired"));
+
+        /* Provider-reported denial. */
+        const denied = await fetch(`${baseUrl}/auth/google/callback?error=access_denied&state=x`);
+        assert.equal(denied.status, 400);
+        assert.ok((await denied.text()).includes("cancelled"));
+      } finally {
+        delete process.env.GOOGLE_CLIENT_ID;
+        delete process.env.GOOGLE_CLIENT_SECRET;
+      }
+      const provAfter = await fetch(`${baseUrl}/api/auth/providers`);
+      assert.deepEqual((await provAfter.json()).providers, [], "removing credentials disables the provider again");
+    });
+
+    // 82. Migration: users.password_hash is nullable and the linked
+    //     identities table exists with its uniqueness rule.
+    await test("OAuth: migration leaves password_hash nullable + linked_identities unique", async () => {
+      const cols = db.prepare("PRAGMA table_info(users)").all();
+      const hashCol = cols.find((c) => c.name === "password_hash");
+      assert.ok(hashCol, "users has password_hash");
+      assert.equal(Number(hashCol.notnull), 0, "password_hash must be nullable for social-only accounts");
+
+      /* A social-only row inserts fine with a NULL hash. */
+      const now = new Date().toISOString();
+      const ins = db.prepare(`
+        INSERT INTO users (email, password_hash, name, avatar_tone, created_at, updated_at)
+        VALUES (?, NULL, ?, 1, ?, ?)
+      `).run(`oauth-mig-${Date.now()}@example.com`, "Mig Test", now, now);
+      const row = db.prepare("SELECT * FROM users WHERE id = ?").get(ins.lastInsertRowid);
+      assert.equal(row.password_hash, null);
+
+      /* The identities table exists and enforces one row per identity. */
+      db.prepare(`
+        INSERT INTO linked_identities (user_id, provider, provider_user_id, created_at)
+        VALUES (?, 'google', 'mig-1', ?)
+      `).run(row.id, now);
+      assert.throws(
+        () =>
+          db.prepare(`
+            INSERT INTO linked_identities (user_id, provider, provider_user_id, created_at)
+            VALUES (?, 'google', 'mig-1', ?)
+          `).run(row.id, now),
+        /UNIQUE constraint failed/,
+        "the same provider identity cannot link twice"
+      );
+      db.prepare("DELETE FROM users WHERE id = ?").run(row.id);
+    });
+
+    // 83. Account linking: create → return → link-by-email (password
+    //     untouched) → no-email placeholder.
+    await test("OAuth: linkOrCreateAccount creates, reuses, links by email, and placeholders", async () => {
+      const stamp = Date.now();
+      /* New social user (Google, fresh email) → created, NULL hash. */
+      const u1 = linkOrCreateAccount({
+        provider: "google",
+        providerUserId: `g-${stamp}`,
+        email: `oauth-new-${stamp}@example.com`,
+        name: "OAuth New",
+      });
+      assert.ok(u1.id);
+      assert.equal(u1.email, `oauth-new-${stamp}@example.com`);
+      assert.equal(u1.password_hash, null, "social-only account has no password hash");
+      const ident1 = db.prepare("SELECT * FROM linked_identities WHERE provider = 'google' AND provider_user_id = ?").get(`g-${stamp}`);
+      assert.ok(ident1 && ident1.user_id === u1.id, "the identity row links the new user");
+
+      /* Same identity again → the SAME user, no duplicate. */
+      const u1b = linkOrCreateAccount({
+        provider: "google",
+        providerUserId: `g-${stamp}`,
+        email: `oauth-new-${stamp}@example.com`,
+        name: "OAuth New",
+      });
+      assert.equal(u1b.id, u1.id);
+      assert.equal(
+        db.prepare("SELECT COUNT(*) c FROM users WHERE email = ?").get(`oauth-new-${stamp}@example.com`).c,
+        1
+      );
+
+      /* Email match → links to the LOCAL account, password untouched. */
+      const localEmail = `oauth-local-${stamp}@example.com`;
+      const reg = await postJson("/api/auth/register", { email: localEmail, password: "password123", name: "Local User" }, "198.51.100.90");
+      assert.equal(reg.status, 201);
+      const before = db.prepare("SELECT * FROM users WHERE email = ?").get(localEmail);
+      assert.ok(before.password_hash, "local user has a hash before linking");
+      const linked = linkOrCreateAccount({
+        provider: "discord",
+        providerUserId: `d-${stamp}`,
+        email: localEmail,
+        name: "Discord Name",
+      });
+      assert.equal(linked.id, before.id, "same email = same account");
+      const after = db.prepare("SELECT * FROM users WHERE email = ?").get(localEmail);
+      assert.equal(after.password_hash, before.password_hash, "linking NEVER overwrites the local password");
+      assert.equal(after.name, "Local User", "linking does not rename the local account");
+
+      /* No-email provider (MAL) → placeholder .invalid address. */
+      const u3 = linkOrCreateAccount({ provider: "mal", providerUserId: `m-${stamp}`, email: null, name: "MAL Fan" });
+      assert.equal(u3.email, `no-email-mal-m-${stamp}@aniverse.invalid`);
+      assert.equal(u3.password_hash, null);
+
+      /* Cleanup (identities cascade with the users). */
+      db.prepare("DELETE FROM users WHERE id IN (?, ?, ?)").run(u1.id, before.id, u3.id);
+    });
+
+    // 84. A social-only account can never log in with a password, while
+    //     local login still works (the session-extraction refactor).
+    await test("OAuth: social-only accounts cannot password-login; local login still works", async () => {
+      const stamp = Date.now();
+      const social = linkOrCreateAccount({
+        provider: "anilist",
+        providerUserId: `a-${stamp}`,
+        email: null,
+        name: "AniList Fan",
+      });
+      const bad = await postJson(
+        "/api/auth/login",
+        { email: social.email, password: "anything" },
+        "198.51.100.91"
+      );
+      assert.equal(bad.status, 401, "a NULL password hash can never validate");
+
+      const email = `oauth-login-${stamp}@example.com`;
+      const reg = await postJson("/api/auth/register", { email, password: "password123", name: "Login Check" }, "198.51.100.92");
+      assert.equal(reg.status, 201);
+      const ok = await postJson("/api/auth/login", { email, password: "password123" }, "198.51.100.93");
+      assert.equal(ok.status, 200, "local login still works after the session refactor");
+      assert.ok(ok.headers.get("set-cookie"), "login still sets the session cookie");
+      const me = await fetch(`${baseUrl}/api/auth/me`, {
+        headers: { Cookie: ok.headers.get("set-cookie").split(";")[0] },
+      });
+      assert.equal((await me.json()).user.email, email, "the session cookie authenticates /api/auth/me");
+
+      db.prepare("DELETE FROM users WHERE id IN (?, ?)").run(
+        social.id,
+        db.prepare("SELECT id FROM users WHERE email = ?").get(email).id
+      );
     });
 
     console.log(`\nAll ${passed} E2E integration tests passed successfully!\n`);

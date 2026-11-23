@@ -894,11 +894,20 @@
           </div>
           <button class="btn-zoro-primary" id="btn-auth-submit" type="submit" style="width: 100%; justify-content: center; margin-top: 1rem; padding: 0.75rem;">Sign In</button>
         </form>
+        <div id="zoro-social-block" style="display: none;">
+          <div class="social-login-divider"><span>or continue with</span></div>
+          <div id="zoro-social-logins" class="social-login-list"></div>
+        </div>
         <button class="btn-demo-quick" id="btn-quick-demo" type="button">⚡ Quick Demo Login (Akihiro)</button>
       </div>
     `;
 
     document.body.appendChild(modal);
+
+    /* Social logins (Google / Discord / MAL / AniList): the server says
+       which providers are configured — unconfigured providers never render
+       a button. Fetched once per page load; the modal reuses the result. */
+    renderSocialLogins(modal.querySelector("#zoro-social-block"), modal.querySelector("#zoro-social-logins"));
 
     let activeTab = "login";
     const form = modal.querySelector("#zoro-auth-form");
@@ -986,6 +995,31 @@
       const tabBtn = modal.querySelector(`.modal-tab-btn[data-tab="${tab}"]`);
       if (tabBtn) tabBtn.click();
     }
+  }
+
+  /* Social-login buttons for the auth modal. The list comes from the
+     server (GET /api/auth/providers) and is cached for the page's life —
+     a provider with no credentials configured simply has no button. Each
+     button is a plain link to /auth/<provider> (full navigation, as OAuth
+     requires); `next` returns the user to the page they signed in from. */
+  let socialProvidersCache = null;
+
+  async function renderSocialLogins(block, list) {
+    if (!block || !list) return;
+    if (socialProvidersCache === null) {
+      const res = await api("/api/auth/providers");
+      socialProvidersCache =
+        res.ok && res.data && Array.isArray(res.data.providers) ? res.data.providers : [];
+    }
+    if (!socialProvidersCache.length) return; /* Block stays hidden. */
+    const next = encodeURIComponent(window.location.pathname + window.location.search);
+    list.innerHTML = socialProvidersCache
+      .map(
+        (p) =>
+          `<a class="btn-social btn-social-${escapeHtml(p.id)}" href="/auth/${encodeURIComponent(p.id)}?next=${next}">Continue with ${escapeHtml(p.name)}</a>`
+      )
+      .join("");
+    block.style.display = "block";
   }
 
   function updateHeaderUser() {

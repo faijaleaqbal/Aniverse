@@ -32,6 +32,7 @@ import { buildEmbedUrl, ZOKO_SOURCES, ZOKO_TRACKS } from "./zoko.js";
 import { checkDubAvailability } from "./dub-check.js";
 import { resolveAnimegg } from "./animegg.js";
 import { createRateLimiter } from "./ratelimit.js";
+import { mountOAuthRoutes } from "./oauth.js";
 import {
   AniListBusyError,
   searchAniList,
@@ -122,6 +123,21 @@ function clearSessionCookie(res) {
   ];
   if (COOKIE_SECURE) flags.push("Secure");
   res.setHeader("Set-Cookie", flags.join("; "));
+}
+
+/* One session-creation path for local AND social login: same token shape,
+   same 30-day TTL, same cookie. (Extracted from the identical blocks that
+   register/login used to carry inline.) */
+function createUserSession(req, res, userId) {
+  const now = nowIso();
+  const token = randomToken(32);
+  const expiresAt = addMs(now, SESSION_TTL_DAYS * 24 * 60 * 60 * 1000);
+  db.prepare(`
+    INSERT INTO sessions (id, user_id, expires_at, created_at, ip, user_agent)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(token, userId, expiresAt, now, req.ip || "", req.headers["user-agent"] || "");
+  setSessionCookie(res, token, expiresAt);
+  return { token, expiresAt };
 }
 
 // Authentication & Session Middleware
@@ -239,15 +255,8 @@ app.post("/api/auth/register", async (req, res, next) => {
       updated_at: now,
     };
 
-    // Create session
-    const token = randomToken(32);
-    const expiresAt = addMs(now, SESSION_TTL_DAYS * 24 * 60 * 60 * 1000);
-    db.prepare(`
-      INSERT INTO sessions (id, user_id, expires_at, created_at, ip, user_agent)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(token, user.id, expiresAt, now, req.ip || "", req.headers["user-agent"] || "");
-
-    setSessionCookie(res, token, expiresAt);
+    // Create session (same path as local login and OAuth)
+    createUserSession(req, res, user.id);
     res.status(201).json({ ok: true, user: userView(user) });
   } catch (err) {
     next(err);
@@ -293,16 +302,7 @@ app.post("/api/auth/login", async (req, res, next) => {
        mistyped, but a correct password always earns a fresh set of tries). */
     loginAccountLimiter.reset(`acct:${email}`);
 
-    const now = nowIso();
-    const token = randomToken(32);
-    const expiresAt = addMs(now, SESSION_TTL_DAYS * 24 * 60 * 60 * 1000);
-
-    db.prepare(`
-      INSERT INTO sessions (id, user_id, expires_at, created_at, ip, user_agent)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(token, user.id, expiresAt, now, req.ip || "", req.headers["user-agent"] || "");
-
-    setSessionCookie(res, token, expiresAt);
+    createUserSession(req, res, user.id);
     res.json({ ok: true, user: userView(user) });
   } catch (err) {
     next(err);
@@ -339,6 +339,13 @@ app.get("/api/auth/me", (req, res) => {
     },
   });
 });
+
+/* HiAnime-style social logins (Google / Discord / MAL / AniList):
+   GET /api/auth/providers (which are enabled), GET /auth/<provider> and
+   GET /auth/<provider>/callback. Providers without credentials stay
+   disabled and hidden. Social logins create sessions through the same
+   createUserSession as local login. */
+mountOAuthRoutes(app, { createSession: createUserSession });
 
 /* ==========================================================================
    CATALOG & TITLES ROUTES
