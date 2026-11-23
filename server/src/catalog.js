@@ -264,7 +264,7 @@ export const CATALOG = [
     oldTitle: "Corner Store Hours",
     kind: "Series",
     year: 2025,
-    episodes: 12, // SPY x FAMILY S1 (MAL 50265) = 12 (AniList); Zoko NO payload ep 13/24 (was 24 - 12 dead eps)
+    episodes: 12, // SPY x FAMILY S1 (MAL 50265) = 12 (AniList); Zoko NO payload ep 13/24 (was 24 - 12 dead eps). Cour 2 (eps 13-25) streams separately as MAL 50602 / AniList 142838 — Next Ep continues there via TITLE_CONTINUATIONS in js/zoro-aizen.js.
     runtimeMin: 24,
     genres: ["comedy", "action"],
     tone: 1,

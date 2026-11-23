@@ -2170,6 +2170,16 @@ async function runTests() {
         { action: "none" },
         "an unknown episode count must not invent a next episode"
       );
+      assert.deepEqual(
+        autoNextAction({ server: "zoko", currentEp: 12, totalEps: 12, autonext: true, continuation: { live: 142838, name: "SPY x FAMILY Cour 2" } }),
+        { action: "continue", live: 142838, name: "SPY x FAMILY Cour 2" },
+        "the last episode of a split-cour title continues into the follow-on"
+      );
+      assert.deepEqual(
+        autoNextAction({ server: "zoko", currentEp: 12, totalEps: 12, autonext: false, continuation: { live: 142838, name: "SPY x FAMILY Cour 2" } }),
+        { action: "none" },
+        "auto-next off never continues either"
+      );
 
       /* Both real end-of-episode handlers must go through the shared decision
          (the backup branch has no such path). */
@@ -2504,19 +2514,21 @@ async function runTests() {
       assert.equal((await res4.json()).available, false);
     });
 
-    // 72. The shipped frontend treats animegg as a manual-only, sub-only 4th
-    //     server: pill in watch.html, switch support, ?player hook, no
-    //     auto-switch, and no client-side stream URL.
-    await test("animegg is a manual-only sub-only 4th server in the shipped client", async () => {
+    // 72. animegg is DEAD (embed hangs on "Please wait", confirmed on a real
+    //     phone 2026-11-23): the pill is REMOVED from watch.html so no viewer
+    //     can reach a player that never plays — but the server routes and the
+    //     client-side ?player=animegg hook stay live for testing. The pill
+    //     must not come back without a working player.
+    await test("animegg pill is removed from watch.html (dead player), routes stay live", async () => {
       const src = readFileSync(ZORO_JS_PATH, "utf8");
       const html = readFileSync(fileURLToPath(new URL("../../ani-verse/watch.html", import.meta.url)), "utf8");
 
-      /* 4th server button, same pattern as the other three. */
+      /* No pill: the dead player must not be offered in the server row. */
       assert.ok(
-        html.includes('data-server="animegg"'),
-        "watch.html must carry the animegg server pill"
+        !html.includes('data-server="animegg"'),
+        "watch.html must NOT carry the animegg server pill (dead player)"
       );
-      /* switchServer + sessionStorage + ?player hook. */
+      /* The ?player hook and session handling stay (routes live for tests). */
       assert.ok(src.includes('server !== ANIMEGG_SERVER_ID'), "switchServer accepts animegg");
       assert.ok(src.includes("storedServer === ANIMEGG_SERVER_ID"), "the session choice persists");
       assert.ok(src.includes('playerHook === ANIMEGG_SERVER_ID'), "the ?player=animegg hook exists");
@@ -2544,7 +2556,31 @@ async function runTests() {
       assert.ok(src.includes("/api/animegg/"), "the client calls the server proxy route");
     });
 
-    // 73. The shared #zoko-embed-frame iframe ships UNSANDBOXED (the default
+    // 73. The watch page controls are ONE grouped card (Server / Audio /
+    //     Episode / Playback), every control keeps its id, and Spy x Family
+    //     continues into Cour 2 (the Next Ep fix for split-cour titles).
+    await test("watch controls are one grouped card; Spy x Family continues into Cour 2", async () => {
+      const src = readFileSync(ZORO_JS_PATH, "utf8");
+      const html = readFileSync(fileURLToPath(new URL("../../ani-verse/watch.html", import.meta.url)), "utf8");
+      const css = readFileSync(fileURLToPath(new URL("../../ani-verse/css/zoro-aizen.css", import.meta.url)), "utf8");
+      const playerCss = readFileSync(fileURLToPath(new URL("../../ani-verse/css/zoko-player.css", import.meta.url)), "utf8");
+
+      assert.ok(html.includes('class="watch-controls"'), "watch.html has the grouped controls card");
+      for (const id of ["zoko-server-switcher", "zoko-track-switcher", "zoko-setting-toggles", "btn-prev-ep", "btn-next-ep", "btn-theater-mode", "watch-add-list-btn"]) {
+        assert.ok(html.includes(`id="${id}"`), `watch.html keeps #${id}`);
+      }
+      /* Split-cour continuation pin (client-side; no DB change). */
+      assert.ok(src.includes("TITLE_CONTINUATIONS"), "zoro-aizen.js defines TITLE_CONTINUATIONS");
+      assert.ok(src.includes('"corner-store-hours": { live: 142838'), "Spy x Family continues into Cour 2 (AniList 142838)");
+      assert.ok(src.includes("watch.html?live=${encodeURIComponent(cont.live)}&ep=1") || src.includes("watch.html?live=${encodeURIComponent(decision.live)}&ep=1"), "continuation navigates to the follow-on watch page");
+      /* Header must fit one line at 390px: no wrapping pill labels, and the
+         compact header starts at 480px (not 420px). */
+      assert.ok(css.includes("white-space: nowrap;"), "the primary pill button never wraps its label");
+      assert.ok(playerCss.includes(".watch-controls"), "the controls card is styled");
+      assert.ok(playerCss.includes("min-height: 44px"), "controls meet the 44px tap-target minimum");
+    });
+
+    // 74. The shared #zoko-embed-frame iframe ships UNSANDBOXED (the default
     //     player is Zoko, which refuses sandboxed iframes); the per-player
     //     sandbox map in zoro-aizen.js gives Zoko null and the exact
     //     popup-blocking literal to TVplus (backup), MegaPlay and animegg.

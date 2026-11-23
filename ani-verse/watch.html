@@ -11,8 +11,8 @@
   <!-- Loaded async: a slow Google Fonts response must never block the app script or render. -->
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
   <noscript><link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet"></noscript>
-  <link rel="preload" href="css/zoro-aizen.css?v=17" as="style">
-  <link rel="preload" href="js/zoro-aizen.js?v=19" as="script">
+  <link rel="preload" href="css/zoro-aizen.css?v=18" as="style">
+  <link rel="preload" href="js/zoro-aizen.js?v=20" as="script">
   <script>
     /* Warm the API while the app script is still downloading: this removes a
        full round trip from the critical path. The app script adopts these
@@ -46,10 +46,10 @@
       }
     })();
   </script>
-  <link rel="stylesheet" href="css/zoro-aizen.css?v=17">
+  <link rel="stylesheet" href="css/zoro-aizen.css?v=18">
   <!-- Player-specific styles (spinner overlay, resume note, toasts). Without
        this sheet the spinner rendered as plain text BELOW the player. -->
-  <link rel="stylesheet" href="css/zoko-player.css?v=11">
+  <link rel="stylesheet" href="css/zoko-player.css?v=12">
 </head>
 <body>
 
@@ -214,20 +214,68 @@
           </div>
         </div>
 
-        <!-- Server switcher: Zoko stays the PRIMARY player; TVplus,
-             MegaPlay and animegg are alternates the viewer chooses (or is
-             offered when a player fails). Session-scoped choice; swaps the
-             iframe src in place. animegg is enabled only for episodes the
-             provider actually lists. -->
-        <div class="servers-bar-zoro zoko-server-bar" id="zoko-server-bar">
-          <span class="zoko-bar-label">SERVER:</span>
-          <div class="zoko-track-switcher" id="zoko-server-switcher" role="group" aria-label="Streaming server">
-            <button class="server-pill active" data-server="zoko" type="button" title="ZokoAnime — primary player (Sub / Hard-sub / Dub)">Zoko</button>
-            <button class="server-pill" data-server="backup" type="button" title="TVplus — audio &amp; subs depend on the source file; the site can't switch tracks. Press Play inside the player.">TVplus</button>
-            <button class="server-pill" data-server="megaplay" type="button" title="MegaPlay — Sub &amp; Dub, auto-play. Hard-sub isn't a MegaPlay track.">MegaPlay</button>
-            <button class="server-pill" data-server="animegg" type="button" title="animegg — sub only, SD. Manual fallback; no track switch.">animegg</button>
+        <!-- Watch controls: ONE grouped card — Server, Audio, Episode and
+             Playback. Every control keeps its id (the app script binds by
+             id); only the grouping changed (2026-11-23, user asked for one
+             clean, easy-to-use control area instead of three scattered
+             bars). The dead animegg pill was removed here: the player never
+             plays (embed hangs on "Please wait", confirmed on the user's own
+             phone) — the server routes stay live, only the pill is gone. -->
+        <section class="watch-controls" aria-label="Player controls">
+          <!-- Server: Zoko stays the PRIMARY player; TVplus and MegaPlay are
+               alternates the viewer chooses (or is offered when a player
+               fails). Session-scoped choice; swaps the iframe src in place. -->
+          <div class="watch-controls-row">
+            <span class="watch-controls-label">Server</span>
+            <div class="zoko-track-switcher" id="zoko-server-switcher" role="group" aria-label="Streaming server">
+              <button class="server-pill active" data-server="zoko" type="button" title="ZokoAnime — primary player (Sub / Hard-sub / Dub)">Zoko</button>
+              <button class="server-pill" data-server="backup" type="button" title="TVplus — audio &amp; subs depend on the source file; the site can't switch tracks. Press Play inside the player.">TVplus</button>
+              <button class="server-pill" data-server="megaplay" type="button" title="MegaPlay — Sub &amp; Dub, auto-play. Hard-sub isn't a MegaPlay track.">MegaPlay</button>
+            </div>
           </div>
-        </div>
+
+          <!-- Audio track -->
+          <div class="watch-controls-row">
+            <span class="watch-controls-label">Audio</span>
+            <div class="zoko-track-switcher" id="zoko-track-switcher" role="group" aria-label="Audio track">
+              <button class="server-pill active" data-track="sub" type="button">Sub</button>
+              <button class="server-pill" data-track="hsub" type="button">Hard-sub</button>
+              <button class="server-pill" data-track="dub" type="button">Dub</button>
+            </div>
+          </div>
+
+          <!-- Episode navigation + watchlist -->
+          <div class="watch-controls-row">
+            <span class="watch-controls-label">Episode</span>
+            <div class="watch-controls-group">
+              <button class="genre-chip-zoro" id="btn-prev-ep" type="button">‹ Prev Ep</button>
+              <button class="genre-chip-zoro" id="btn-next-ep" type="button">Next Ep ›</button>
+              <button class="genre-chip-zoro" id="btn-theater-mode" type="button" aria-pressed="false" title="Theater mode — expand the player to full width, hide the episode sidebar">⛶ Theater</button>
+              <button class="btn-zoro-primary" id="watch-add-list-btn" type="button" data-active="false">
+                + Add to List
+              </button>
+            </div>
+          </div>
+
+          <!-- Playback settings -->
+          <div class="watch-controls-row">
+            <span class="watch-controls-label">Playback</span>
+            <div class="zoko-setting-toggles" id="zoko-setting-toggles">
+              <label class="zoko-toggle">
+                <input type="checkbox" data-setting="autoplay" checked>
+                <span>Autoplay</span>
+              </label>
+              <label class="zoko-toggle">
+                <input type="checkbox" data-setting="autoskip" checked>
+                <span>Auto-skip intro/outro</span>
+              </label>
+              <label class="zoko-toggle">
+                <input type="checkbox" data-setting="autonext" checked>
+                <span>Auto-next episode</span>
+              </label>
+            </div>
+          </div>
+        </section>
 
         <!-- Failure offer / backup status notice: inline, the viewer chooses.
              Never auto-switches away from Zoko. -->
@@ -240,43 +288,6 @@
         <!-- The site control bar (-10s / +10s / fullscreen) was REMOVED: every
              control duplicated the embed's own bar (seek, fullscreen, volume).
              Keyboard shortcuts (F, Space, arrows) still work page-wide. -->
-
-        <!-- Action Bar: Add to Watchlist & Next/Prev -->
-        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
-          <button class="btn-zoro-primary" id="watch-add-list-btn" type="button" data-active="false" style="padding: 0.5rem 1.25rem;">
-            + Add to List
-          </button>
-          <div style="display: flex; gap: 0.75rem; align-items: center;">
-            <button class="genre-chip-zoro" id="btn-theater-mode" type="button" aria-pressed="false" title="Theater mode — expand the player to full width, hide the episode sidebar">⛶ Theater</button>
-            <button class="genre-chip-zoro" id="btn-prev-ep" type="button">‹ Prev Ep</button>
-            <button class="genre-chip-zoro" id="btn-next-ep" type="button">Next Ep ›</button>
-          </div>
-        </div>
-
-        <!-- ZokoAnime Track Switcher + Player Settings -->
-        <div class="servers-bar-zoro zoko-control-bar">
-          <span class="zoko-bar-label">TRACK:</span>
-          <div class="zoko-track-switcher" id="zoko-track-switcher">
-            <button class="server-pill active" data-track="sub" type="button">Sub</button>
-            <button class="server-pill" data-track="hsub" type="button">Hard-sub</button>
-            <button class="server-pill" data-track="dub" type="button">Dub</button>
-          </div>
-
-          <div class="zoko-setting-toggles" id="zoko-setting-toggles">
-            <label class="zoko-toggle">
-              <input type="checkbox" data-setting="autoplay" checked>
-              <span>Autoplay</span>
-            </label>
-            <label class="zoko-toggle">
-              <input type="checkbox" data-setting="autoskip" checked>
-              <span>Auto-skip intro/outro</span>
-            </label>
-            <label class="zoko-toggle">
-              <input type="checkbox" data-setting="autonext" checked>
-              <span>Auto-next episode</span>
-            </label>
-          </div>
-        </div>
 
         <!-- Anime Synopsis & Details Card -->
         <div style="background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 12px; padding: 1.5rem;">
@@ -385,6 +396,6 @@
     </div>
   </footer>
 
-  <script src="js/zoro-aizen.js?v=19"></script>
+  <script src="js/zoro-aizen.js?v=20"></script>
 </body>
 </html>

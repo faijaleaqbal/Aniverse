@@ -544,6 +544,9 @@ img {
   align-items: center;
   gap: 0.5rem;
   box-shadow: 0 0 16px var(--zoro-lime-glow);
+  /* A pill button must never wrap its label ("Sign" / "In" on two lines at
+     390px was the reported bug) — the header compacts around it instead. */
+  white-space: nowrap;
 }
 
 /* Live titles have no catalog slug, so the watchlist buttons (detail-add-list,
@@ -3672,7 +3675,18 @@ body.drawer-open .zoro-header {
 @media (max-width: 480px) {
   .header-left { gap: 0.6rem; }
   .header-left .zoro-brand > span { display: none; }
-  .search-wrapper { max-width: 96px; }
+  /* The compact header used to start only at 420px, so at 421–480px (the
+     common 430px Android width) the full-size header — 2rem padding, 1.5rem
+     gaps, all four icons — overflowed ~110px and the Sign In pill wrapped.
+     Compact from 480px down: one line, logo + search + theme + sign-in. */
+  .header-inner { padding: 0 0.75rem; gap: 0.5rem; }
+  .header-actions { gap: 0.35rem; }
+  .header-actions,
+  .header-left { flex-shrink: 0; }
+  #btn-replay-intro { display: none; }
+  #btn-random-anime { display: none; }
+  .btn-zoro-primary { padding: 0.4rem 0.85rem; font-size: 0.8rem; }
+  .search-wrapper { max-width: 96px; min-width: 0; }
   .search-dropdown {
     left: auto;
     right: 0;

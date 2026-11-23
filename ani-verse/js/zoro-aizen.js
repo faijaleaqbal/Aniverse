@@ -85,15 +85,25 @@
      backup and the animegg embed emit no such event, so they never reach
      here. totalEps is the title's real count (the AIRED count for a live
      title); 0 = unknown, and an unknown count must NEVER invent a next
-     episode. */
-  function autoNextAction({ server, currentEp, totalEps, autonext }) {
+     episode. `continuation` (optional) is a split-cour follow-on
+     ({ live, name }): when the last episode of THIS title ends and a
+     continuation exists, the decision is "continue" into the follow-on
+     title instead of "completed" (Spy x Family Part 1 -> Cour 2). */
+  function autoNextAction({ server, currentEp, totalEps, autonext, continuation }) {
     if (server === "backup") return { action: "none" };
     if (server === "animegg") return { action: "none" };
     if (!autonext) return { action: "none" };
     const total = Number(totalEps) || 0;
     const current = Number(currentEp) || 0;
     if (total <= 0) return { action: "none" };
-    if (current >= total) return { action: "completed" };
+    if (current >= total) {
+      /* Split-cour title: the story continues under a DIFFERENT title id,
+         so the last episode continues there instead of ending. */
+      if (continuation && continuation.live) {
+        return { action: "continue", live: continuation.live, name: continuation.name || "" };
+      }
+      return { action: "completed" };
+    }
     return { action: "next", nextEp: current + 1 };
   }
   /* __AUTONEXT_LOGIC_END__ */
@@ -3557,6 +3567,22 @@
          black spinner another time) — deliberately NO special handling. */
     };
 
+    /* Split-cour continuations: a catalog title whose later episodes stream
+       under a DIFFERENT title id. Spy x Family Part 1 (MAL 50265) is 12 eps
+       on every player — eps 13-25 are "SPY x FAMILY Cour 2" (AniList 142838,
+       MAL 50602, verified streaming on Zoko 2026-11-23). Without this pin,
+       Next Ep on ep 12 looked broken (disabled at the "last" episode) even
+       though the story continues. The continuation is a LIVE title, so Next
+       Ep / auto-next navigate to watch.html?live=<id>&ep=1. `short` is the
+       button label (the full name is too long for the episode row). */
+    const TITLE_CONTINUATIONS = {
+      "corner-store-hours": { live: 142838, name: "SPY x FAMILY Cour 2", short: "Cour 2" },
+    };
+    function titleContinuation() {
+      if (isLive) return null;
+      return (currentSlug && TITLE_CONTINUATIONS[currentSlug]) || null;
+    }
+
     function getBackupEmbedUrl(epNum, startTime, restart) {
       /* The pinned exceptions are CATALOG titles — a live title never uses
          them (it has no catalog slug). */
@@ -4531,8 +4557,13 @@
       }
       if (nextBtn) {
         const atEnd = totalEps > 0 && currentEp >= totalEps;
-        nextBtn.disabled = atEnd || totalEps === 0;
+        /* A split-cour continuation turns the dead end into a door: Next
+           stays enabled at the last episode and is labelled with where it
+           goes (Spy x Family ep 12 -> Cour 2). */
+        const cont = atEnd ? titleContinuation() : null;
+        nextBtn.disabled = (atEnd && !cont) || totalEps === 0;
         nextBtn.style.opacity = nextBtn.disabled ? "0.5" : "1";
+        nextBtn.textContent = cont ? `Next: ${cont.short || cont.name} ›` : "Next Ep ›";
       }
     }
 
@@ -5318,7 +5349,19 @@
         e.preventDefault();
         e.stopPropagation();
         const totalEps = totalEpisodes();
-        if (totalEps > 0 && currentEp < totalEps) loadEpisode(currentEp + 1);
+        if (totalEps > 0 && currentEp < totalEps) {
+          loadEpisode(currentEp + 1);
+          return;
+        }
+        /* Last episode of a split-cour title: continue into the next part.
+           The continuation is a DIFFERENT title id, so this is a full
+           navigation to its watch page — not an in-page episode swap. */
+        if (totalEps > 0 && currentEp >= totalEps) {
+          const cont = titleContinuation();
+          if (cont && cont.live) {
+            window.location.href = `watch.html?live=${encodeURIComponent(cont.live)}&ep=1`;
+          }
+        }
       });
     }
 
@@ -5573,10 +5616,14 @@
             currentEp,
             totalEps: totalEpisodes(),
             autonext: playerSettings.autonext,
+            continuation: titleContinuation(),
           });
           if (decision.action === "next") {
             showToast(`Episode finished! Auto-playing Episode ${decision.nextEp}...`);
             setTimeout(() => loadEpisode(decision.nextEp), 1500);
+          } else if (decision.action === "continue") {
+            showToast(`Part finished! Continuing to ${decision.name || "the next part"}...`);
+            setTimeout(() => { window.location.href = `watch.html?live=${encodeURIComponent(decision.live)}&ep=1`; }, 1500);
           } else if (decision.action === "completed") {
             showToast("You finished this anime!");
           }
@@ -5600,10 +5647,12 @@
 
       /* ---- animeTVplus backup embed ----------------------------------
          Docs-verified events: ready {mal, anilist, episode}, error {error,
-         available}, info (reply to an info request). There are NO time /
-         play / pause / ended events — so the backup gets no auto-next and
-         its playback position is not observable (resume-back uses the last
-         stored position). Every message carries source:"animetvplus-embed". */
+         available}, info (reply to an info request), fullscreen (the embed
+         asks the parent to drive fullscreen — handled below). There are NO
+         time / play / pause / ended events — so the backup gets no auto-next
+         and its playback position is not observable (resume-back uses the
+         last stored position). Every message carries
+         source:"animetvplus-embed". */
       if (event.origin === BACKUP_ORIGIN) {
         if (activeServer !== "backup") return;
         let bdata = event.data;
@@ -5635,6 +5684,18 @@
                     : bdata.error === "unknown_title" ? "This title isn't available on the TVplus player."
                     : "The TVplus player couldn't load this episode.";
           showBackupNote(msg);
+        } else if (bdata.type === "fullscreen" || bdata.type === "requestFullscreen" || bdata.type === "toggleFullscreen") {
+          /* Fullscreen request from the embed (the Zoko bridge pattern): the
+             embed's own button flips to "Exit Fullscreen" and asks the
+             PARENT to fullscreen the player wrapper. Before this handler
+             existed the request was silently dropped here — the label
+             flipped but the page never entered fullscreen. Same shared
+             toggleFullscreen path (with its error toast) as Zoko and the
+             F key. A bare message with no direction is a toggle. */
+          const req = bdata.request;
+          if (req === "enter" && !document.fullscreenElement) toggleFullscreen();
+          else if (req === "exit" && document.fullscreenElement) toggleFullscreen();
+          else if (req == null) toggleFullscreen();
         }
         return;
       }
@@ -5890,10 +5951,14 @@
           currentEp,
           totalEps: totalEpisodes(),
           autonext: playerSettings.autonext,
+          continuation: titleContinuation(),
         });
         if (decision.action === "next") {
           showToast(`Episode finished! Auto-playing Episode ${decision.nextEp}...`);
           setTimeout(() => loadEpisode(decision.nextEp), 1500);
+        } else if (decision.action === "continue") {
+          showToast(`Part finished! Continuing to ${decision.name || "the next part"}...`);
+          setTimeout(() => { window.location.href = `watch.html?live=${encodeURIComponent(decision.live)}&ep=1`; }, 1500);
         } else if (decision.action === "completed") {
           showToast("You finished this anime!");
         }
@@ -5995,6 +6060,17 @@
     // Fullscreenchange event: report state back to player
     document.addEventListener("fullscreenchange", () => {
       sendPlayerCommand({ type: "fullscreen", active: !!document.fullscreenElement });
+      /* TVplus: report the state back too, so its fullscreen icon stays in
+         sync with reality (the embed ignores messages it doesn't
+         understand, so this is harmless if it never asked). */
+      if (activeServer === "backup" && iframe && iframe.contentWindow) {
+        try {
+          iframe.contentWindow.postMessage(
+            { source: "aniverse", type: "fullscreen", active: !!document.fullscreenElement },
+            BACKUP_ORIGIN
+          );
+        } catch {}
+      }
     });
 
     // Watchlist Toggle (wlBtn is resolved at the top of initWatchPage)

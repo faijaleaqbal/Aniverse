@@ -260,7 +260,87 @@
 
 .zoko-track-switcher {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.4rem;
+}
+
+/* ==========================================================================
+   WATCH CONTROLS — one grouped card (2026-11-23)
+   Server / Audio / Episode / Playback in a single clearly-labelled block,
+   replacing the three scattered bars. Every control is at least 44px tall
+   (the 23 Nov audit found 30–38px targets) and every row wraps, so nothing
+   clips or overflows at 390px.
+   ========================================================================== */
+.watch-controls {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 0.25rem 1.25rem;
+}
+
+.watch-controls-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.7rem 0;
+}
+
+.watch-controls-row + .watch-controls-row {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.watch-controls-label {
+  flex: 0 0 76px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--zoro-lime);
+}
+
+.watch-controls-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* 44px minimum tap targets inside the controls card only (site-wide pills
+   and chips keep their existing sizes). */
+.watch-controls .server-pill,
+.watch-controls .genre-chip-zoro,
+.watch-controls .btn-zoro-primary {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.watch-controls .zoko-setting-toggles {
+  margin-left: 0;
+  padding-left: 0;
+  border-left: none;
+}
+
+.watch-controls .zoko-toggle {
+  min-height: 44px;
+}
+
+.watch-controls .zoko-toggle input {
+  width: 18px;
+  height: 18px;
+}
+
+@media (max-width: 480px) {
+  .watch-controls {
+    padding: 0.25rem 1rem;
+  }
+  .watch-controls-label {
+    flex-basis: 100%;
+  }
 }
 
 .zoko-setting-toggles {
