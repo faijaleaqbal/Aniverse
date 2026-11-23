@@ -2726,6 +2726,13 @@ body.drawer-open .zoro-header {
   color: var(--zoro-lime);
 }
 
+/* The detail page's Remind Me button starts `hidden` (finished titles never
+   show it) — the class's display:flex would otherwise beat the [hidden] UA
+   rule, same pattern as .btn-watch-now[hidden]. */
+.btn-remind-slot[hidden] {
+  display: none;
+}
+
 /* A reminder that is SET (fix #9): lime, same as the old inline style but
    classed so the toggle can switch it on and off. */
 .btn-remind-slot.is-set {

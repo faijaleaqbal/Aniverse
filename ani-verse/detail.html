@@ -10,8 +10,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
   <noscript><link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet"></noscript>
-  <link rel="preload" href="css/zoro-aizen.css?v=19" as="style">
-  <link rel="preload" href="js/zoro-aizen.js?v=21" as="script">
+  <link rel="preload" href="css/zoro-aizen.css?v=20" as="style">
+  <link rel="preload" href="js/zoro-aizen.js?v=22" as="script">
   <script>
     /* Warm the API while the app script is still downloading. */
     window.__zoroPrefetch = {};
@@ -45,7 +45,7 @@
     })();
   </script>
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
-  <link rel="stylesheet" href="css/zoro-aizen.css?v=19">
+  <link rel="stylesheet" href="css/zoro-aizen.css?v=20">
 </head>
 <body>
 
@@ -139,6 +139,12 @@
                 Watch Now
               </a>
               <button class="btn-zoro-primary" id="detail-add-list" type="button" data-active="false" style="padding: 0.7rem 1.5rem;">+ Add to My List</button>
+              <!-- Remind Me (live-browser defect #2, 23 Nov): hidden by
+                   default; the app shows it only for airing/upcoming titles
+                   and wires it to the same localStorage reminders as the
+                   schedule page. Label is set by JS ("Remind Me" / "✓ Alert
+                   Set") so the state is always in sync. -->
+              <button class="btn-remind-slot" id="detail-remind" type="button" hidden>Remind Me</button>
             </div>
           </div>
         </div>
@@ -210,6 +216,6 @@
     </div>
   </footer>
 
-  <script src="js/zoro-aizen.js?v=21"></script>
+  <script src="js/zoro-aizen.js?v=22"></script>
 </body>
 </html>

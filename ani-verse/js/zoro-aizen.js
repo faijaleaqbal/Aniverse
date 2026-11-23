@@ -405,6 +405,76 @@
     return map[t.status] || t.status || "Unknown";
   }
 
+  /* ========================================================================
+     REMINDERS — real, persisted, this-device only (fix #9, 23 Nov audit).
+     Shared by the schedule page AND the detail pages (live-browser defect
+     #2, 23 Nov: detail pages had no Remind Me button at all). A reminder is
+     a {slug, name} in localStorage; the schedule page lists reminded titles
+     with their weekly airing time in the "Your Reminders" section. There is
+     NO push/browser notification (no service worker) — the copy promises
+     none. Live titles key by "live-<anilistId>" (they have no catalog slug);
+     their Watch link goes to watch.html?live=<id>&ep=1.
+     ======================================================================== */
+  const LS_REMINDERS_KEY = "av_reminders";
+  const BELL_SVG = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>`;
+  function readReminders() {
+    try {
+      const raw = localStorage.getItem(LS_REMINDERS_KEY);
+      const list = raw ? JSON.parse(raw) : [];
+      return Array.isArray(list) ? list.filter((r) => r && r.slug && r.name) : [];
+    } catch { return []; }
+  }
+  function writeReminders(list) {
+    try { localStorage.setItem(LS_REMINDERS_KEY, JSON.stringify(list)); } catch {}
+  }
+  function isReminded(slug) {
+    return readReminders().some((r) => r.slug === slug);
+  }
+  /* Toggle: returns true when the reminder was ADDED, false when removed. */
+  function toggleReminder(slug, name) {
+    const list = readReminders();
+    const i = list.findIndex((r) => r.slug === slug);
+    if (i >= 0) { list.splice(i, 1); writeReminders(list); return false; }
+    list.push({ slug, name });
+    writeReminders(list);
+    return true;
+  }
+  /* Watch link for a reminder key: live keys ("live-<anilistId>") go to the
+     live watch URL, catalog slugs to the slug watch URL. */
+  function reminderWatchHref(key) {
+    if (typeof key === "string" && key.startsWith("live-")) {
+      const id = key.slice("live-".length);
+      return `watch.html?live=${encodeURIComponent(id)}&ep=1`;
+    }
+    return watchHref(key, 1);
+  }
+  /* Only titles with something still to air get a reminder: airing or
+     upcoming. Finished/cancelled titles have nothing to remind about. */
+  function titleNeedsReminder(status) {
+    return status === "RELEASING" || status === "NOT_YET_RELEASED";
+  }
+  /* Wire the detail-page Remind Me button (shared by catalog + live detail
+     pages): shows it, paints the current state, toggles on click. The
+     button starts `hidden` in the markup and stays hidden for finished
+     titles — the caller decides whether to call this at all. */
+  function wireDetailRemindButton(btn, key, name) {
+    if (!btn) return;
+    const paint = () => {
+      const set = isReminded(key);
+      btn.classList.toggle("is-set", set);
+      btn.innerHTML = set ? "✓ Alert Set" : `${BELL_SVG} Remind Me`;
+    };
+    btn.hidden = false;
+    paint();
+    btn.addEventListener("click", () => {
+      const added = toggleReminder(key, name);
+      paint();
+      showToast(added
+        ? `Reminder saved for ${name} — see Your Reminders on the Schedule page.`
+        : `Reminder removed for ${name}`);
+    });
+  }
+
   /* "2 hours ago" / "3 days ago" for the Latest Episodes rail. */
   function timeSinceLabel(unixSeconds) {
     const ts = Number(unixSeconds);
@@ -3663,13 +3733,35 @@
              Zoko-side loading screen and played fine — ready arrived in
              under a second). Elapsed time alone never fires while the
              player is alive.
+       3. LOAD-START NO-PLAYBACK DEADLINE (23 Nov, live-browser defect #1):
+          the 30s ready-without-playback backstop is armed ONLY in the
+          `ready` handler — but a 404ing player (Doraemon) serves a static
+          error page with NO scripts, so `ready` never fires and that timer
+          never starts. The 45s no-ready timer above SHOULD have caught it,
+          but the live browser still saw the spinner minutes later (the
+          exact mechanism could not be reproduced from the VM). So a third
+          timer is armed when the load STARTS (in armZokoFailureDetection,
+          called from loadEpisode right after the src assignment): if no
+          playback evidence (play / first time event with a real position)
+          arrives within 45s of the src assignment, the spinner hides and
+          the fallback offer shows — ready or not. `ready` must NEVER retire
+          this deadline; only playback evidence, an error, or a teardown
+          does. 45s matches the no-ready threshold; a slow-but-real start
+          (Paper Cranes class) self-corrects when playback begins — the
+          play/time handlers withdraw the stale offer.
        ------------------------------------------------------------------ */
     const ZOKO_NO_READY_TIMEOUT_MS = 45000;
     /* Backstop for ready-without-playback (fix #1, 23 Nov audit): the embed
        reported `ready` but never plays or errors (Doraemon). `ready` clears
        every other timer, so without this the spinner stays forever. 30s: a
-       healthy embed starts within seconds. */
+       healthy embed starts within seconds. Armed ONCE per load: a retrying
+       embed that fires `ready` repeatedly must not keep resetting the
+       window (that was a second way the spinner could stick forever). */
     const ZOKO_NO_PLAY_AFTER_READY_MS = 30000;
+    /* Load-start no-playback deadline (live-browser defect #1, 23 Nov):
+       armed in armZokoFailureDetection — i.e. at load start, not on ready.
+       Fires only on NO playback evidence within 45s of the src assignment. */
+    const ZOKO_NO_PLAYBACK_DEADLINE_MS = 45000;
     const ZOKO_PROBE_ABORT_MS = 20000;
     const BACKUP_NO_READY_TIMEOUT_MS = 45000;
     /* MegaPlay emits no reliable pre-play signal; a dead file (the 410 page)
@@ -3680,6 +3772,8 @@
     let loadToken = 0;
     let zokoFailTimer = null;
     let zokoNoPlayTimer = null; // backstop: ready fired but playback never started
+    let zokoNoPlaybackTimer = null; // load-start deadline: no playback evidence at all
+    let playbackEvidenceForLoad = false; // play / first time event with cur > 0
     let backupFailTimer = null;
     let megaplayFailTimer = null;
     let fallbackOfferVisible = false;
@@ -3707,6 +3801,7 @@
     function clearPlayerTimersAndProbes() {
       if (zokoFailTimer) { clearTimeout(zokoFailTimer); zokoFailTimer = null; }
       if (zokoNoPlayTimer) { clearTimeout(zokoNoPlayTimer); zokoNoPlayTimer = null; }
+      if (zokoNoPlaybackTimer) { clearTimeout(zokoNoPlaybackTimer); zokoNoPlaybackTimer = null; }
       if (backupFailTimer) { clearTimeout(backupFailTimer); backupFailTimer = null; }
       if (megaplayFailTimer) { clearTimeout(megaplayFailTimer); megaplayFailTimer = null; }
       if (animeggFailTimer) { clearTimeout(animeggFailTimer); animeggFailTimer = null; }
@@ -3890,6 +3985,24 @@
         if (coverOverlay) coverOverlay.style.display = "none";
         showFallbackOffer();
       }, ZOKO_NO_READY_TIMEOUT_MS);
+      /* Load-start no-playback deadline (live-browser defect #1): armed
+         HERE — at load start, not on ready — so a player that emits nothing
+         at all (Doraemon's static 404 page: no scripts, no ready, no error)
+         still gets a spinner-hide + fallback offer. The guard deliberately
+         does NOT check playerReady: `ready` must never retire this
+         deadline — only playback evidence, an error, or a teardown does.
+         If the 30s ready-without-play timer already fired, this is a no-op
+         re-render of the same offer (harmless). */
+      if (zokoNoPlaybackTimer) clearTimeout(zokoNoPlaybackTimer);
+      zokoNoPlaybackTimer = setTimeout(() => {
+        zokoNoPlaybackTimer = null;
+        if (token !== loadToken || activeServer !== "zoko" || playbackEvidenceForLoad) return;
+        markPlayerSettled();
+        if (zokoNoPlayTimer) { clearTimeout(zokoNoPlayTimer); zokoNoPlayTimer = null; }
+        if (spinner) spinner.hidden = true;
+        if (coverOverlay) coverOverlay.style.display = "none";
+        showFallbackOffer();
+      }, ZOKO_NO_PLAYBACK_DEADLINE_MS);
       /* Reachability probe of the exact embed URL (see detection notes).
          The previous switch's probe is aborted first: probes must never
          stack up across switches. */
@@ -4702,6 +4815,7 @@
       resumeNoteShownForLoad = false;
       resumeTimeForLoad = 0;
       loadStartedAt = Date.now();
+      playbackEvidenceForLoad = false;
       skippedThisLoad = false;
       seekCommandThisLoad = false;
       lastZokoErrorAt = 0;
@@ -5771,17 +5885,21 @@
            time event arrives within 30s, the embed is up but the stream is
            not — hide the spinner and offer the fallback instead of sitting
            on "Loading stream…" forever. Cleared on play, first time event,
-           error, and every teardown. */
-        if (zokoNoPlayTimer) clearTimeout(zokoNoPlayTimer);
-        const readyToken = loadToken;
-        zokoNoPlayTimer = setTimeout(() => {
-          zokoNoPlayTimer = null;
-          if (readyToken !== loadToken || activeServer !== "zoko") return;
-          markPlayerSettled();
-          if (spinner) spinner.hidden = true;
-          if (coverOverlay) coverOverlay.style.display = "none";
-          showFallbackOffer();
-        }, ZOKO_NO_PLAY_AFTER_READY_MS);
+           error, and every teardown. Armed ONCE per load: a retrying embed
+           that fires `ready` repeatedly must not keep resetting the window
+           (a second way the spinner could stick forever). */
+        if (!zokoNoPlayTimer) {
+          const readyToken = loadToken;
+          zokoNoPlayTimer = setTimeout(() => {
+            zokoNoPlayTimer = null;
+            if (readyToken !== loadToken || activeServer !== "zoko") return;
+            markPlayerSettled();
+            if (zokoNoPlaybackTimer) { clearTimeout(zokoNoPlaybackTimer); zokoNoPlaybackTimer = null; }
+            if (spinner) spinner.hidden = true;
+            if (coverOverlay) coverOverlay.style.display = "none";
+            showFallbackOffer();
+          }, ZOKO_NO_PLAY_AFTER_READY_MS);
+        }
         /* "ready" means the player chrome is up — NOT that the stream is
            playing. Keep the loading overlay until playback actually starts
            (play / first time event) so the embed's placeholder duration is
@@ -5797,8 +5915,11 @@
       if (data.type === "play") {
         if (!eventIsForCurrentLoad) return;
         markPlayerSettled();
-        /* Playback started — retire the ready-without-playback backstop. */
+        /* Playback started — retire the ready-without-playback backstop AND
+           the load-start no-playback deadline. */
+        playbackEvidenceForLoad = true;
         if (zokoNoPlayTimer) { clearTimeout(zokoNoPlayTimer); zokoNoPlayTimer = null; }
+        if (zokoNoPlaybackTimer) { clearTimeout(zokoNoPlaybackTimer); zokoNoPlaybackTimer = null; }
         isPaused = false;
         if (playPauseBtn) playPauseBtn.textContent = "❚❚";
         /* Playback has actually started: the stream (and its real duration)
@@ -5898,8 +6019,11 @@
            the loading overlay AND the loading poster are done. */
         if (cur > 0) {
           /* First time event with a real position — retire the
-             ready-without-playback backstop. */
+             ready-without-playback backstop AND the load-start
+             no-playback deadline. */
+          playbackEvidenceForLoad = true;
           if (zokoNoPlayTimer) { clearTimeout(zokoNoPlayTimer); zokoNoPlayTimer = null; }
+          if (zokoNoPlaybackTimer) { clearTimeout(zokoNoPlaybackTimer); zokoNoPlaybackTimer = null; }
           if (spinner) spinner.hidden = true;
           if (coverOverlay) coverOverlay.style.display = "none";
           /* Sustained playback after an error = genuine recovery (see the
@@ -5957,8 +6081,10 @@
       if (data.type === "error") {
         markPlayerSettled();
         /* An error is a definitive answer — retire the
-           ready-without-playback backstop. */
+           ready-without-playback backstop AND the load-start
+           no-playback deadline. */
         if (zokoNoPlayTimer) { clearTimeout(zokoNoPlayTimer); zokoNoPlayTimer = null; }
+        if (zokoNoPlaybackTimer) { clearTimeout(zokoNoPlaybackTimer); zokoNoPlaybackTimer = null; }
         /* Errors are always surfaced — including failures while the new
            player is still initialising (before `ready` flips playerEp). */
         if (spinner) spinner.hidden = true;
@@ -6459,6 +6585,14 @@
     const listBtn = document.getElementById("detail-add-list");
     if (listBtn) listBtn.hidden = true;
 
+    /* Remind Me (live-browser defect #2): airing + upcoming live titles get
+       the same persisted reminder as the schedule page (keyed live-<id>,
+       listed in the schedule page's "Your Reminders"). Finished titles
+       have nothing to remind about, so the button stays hidden for them. */
+    if (titleNeedsReminder(t.status)) {
+      wireDetailRemindButton(document.getElementById("detail-remind"), `live-${liveId}`, t.name);
+    }
+
     /* Episode list: only the AIRED episodes. */
     const epList = document.getElementById("detail-episode-list");
     if (epList) {
@@ -6727,6 +6861,13 @@
       setListBtn(r.ok && r.data && r.data.userState ? r.data.userState.inWatchlist : false);
     });
 
+    /* Remind Me (live-browser defect #2): the same persisted reminder as
+       the schedule page, keyed by slug. Only airing/upcoming titles get
+       it — finished catalog titles keep the button hidden. */
+    if (titleNeedsReminder(t.status)) {
+      wireDetailRemindButton(document.getElementById("detail-remind"), slug, t.name);
+    }
+
     // Episode list (all episodes, each links to the watch page).
     const epList = document.getElementById("detail-episode-list");
     if (epList) {
@@ -6852,37 +6993,10 @@
     const nowLocal = new Date();
     const currentDayName = dayNames[nowLocal.getDay()];
 
-    /* REMINDERS — real, persisted, this-device only (fix #9, 23 Nov audit).
-       The old button only changed its own label + toast while the page copy
-       promised "in-app notifications" — nothing was stored. A reminder is
-       now a {slug, name} in localStorage, and the schedule page lists
-       reminded titles with their weekly airing time in the "Your Reminders"
-       section above the timeline. There is NO push/browser notification
-       (no service worker) — the copy promises none. */
-    const LS_REMINDERS_KEY = "av_reminders";
-    const BELL_SVG = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>`;
-    function readReminders() {
-      try {
-        const raw = localStorage.getItem(LS_REMINDERS_KEY);
-        const list = raw ? JSON.parse(raw) : [];
-        return Array.isArray(list) ? list.filter((r) => r && r.slug && r.name) : [];
-      } catch { return []; }
-    }
-    function writeReminders(list) {
-      try { localStorage.setItem(LS_REMINDERS_KEY, JSON.stringify(list)); } catch {}
-    }
-    function isReminded(slug) {
-      return readReminders().some((r) => r.slug === slug);
-    }
-    /* Toggle: returns true when the reminder was ADDED, false when removed. */
-    function toggleReminder(slug, name) {
-      const list = readReminders();
-      const i = list.findIndex((r) => r.slug === slug);
-      if (i >= 0) { list.splice(i, 1); writeReminders(list); return false; }
-      list.push({ slug, name });
-      writeReminders(list);
-      return true;
-    }
+    /* REMINDERS — the store helpers (readReminders / writeReminders /
+       isReminded / toggleReminder) and BELL_SVG live in the SHARED section
+       near liveStatusLabel: the detail pages use the same store (defect #2,
+       23 Nov). This page owns only the schedule-specific rendering below. */
     function activeDayKey() {
       const active = document.querySelector(".schedule-day-tab.active");
       return (active && active.dataset.day) || currentDayName;
@@ -6905,7 +7019,7 @@
         return `<div class="reminder-row">
           <span class="reminder-name">${escapeHtml(r.name)}</span>
           <span class="reminder-when">${when}</span>
-          <a class="btn-zoro-primary reminder-watch" href="${watchHref(r.slug, 1)}">Watch</a>
+          <a class="btn-zoro-primary reminder-watch" href="${reminderWatchHref(r.slug)}">Watch</a>
           <button class="reminder-remove" type="button" data-slug="${escapeHtml(r.slug)}" aria-label="Remove reminder for ${escapeHtml(r.name)}">✕</button>
         </div>`;
       }).join("");

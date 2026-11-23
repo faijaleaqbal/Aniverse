@@ -413,8 +413,8 @@ async function runTests() {
 
     // 4d. Versioned assets are immutable, unversioned ones revalidate
     // (23 Nov audit fix #5 — exactly ONE Cache-Control header each).
-    await test("GET /js/zoro-aizen.js?v=21 serves a single immutable Cache-Control", async () => {
-      const res = await fetch(`${baseUrl}/js/zoro-aizen.js?v=21`);
+    await test("GET /js/zoro-aizen.js?v=22 serves a single immutable Cache-Control", async () => {
+      const res = await fetch(`${baseUrl}/js/zoro-aizen.js?v=22`);
       assert.equal(res.status, 200);
       const cc = res.headers.get("cache-control");
       assert.ok(cc && cc.includes("immutable"), `expected immutable, got: ${cc}`);
@@ -2700,6 +2700,120 @@ async function runTests() {
       assert.ok(rebuildSrc, "zoro-aizen.js must define rebuildIframe()");
       assert.ok(/PLAYER_IFRAME_SANDBOX_BY_SERVER/.test(rebuildSrc[0]), "rebuildIframe must look up the sandbox per activeServer");
       assert.ok(/activeServer/.test(rebuildSrc[0]), "rebuildIframe must read the current activeServer");
+    });
+
+    // 75. Zoko no-playback deadline (live-browser defect #1, 23 Nov): the 30s
+    //     ready-without-play timer is armed ONLY in the `ready` handler, but a
+    //     404ing player (Doraemon) serves a static page with no scripts — `ready`
+    //     never fires, so the spinner stuck forever. A deadline timer is now
+    //     armed at LOAD START (in armZokoFailureDetection, called from
+    //     loadEpisode right after the src assignment) and fires on NO playback
+    //     evidence within 45s — ready or not. `ready` must never retire it;
+    //     only playback evidence, an error, or a teardown does.
+    await test("Zoko no-playback deadline is armed at load start, never retired by ready", async () => {
+      const src = readFileSync(ZORO_JS_PATH, "utf8");
+
+      /* The deadline constant + timer + evidence flag exist. */
+      assert.ok(src.includes("ZOKO_NO_PLAYBACK_DEADLINE_MS"), "the load-start deadline constant exists");
+      assert.ok(src.includes("let zokoNoPlaybackTimer"), "the deadline timer variable exists");
+      assert.ok(src.includes("let playbackEvidenceForLoad"), "the playback-evidence flag exists");
+
+      /* Armed inside armZokoFailureDetection — the load-start arming point. */
+      const armSrc = src.match(/function armZokoFailureDetection\(streamUrl, token\)\s*\{[\s\S]*?\n    \}\n/);
+      assert.ok(armSrc, "zoro-aizen.js must define armZokoFailureDetection(streamUrl, token)");
+      assert.ok(armSrc[0].includes("zokoNoPlaybackTimer = setTimeout"), "armZokoFailureDetection must arm the no-playback deadline");
+      assert.ok(armSrc[0].includes("ZOKO_NO_PLAYBACK_DEADLINE_MS"), "the deadline uses its own timeout constant");
+      /* The deadline guard must NOT check playerReady — that was the hole.
+         Scope the check to the deadline callback itself (the reachability
+         probe below it legitimately checks playerReady — a ready player
+         moots a network probe). */
+      const deadlineStart = armSrc[0].indexOf("zokoNoPlaybackTimer = setTimeout");
+      const deadlineEnd = armSrc[0].indexOf("}, ZOKO_NO_PLAYBACK_DEADLINE_MS);", deadlineStart);
+      assert.ok(deadlineStart >= 0 && deadlineEnd > deadlineStart, "the deadline timer must be armed with its own timeout");
+      const deadlineBlock = armSrc[0].slice(deadlineStart, deadlineEnd);
+      assert.ok(deadlineBlock.includes("playbackEvidenceForLoad"), "the deadline fires only without playback evidence");
+      assert.ok(!deadlineBlock.includes("playerReady"), "the deadline guard must NOT check playerReady (ready must never retire it)");
+
+      /* loadEpisode arms detection on every load path (initial load, server
+         switch, episode switch all flow through loadEpisode). */
+      assert.ok(src.includes("armZokoFailureDetection(streamUrl, token)"), "loadEpisode arms Zoko failure detection");
+      /* Playback evidence is reset per load and set on play / first time. */
+      assert.ok(src.includes("playbackEvidenceForLoad = false"), "loadEpisode resets the playback-evidence flag per load");
+      assert.equal((src.match(/playbackEvidenceForLoad = true/g) || []).length, 2, "play AND first time event set playback evidence");
+
+      /* The ready handler arms the 30s timer ONCE per load (a retrying embed
+         firing ready repeatedly must not keep resetting the window), and
+         ready itself must not touch the deadline. */
+      const readyBlock = src.match(/if \(data\.type === "ready"\) \{[\s\S]*?\/\/ Event: play/);
+      assert.ok(readyBlock, "the Zoko ready handler must exist");
+      assert.ok(readyBlock[0].includes("if (!zokoNoPlayTimer)"), "the ready handler arms the 30s timer only if not already armed");
+      const readyHead = readyBlock[0].slice(0, readyBlock[0].indexOf("if (!zokoNoPlayTimer)"));
+      assert.ok(!readyHead.includes("zokoNoPlaybackTimer"), "ready itself must not touch the load-start deadline");
+
+      /* Teardown clears the deadline like every other player timer. */
+      const clearSrc = src.match(/function clearPlayerTimersAndProbes\(\)\s*\{[\s\S]*?\n    \}/);
+      assert.ok(clearSrc && clearSrc[0].includes("zokoNoPlaybackTimer"), "clearPlayerTimersAndProbes must clear the deadline timer");
+    });
+
+    // 76. Remind Me on detail pages (live-browser defect #2, 23 Nov): the flow
+    //     worked from the Schedule page, but detail pages had no button at all.
+    //     Airing + upcoming titles (catalog AND live) now get the same
+    //     persisted reminder, keyed by slug or live-<anilistId>; finished
+    //     titles keep the button hidden.
+    await test("detail pages offer Remind Me for airing/upcoming titles (same store as schedule)", async () => {
+      const src = readFileSync(ZORO_JS_PATH, "utf8");
+      const html = readFileSync(fileURLToPath(new URL("../../ani-verse/detail.html", import.meta.url)), "utf8");
+      const css = readFileSync(fileURLToPath(new URL("../../ani-verse/css/zoro-aizen.css", import.meta.url)), "utf8");
+
+      /* The button exists in the detail actions, hidden by default. */
+      assert.ok(html.includes('id="detail-remind"'), "detail.html has the Remind Me button");
+      assert.ok(html.includes('class="btn-remind-slot" id="detail-remind"'), "the detail Remind Me button reuses the schedule button style");
+      /* The class's display:flex would beat [hidden] without this rule. */
+      assert.ok(css.includes(".btn-remind-slot[hidden]"), "the remind button's [hidden] state is enforced in CSS");
+
+      /* One shared store: the helpers are defined once (top-level), not once
+         per page — schedule and detail pages share av_reminders. */
+      for (const decl of ["function readReminders(", "function writeReminders(", "function isReminded(", "function toggleReminder("]) {
+        assert.equal(src.split(decl).length - 1, 1, `${decl} must be defined exactly once (shared store)`);
+      }
+      /* Live titles key by live-<id>; their Watch link is a live URL. */
+      assert.ok(src.includes("function reminderWatchHref"), "reminderWatchHref builds the right Watch link per key type");
+      assert.ok(src.includes('key.startsWith("live-")'), "live reminder keys are detected");
+      assert.ok(src.includes("watch.html?live=${encodeURIComponent(id)}&ep=1"), "a live reminder's Watch link is a live URL");
+      assert.ok(src.includes("reminderWatchHref(r.slug)"), "Your Reminders uses reminderWatchHref for the Watch link");
+
+      /* Both detail init functions wire the button, gated on airing/upcoming. */
+      assert.ok(src.includes("function titleNeedsReminder"), "the airing/upcoming gate exists");
+      assert.ok(src.includes('status === "RELEASING" || status === "NOT_YET_RELEASED"'), "only airing/upcoming titles get a reminder");
+      assert.ok(src.includes('wireDetailRemindButton(document.getElementById("detail-remind"), `live-${liveId}`, t.name)'), "live detail pages wire Remind Me keyed live-<id>");
+      assert.ok(src.includes('wireDetailRemindButton(document.getElementById("detail-remind"), slug, t.name)'), "catalog detail pages wire Remind Me keyed by slug");
+      /* State sync: the button paints ✓ Alert Set when a reminder exists. */
+      assert.ok(src.includes('btn.innerHTML = set ? "✓ Alert Set"'), "the detail button shows ✓ Alert Set when a reminder exists");
+    });
+
+    // 77. Player loading notice readable in both themes (live-browser defect
+    //     #3, 23 Nov): light mode redefines --text-sub to dark grey while the
+    //     spinner scrim stays dark — "Loading stream…" was dark-on-dark. The
+    //     spinner text is now a fixed light colour and the label is a solid
+    //     dark pill, so it reads in both themes whatever poster blurs through.
+    await test("player loading notice is readable in both themes (fixed light text + solid pill)", async () => {
+      const playerCss = readFileSync(fileURLToPath(new URL("../../ani-verse/css/zoko-player.css", import.meta.url)), "utf8");
+
+      /* The spinner's own colour must NOT follow the theme variable.
+         (Strip comments first — the rule's own comment names --text-sub
+         while explaining why the rule does NOT use it.) */
+      const spinnerBlock = playerCss.match(/\.zoko-player-spinner \{[^}]*\}/);
+      assert.ok(spinnerBlock, "zoko-player.css must define .zoko-player-spinner");
+      const spinnerDecls = spinnerBlock[0].replace(/\/\*[\s\S]*?\*\//g, "");
+      assert.ok(!spinnerDecls.includes("var(--text-sub)"), "the spinner text must not use the theme's --text-sub (dark in light mode)");
+      assert.ok(spinnerDecls.includes("color: #e5e7eb"), "the spinner text is a fixed light colour in both themes");
+      /* The label is a solid dark pill with light text. */
+      const pillBlock = playerCss.match(/\.zoko-player-spinner span \{[^}]*\}/);
+      assert.ok(pillBlock, "the spinner label must have its own solid-pill rule");
+      assert.ok(pillBlock[0].includes("background: rgba(17, 20, 28, 0.94)"), "the label pill is solid dark");
+      assert.ok(pillBlock[0].includes("color: #e5e7eb"), "the label pill text is light");
+      /* The scrim stays dark in both themes (no light override lightens it). */
+      assert.ok(!playerCss.includes('[data-theme="light"] .zoko-player-spinner'), "no light override must lighten the spinner scrim");
     });
 
     console.log(`\nAll ${passed} E2E integration tests passed successfully!\n`);

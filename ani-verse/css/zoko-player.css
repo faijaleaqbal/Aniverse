@@ -39,7 +39,21 @@
   font-family: var(--font-mono);
   font-size: 0.8rem;
   letter-spacing: 0.06em;
-  color: var(--text-sub, #b9bdc9);
+  /* Fixed light text, NOT var(--text-sub): the scrim is dark in BOTH themes,
+     but light mode redefines --text-sub to dark grey (#4b5563) — that was
+     the dark-on-dark unreadable "Loading stream…" (live-browser defect #3).
+     The ring is lime in both themes, so only the text needed pinning. */
+  color: #e5e7eb;
+}
+
+/* The label is a solid dark pill with light text, so it stays readable
+   whatever poster art blurs through the scrim — in both themes. */
+.zoko-player-spinner span {
+  background: rgba(17, 20, 28, 0.94);
+  color: #e5e7eb;
+  padding: 0.45rem 1.1rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
 }
 
 .zoko-player-spinner[hidden] {
