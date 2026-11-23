@@ -441,11 +441,11 @@ async function runTests() {
       });
     }
 
-    await test("GET /home footer links to all six info pages", async () => {
+    await test("GET /home footer links to all six info pages + Discord", async () => {
       const res = await fetch(`${baseUrl}/home`);
       assert.equal(res.status, 200);
       const body = await res.text();
-      for (const href of ["/faq", "/about", "/privacy", "/terms", "/dmca", "/contact"]) {
+      for (const href of ["/faq", "/about", "/privacy", "/terms", "/dmca", "/contact", "https://discord.com/invite/48yKxyar5g"]) {
         assert.ok(body.includes(`href="${href}"`), `/home footer missing link ${href}`);
       }
     });
