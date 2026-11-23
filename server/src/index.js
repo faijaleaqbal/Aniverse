@@ -636,7 +636,7 @@ function busyResponse(res) {
 }
 
 /* GET /api/search?q=<query>&page=<n>
-   LOCAL catalog matches first ("On Aniverse"), AniList results below
+   LOCAL catalog matches first ("On AniFlick"), AniList results below
    ("More results"). An AniList result that IS a catalog title (same MAL id)
    is dropped from the LIVE list (never a duplicate live row) but still
    appears in the results grid, marked with its catalog slug — so a search
@@ -661,7 +661,7 @@ app.get("/api/search", async (req, res, next) => {
 
     /* Catalog entries for this query: the text matches, PLUS any catalog
        title that the live results revealed (same MAL id) — that title is
-       shown once, under "On Aniverse", and dropped from the live list.
+       shown once, under "On AniFlick", and dropped from the live list.
        The twin check runs over the WHOLE snapshot, so a catalog title is
        never shown twice and never appears on two different pages. */
     const localRows = localSearchRows(q);
@@ -697,7 +697,7 @@ app.get("/api/search", async (req, res, next) => {
     const start = (safePage - 1) * SEARCH_PAGE_SIZE;
     const results = allResults.slice(start, start + SEARCH_PAGE_SIZE);
 
-    /* The curated shelf ("On Aniverse") belongs to the FIRST page only —
+    /* The curated shelf ("On AniFlick") belongs to the FIRST page only —
        repeating it on every page would show the same titles twice. */
     const local = safePage === 1 ? localRows.slice(0, 12).map((row) => withDubCount(titleView(row))) : [];
 
@@ -955,7 +955,7 @@ app.get("/api/cover", async (req, res, next) => {
     try {
       upstream = await fetch(target, {
         signal: ctl.signal,
-        headers: { Accept: "image/*", "User-Agent": "AniVerse/1.0 (poster proxy)" },
+        headers: { Accept: "image/*", "User-Agent": "AniFlick/1.0 (poster proxy)" },
       });
     } catch {
       return res.status(502).json({ ok: false, error: "cover_unavailable" });
@@ -1405,7 +1405,7 @@ app.get("/api/health", (req, res) => {
   const episodeCount = db.prepare("SELECT COUNT(*) as c FROM episodes").get().c;
   res.json({
     ok: true,
-    app: "Ani Verse API",
+    app: "AniFlick API",
     status: "healthy",
     titleCount,
     episodeCount,
@@ -1536,7 +1536,7 @@ app.use((err, req, res, next) => {
 // Start Server
 if (process.argv[1] && process.argv[1].endsWith("index.js")) {
   app.listen(PORT, HOST, () => {
-    console.log(`Ani Verse Server running at http://${HOST}:${PORT}`);
+    console.log(`AniFlick Server running at http://${HOST}:${PORT}`);
     console.log(`Serving frontend from: ${SITE_ROOT}`);
   });
 }

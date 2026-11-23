@@ -52,7 +52,7 @@ async function fetchWithTimeout(url, as = "text") {
            XHR). Without it those dubs stayed "unknown" and the DUB badge
            under-counted a fully dubbed title. */
         Origin: ZOKO_EMBED_ORIGIN,
-        "User-Agent": "Mozilla/5.0 (AniVerse dub-check)",
+        "User-Agent": "Mozilla/5.0 (AniFlick dub-check)",
         Accept: as === "text" ? "text/html,*/*" : "*/*",
       },
     });

@@ -1,4 +1,4 @@
-# Ani Verse (Zoro UI × Aizen Animation Hybrid) ⚡
+# AniFlick (Zoro UI × Aizen Animation Hybrid) ⚡
 
 A high-performance anime streaming web application fusing **Zoro.to's iconic layout and dark aesthetic** with **Aizen-Verse's cinematic motion and cybernetic animation design**. Powered strictly and exclusively by the **ZokoAnime 1080p Embed Player**.
 
@@ -192,7 +192,7 @@ This enrichment is only for the running app — the test suite does not depend o
 ---
 
 ## 👤 Demo User Account
-- **Email**: `demo@aniverse.io`
+- **Email**: `demo@aniflick.org`
 - **Password**: `password123`
 *(Or click "Quick Fill Demo Account" inside the Sign In modal).*
 
@@ -200,7 +200,7 @@ This enrichment is only for the running app — the test suite does not depend o
 
 ## 🚢 Production Notes
 
-Ani Verse is a **personal / demo project**. The video players are **unofficial
+AniFlick is a **personal / demo project**. The video players are **unofficial
 third-party embeds** (ZokoAnime, animeTVplus, MegaPlay); the site stores no
 video files and makes no claim about them. Titles, posters and episode names
 come from AniList; the site is not affiliated with AniList or with any player
@@ -233,7 +233,7 @@ npm start             # http://127.0.0.1:4000
 ### systemd unit (sketch)
 ```ini
 [Unit]
-Description=Ani Verse API
+Description=AniFlick API
 After=network.target
 
 [Service]

@@ -1,5 +1,5 @@
 /**
- * Ani Verse — per-title DUB truth.
+ * AniFlick — per-title DUB truth.
  *
  * Probes EVERY seeded episode of every catalog title with the same probe the
  * watch page uses (src/dub-check.js: sub vs dub payload -> variant playlists

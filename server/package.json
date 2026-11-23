@@ -2,7 +2,7 @@
   "name": "aniverse-server",
   "version": "1.0.0",
   "private": true,
-  "description": "Ani Verse API: accounts, sessions, my list, watch progress and history.",
+  "description": "AniFlick API: accounts, sessions, my list, watch progress and history.",
   "type": "module",
   "main": "src/index.js",
   "engines": {

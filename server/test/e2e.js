@@ -274,7 +274,7 @@ function postJson(path, body, ip) {
   });
 }
 
-console.log("=== Running Ani Verse API & Zoko E2E Integration Tests ===");
+console.log("=== Running AniFlick API & Zoko E2E Integration Tests ===");
 
 let passed = 0;
 let server = null;
@@ -418,19 +418,19 @@ async function runTests() {
     // 4c2. Named page routes (23 Nov): every clean URL serves its own page.
     // Distinctive string per page is its <title> (home = index.html's).
     const NAMED_PAGE_CHECKS = [
-      ["/home", "Ani Verse - Watch Anime Online Free with Zoro UI & Aizen Motion"],
-      ["/browse", "Browse Anime - Ani Verse (Zoro UI × Aizen Motion)"],
-      ["/watch", "Watch Anime - Ani Verse (Zoro UI × Aizen Engine)"],
-      ["/detail", "Anime Details - Ani Verse (Zoro UI × Aizen Motion)"],
-      ["/schedule", "Broadcast Schedule - Ani Verse (Zoro UI × Aizen Motion)"],
-      ["/genres", "Anime Genres - Ani Verse (Zoro UI × Aizen Motion)"],
-      ["/az-list", "A-Z Anime List - Ani Verse (Zoro UI × Aizen Motion)"],
-      ["/faq", "Frequently Asked Questions | AniVerse"],
-      ["/privacy", "Privacy Policy | AniVerse"],
-      ["/terms", "Terms of Service | AniVerse"],
-      ["/dmca", "DMCA & Copyright | AniVerse"],
-      ["/about", "About AniVerse | AniVerse"],
-      ["/contact", "Contact | AniVerse"],
+      ["/home", "AniFlick - Watch Anime Online Free with Zoro UI & Aizen Motion"],
+      ["/browse", "Browse Anime - AniFlick (Zoro UI × Aizen Motion)"],
+      ["/watch", "Watch Anime - AniFlick (Zoro UI × Aizen Engine)"],
+      ["/detail", "Anime Details - AniFlick (Zoro UI × Aizen Motion)"],
+      ["/schedule", "Broadcast Schedule - AniFlick (Zoro UI × Aizen Motion)"],
+      ["/genres", "Anime Genres - AniFlick (Zoro UI × Aizen Motion)"],
+      ["/az-list", "A-Z Anime List - AniFlick (Zoro UI × Aizen Motion)"],
+      ["/faq", "Frequently Asked Questions | AniFlick"],
+      ["/privacy", "Privacy Policy | AniFlick"],
+      ["/terms", "Terms of Service | AniFlick"],
+      ["/dmca", "DMCA & Copyright | AniFlick"],
+      ["/about", "About AniFlick | AniFlick"],
+      ["/contact", "Contact | AniFlick"],
     ];
     for (const [route, title] of NAMED_PAGE_CHECKS) {
       await test(`GET ${route} serves its page (200, correct <title>)`, async () => {
@@ -454,7 +454,7 @@ async function runTests() {
       const res = await fetch(`${baseUrl}/faq.html`);
       assert.equal(res.status, 200);
       const body = await res.text();
-      assert.ok(body.includes("<title>Frequently Asked Questions | AniVerse</title>"));
+      assert.ok(body.includes("<title>Frequently Asked Questions | AniFlick</title>"));
     });
 
     // 4c3. No email support anywhere (24 Nov): contact is Discord-only.
@@ -2185,7 +2185,7 @@ async function runTests() {
 
     // 58. Login rate limit: 5 / 15 min per IP, 6th -> 429, another IP unaffected.
     await test("Phase 3b: login rate limit (6th attempt 429 + IP isolation)", async () => {
-      const email = "demo@aniverse.io";
+      const email = "demo@aniflick.org";
       const ip = "198.51.100.10";
       for (let i = 0; i < 5; i++) {
         const r = await postJson("/api/auth/login", { email, password: "wrong-password" }, ip);
@@ -2913,7 +2913,7 @@ async function runTests() {
         const body = await res.text();
         assert.ok(body.includes(name), `${id} error page names the provider`);
         assert.ok(body.includes("isn't set up yet"), `${id} error page says it is not set up`);
-        assert.ok(body.includes("Back to AniVerse"), `${id} error page links home`);
+        assert.ok(body.includes("Back to AniFlick"), `${id} error page links home`);
       }
     });
 
@@ -3053,7 +3053,7 @@ async function runTests() {
 
       /* No-email provider (MAL) → placeholder .invalid address. */
       const u3 = linkOrCreateAccount({ provider: "mal", providerUserId: `m-${stamp}`, email: null, name: "MAL Fan" });
-      assert.equal(u3.email, `no-email-mal-m-${stamp}@aniverse.invalid`);
+      assert.equal(u3.email, `no-email-mal-m-${stamp}@aniflick.invalid`);
       assert.equal(u3.password_hash, null);
 
       /* Cleanup (identities cascade with the users). */

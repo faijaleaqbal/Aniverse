@@ -90,16 +90,16 @@ export function pkceChallenge(verifier) {
    later (profile feature, not this change). */
 export function placeholderEmail(provider, providerUserId) {
   const safeId = String(providerUserId).replace(/[^a-zA-Z0-9_-]/g, "-").slice(0, 64) || "unknown";
-  return `no-email-${provider}-${safeId}@aniverse.invalid`;
+  return `no-email-${provider}-${safeId}@aniflick.invalid`;
 }
 
 export function isPlaceholderEmail(email) {
-  return typeof email === "string" && email.endsWith("@aniverse.invalid");
+  return typeof email === "string" && email.endsWith("@aniflick.invalid");
 }
 
 /* Provider display names can be long or odd — clean and cap at the same
    40-character limit local registration uses. */
 export function cleanSocialName(name) {
   const cleaned = cleanText(name).slice(0, 40);
-  return cleaned || "AniVerse User";
+  return cleaned || "AniFlick User";
 }

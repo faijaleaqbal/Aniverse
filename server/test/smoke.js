@@ -293,21 +293,21 @@ test("buildRedirectUri builds the exact callback URL per provider", () => {
 // 19. Placeholder emails for no-email providers are clearly fake (.invalid)
 //     and unique per provider identity.
 test("placeholderEmail is an obviously-fake .invalid address, unique per identity", () => {
-  assert.equal(placeholderEmail("mal", "123"), "no-email-mal-123@aniverse.invalid");
-  assert.equal(placeholderEmail("anilist", "456"), "no-email-anilist-456@aniverse.invalid");
+  assert.equal(placeholderEmail("mal", "123"), "no-email-mal-123@aniflick.invalid");
+  assert.equal(placeholderEmail("anilist", "456"), "no-email-anilist-456@aniflick.invalid");
   assert.notEqual(placeholderEmail("mal", "123"), placeholderEmail("mal", "124"));
-  assert.ok(isPlaceholderEmail("no-email-mal-123@aniverse.invalid"));
+  assert.ok(isPlaceholderEmail("no-email-mal-123@aniflick.invalid"));
   assert.ok(!isPlaceholderEmail("user@example.com"));
   /* Unsafe characters in a provider id are sanitised out of the local part. */
-  assert.equal(placeholderEmail("google", "a/b c"), "no-email-google-a-b-c@aniverse.invalid");
+  assert.equal(placeholderEmail("google", "a/b c"), "no-email-google-a-b-c@aniflick.invalid");
 });
 
 // 20. Social display names are cleaned and capped at the 40-char limit.
 test("cleanSocialName cleans and caps provider names at 40 chars", () => {
   assert.equal(cleanSocialName("  Zoro Fan  "), "Zoro Fan");
   assert.equal(cleanSocialName("x".repeat(100)).length, 40);
-  assert.equal(cleanSocialName(""), "AniVerse User");
-  assert.equal(cleanSocialName("   "), "AniVerse User");
+  assert.equal(cleanSocialName(""), "AniFlick User");
+  assert.equal(cleanSocialName("   "), "AniFlick User");
 });
 
 // 21. All four providers exist and are DISABLED with no credentials set

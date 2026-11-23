@@ -125,7 +125,7 @@ export function oauthErrorPage(title, message) {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${esc(title)} | AniVerse</title>
+<title>${esc(title)} | AniFlick</title>
 <style>
   body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
          background: #0b0d12; color: #e5e7eb; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
@@ -137,7 +137,7 @@ export function oauthErrorPage(title, message) {
       background: #cae962; color: #111; font-weight: 700; }
 </style>
 </head>
-<body><div class="card"><h1>${esc(title)}</h1><p>${esc(message)}</p><a href="/">Back to AniVerse</a></div></body>
+<body><div class="card"><h1>${esc(title)}</h1><p>${esc(message)}</p><a href="/">Back to AniFlick</a></div></body>
 </html>`;
 }
 

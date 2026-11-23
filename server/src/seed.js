@@ -12,7 +12,7 @@ export function episodeTitleFor(slug, ep) {
 }
 
 export async function seed() {
-  console.log("Beginning Ani Verse database seed with ZokoAnime streaming mappings...");
+  console.log("Beginning AniFlick database seed with ZokoAnime streaming mappings...");
   const now = nowIso();
 
   const insertTitle = db.prepare(`
@@ -144,16 +144,16 @@ export async function seed() {
   console.log(`Seeded ${titleCount} titles and ${episodeCount} episodes with ZokoAnime streams.`);
 
   // Seed default demo user if not existing
-  const existingUser = db.prepare("SELECT id FROM users WHERE email = ?").get("demo@aniverse.io");
+  const existingUser = db.prepare("SELECT id FROM users WHERE email = ?").get("demo@aniflick.org");
   let userId;
   if (!existingUser) {
     const passwordHash = await hashPassword("password123");
     const res = db.prepare(`
       INSERT INTO users (email, password_hash, name, avatar_tone, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?)
-    `).run("demo@aniverse.io", passwordHash, "Akihiro", 2, now, now);
+    `).run("demo@aniflick.org", passwordHash, "Akihiro", 2, now, now);
     userId = res.lastInsertRowid;
-    console.log("Seeded demo user: demo@aniverse.io (password: password123)");
+    console.log("Seeded demo user: demo@aniflick.org (password: password123)");
 
     const insertWatchlist = db.prepare(`
       INSERT OR IGNORE INTO watchlist (user_id, title_slug, added_at) VALUES (?, ?, ?)

@@ -1,5 +1,5 @@
 /**
- * The Ani Verse shelf. Each title maps to real anime metadata & MAL/AniList IDs
+ * The AniFlick shelf. Each title maps to real anime metadata & MAL/AniList IDs
  * for real-time ZokoAnime embedding and streaming.
  */
 export const CATALOG = [

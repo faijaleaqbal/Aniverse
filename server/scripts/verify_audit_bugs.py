@@ -432,7 +432,7 @@ async def main():
                     if (!footer) return { found: false };
                     const hasNavLinks = footer.querySelectorAll('a[href*=\"index\"], a[href*=\"browse\"], a[href*=\"schedule\"], a[href*=\"genres\"], a[href*=\"watch\"]').length >= 4;
                     const hasDisclaimer = footer.textContent.includes('does not store any files');
-                    const hasBrand = footer.textContent.includes('AniVerse');
+                    const hasBrand = footer.textContent.includes('AniFlick');
                     return {
                         found: true,
                         hasNavLinks: hasNavLinks,

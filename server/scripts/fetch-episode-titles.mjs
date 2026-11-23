@@ -1,5 +1,5 @@
 /**
- * Ani Verse — real episode titles per title (MyAnimeList data).
+ * AniFlick — real episode titles per title (MyAnimeList data).
  *
  * Run:  node server/scripts/fetch-episode-titles.mjs
  *
@@ -42,7 +42,7 @@ async function getJson(url, attempt = 0) {
       signal: controller.signal,
       /* Kitsu (JSON:API) answers 406 to "Accept: application/json"; a wildcard
          Accept is accepted by both Kitsu and Jikan. */
-      headers: { Accept: "*/*", "User-Agent": "AniVerse-metadata/1.0" },
+      headers: { Accept: "*/*", "User-Agent": "AniFlick-metadata/1.0" },
     });
     if (res.status === 429 && attempt < 4) {
       const wait = Number(res.headers.get("Retry-After") || 2) * 1000 + 500;

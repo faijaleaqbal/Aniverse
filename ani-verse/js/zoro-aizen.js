@@ -816,8 +816,8 @@
         <div class="mobile-nav-drawer">
           <div class="mobile-drawer-header">
             <a class="zoro-brand" href="index.html">
-              <div class="zoro-brand-icon">Z</div>
-              <span>Ani<span class="verse">Verse</span></span>
+              <img class="zoro-brand-icon" src="/img/aniflick-icon.png" alt="">
+              <span>Ani<span class="verse">Flick</span></span>
             </a>
             <button class="mobile-drawer-close" type="button" aria-label="Close Menu">&times;</button>
           </div>
@@ -943,7 +943,7 @@
       demoBtn.textContent = "Logging in...";
       const res = await api("/api/auth/login", {
         method: "POST",
-        body: { email: "demo@aniverse.io", password: "password123" },
+        body: { email: "demo@aniflick.org", password: "password123" },
       });
       demoBtn.disabled = false;
       demoBtn.textContent = "⚡ Quick Demo Login (Akihiro)";
@@ -1224,7 +1224,7 @@
 
         dropdown.innerHTML =
           (local.length
-            ? `<div class="search-group-label">On Aniverse</div>` + local.map((t) => searchRowHtml(t, detailHref(t.slug))).join("")
+            ? `<div class="search-group-label">On AniFlick</div>` + local.map((t) => searchRowHtml(t, detailHref(t.slug))).join("")
             : "") +
           (more.length
             ? `<div class="search-group-label">More results</div>` + more.map((t) => searchRowHtml(t, liveDetailHref(t))).join("")
@@ -2074,7 +2074,7 @@
   /* ==========================================================================
      6C. LIVE BROWSE — the full AniList catalog on browse.html
      One grid, two modes:
-       - search  (?q=…): "On Aniverse" (the curated catalog) first, then
+       - search  (?q=…): "On AniFlick" (the curated catalog) first, then
                          "More results" (the live catalog).
        - browse  (no q): the live catalog with genre / format / status /
                          sort / year filters and AniList pagination.
@@ -2596,7 +2596,7 @@
         const availableTotal = total;
         grid.innerHTML =
           (local.length
-            ? `<div class="live-result-group"><div class="live-result-group-title">On <span class="accent">Aniverse</span><span class="live-result-group-count">${local.length} curated</span></div><div class="cards-grid-zoro" id="live-local-grid">${local.map((t) => `
+            ? `<div class="live-result-group"><div class="live-result-group-title">On <span class="accent">AniFlick</span><span class="live-result-group-count">${local.length} curated</span></div><div class="cards-grid-zoro" id="live-local-grid">${local.map((t) => `
               <div class="zoro-card" data-slug="${escapeHtml(t.slug)}" data-title="${escapeHtml(t.name)}">
                 <a class="zoro-card-poster" href="${detailHref(t.slug)}">
                   <img src="${coverOf(t)}" alt="${escapeHtml(t.name)}" loading="lazy" decoding="async">
@@ -3093,7 +3093,7 @@
       { id: "live-top-upcoming-grid", path: "/api/browse?sort=popular&status=NOT_YET_RELEASED&page=1", mode: "browse" },
       { id: "live-trending-grid", path: "/api/browse?sort=trending&page=1", mode: "browse" },
       { id: "live-top-rated-grid", path: "/api/browse?sort=top&page=1", mode: "browse" },
-      /* New On Aniverse: the most recently STARTED titles. Distinct from
+      /* New On AniFlick: the most recently STARTED titles. Distinct from
          Latest Episodes (the airing schedule) — this is a title list, not an
          episode feed. */
       { id: "live-new-on-grid", path: "/api/browse?sort=newest&page=1", mode: "browse" },
@@ -6268,7 +6268,7 @@
       if (activeServer === "backup" && iframe && iframe.contentWindow) {
         try {
           iframe.contentWindow.postMessage(
-            { source: "aniverse", type: "fullscreen", active: !!document.fullscreenElement },
+            { source: "aniflick", type: "fullscreen", active: !!document.fullscreenElement },
             BACKUP_ORIGIN
           );
         } catch {}
@@ -6613,7 +6613,7 @@
         watchNow.removeAttribute("href");
       }
     }
-    document.title = `${t.name} - Ani Verse`;
+    document.title = `${t.name} - AniFlick`;
 
     /* No watchlist row for live titles — the catalog is never written to. */
     const listBtn = document.getElementById("detail-add-list");
@@ -6861,7 +6861,7 @@
     if (syn) syn.textContent = t.synopsis || t.tagline || "";
     const watchNow = document.getElementById("detail-watch-now");
     if (watchNow) watchNow.href = watchHref(slug, 1);
-    document.title = `${t.name} - Ani Verse`;
+    document.title = `${t.name} - AniFlick`;
 
     // Add to My List (reuses the existing watchlist API).
     const listBtn = document.getElementById("detail-add-list");

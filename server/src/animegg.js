@@ -61,7 +61,7 @@ async function fetchJson(path, timeoutMs) {
       signal: controller.signal,
       headers: {
         Accept: "application/json",
-        "User-Agent": "AniVerse/animegg-fallback",
+        "User-Agent": "AniFlick/animegg-fallback",
       },
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);

@@ -1,5 +1,5 @@
 /**
- * Ani Verse — Phase 1 real-metadata seed.
+ * AniFlick — Phase 1 real-metadata seed.
  *
  * Run once:  node server/scripts/fetch-metadata.mjs
  *

@@ -4,15 +4,15 @@
   <meta charset="UTF-8">
   <meta name="referrer" content="no-referrer">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Watch Anime - Ani Verse (Zoro UI × Aizen Engine)</title>
-  <meta name="description" content="Watch high quality anime online on Ani Verse. Free streaming with multi-server selection, subtitles and dubs.">
+  <title>Watch Anime - AniFlick (Zoro UI × Aizen Engine)</title>
+  <meta name="description" content="Watch high quality anime online on AniFlick. Free streaming with multi-server selection, subtitles and dubs.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <!-- Loaded async: a slow Google Fonts response must never block the app script or render. -->
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
   <noscript><link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet"></noscript>
-  <link rel="preload" href="css/zoro-aizen.css?v=21" as="style">
-  <link rel="preload" href="js/zoro-aizen.js?v=23" as="script">
+  <link rel="preload" href="css/zoro-aizen.css?v=22" as="style">
+  <link rel="preload" href="js/zoro-aizen.js?v=24" as="script">
   <script>
     /* Warm the API while the app script is still downloading: this removes a
        full round trip from the critical path. The app script adopts these
@@ -47,7 +47,7 @@
     })();
   </script>
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
-  <link rel="stylesheet" href="css/zoro-aizen.css?v=21">
+  <link rel="stylesheet" href="css/zoro-aizen.css?v=22">
   <!-- Player-specific styles (spinner overlay, resume note, toasts). Without
        this sheet the spinner rendered as plain text BELOW the player. -->
   <link rel="stylesheet" href="css/zoko-player.css?v=14">
@@ -63,8 +63,8 @@
       <div class="header-left">
         <button class="menu-toggle-btn" type="button" aria-label="Toggle Menu">☰</button>
         <a class="zoro-brand" href="index.html">
-          <div class="zoro-brand-icon">Z</div>
-          <span>Ani<span class="verse">Verse</span></span>
+          <img class="zoro-brand-icon" src="/img/aniflick-icon.png" alt="">
+          <span>Ani<span class="verse">Flick</span></span>
         </a>
       </div>
 
@@ -378,8 +378,8 @@
     <div class="container-main">
       <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 2rem; padding-bottom: 2rem; border-bottom: 1px solid rgba(255,255,255,0.06);">
         <a class="zoro-brand" href="/home">
-          <div class="zoro-brand-icon">Z</div>
-          <span>Ani<span class="verse">Verse</span></span>
+          <img class="zoro-brand-icon" src="/img/aniflick-icon.png" alt="">
+          <span>Ani<span class="verse">Flick</span></span>
         </a>
         <div>
           <div style="display: flex; gap: 1.5rem; font-size: 0.875rem; color: var(--text-sub); flex-wrap: wrap;">
@@ -401,13 +401,13 @@
         </div>
       </div>
       <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; margin-top: 1.5rem; font-size: 0.75rem; color: var(--text-muted);">
-        <p>Ani Verse does not store any files on its server. Combining Zoro.to UI components with Aizen-Verse cinematic animation engine.</p>
+        <p>AniFlick does not store any files on its server. Combining Zoro.to UI components with Aizen-Verse cinematic animation engine.</p>
         <p class="footer-engine">ZORO × AIZEN HYBRID ENGINE 2026</p>
       </div>
-      <p style="margin-top: 1.25rem; font-size: 0.75rem; color: var(--text-muted);">© <span class="js-footer-year">2026</span> Ani Verse. All rights reserved.</p>
+      <p style="margin-top: 1.25rem; font-size: 0.75rem; color: var(--text-muted);">© <span class="js-footer-year">2026</span> AniFlick. All rights reserved.</p>
     </div>
   </footer>
 
-  <script src="js/zoro-aizen.js?v=23"></script>
+  <script src="js/zoro-aizen.js?v=24"></script>
 </body>
 </html>
