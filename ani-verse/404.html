@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>404 — Page Not Found | AniVerse</title>
+  <meta name="description" content="This page drifted off the map. Head back to AniVerse.">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <!-- Root-relative paths: this page is served for URLs at any depth. -->
+  <link rel="stylesheet" href="/css/zoro-aizen.css?v=19">
+  <style>
+    .notfound-wrap {
+      min-height: 70vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      gap: 1rem;
+      padding: 4rem 1.5rem;
+    }
+    .notfound-code {
+      font-size: clamp(4rem, 14vw, 7rem);
+      font-weight: 900;
+      line-height: 1;
+      color: var(--zoro-lime);
+      text-shadow: 0 0 40px var(--zoro-lime-glow);
+    }
+    .notfound-title { font-size: 1.5rem; font-weight: 800; color: #fff; }
+    .notfound-text { color: var(--text-sub); max-width: 420px; line-height: 1.6; }
+    .notfound-actions { display: flex; gap: 0.75rem; flex-wrap: wrap; justify-content: center; margin-top: 0.5rem; }
+  </style>
+</head>
+<body>
+  <main class="container-main">
+    <div class="notfound-wrap">
+      <div class="notfound-code">404</div>
+      <div class="notfound-title">This page drifted off the map</div>
+      <p class="notfound-text">The episode, title or page you were looking for doesn't exist here — it may have moved, or the link may be mistyped.</p>
+      <div class="notfound-actions">
+        <a class="btn-zoro-primary" href="/index.html">Home</a>
+        <a class="btn-zoro-secondary" href="/browse.html">Browse Anime</a>
+      </div>
+    </div>
+  </main>
+</body>
+</html>

@@ -975,6 +975,14 @@ app.get("/api/stream/:slug/:ep", (req, res) => {
   const epNum = toInt(req.params.ep, 1);
   const title = db.prepare("SELECT * FROM titles WHERE slug = ?").get(slug);
   if (!title) throw notFound("Title not found.");
+  /* Episode-range validation (fix #11, 23 Nov audit): ep 9999 used to
+     return 200 with a dead Zoko URL. The check is against the title's own
+     declared episode count — NOT the episodes table, which is missing rows
+     for Harlock (0 rows, 1 episode), so a row check would false-404 a real
+     episode. A null count skips the upper check rather than breaking. */
+  if (!Number.isInteger(epNum) || epNum < 1 || (title.episodes != null && epNum > title.episodes)) {
+    throw notFound(`Episode ${epNum} not found.`);
+  }
 
   const source = String(req.query.source || ZOKO_DEFAULT_SOURCE).toLowerCase();
   const malId = req.query.mal_id != null ? toInt(req.query.mal_id, null) : (title.mal_id || null);
@@ -1032,8 +1040,13 @@ app.get("/api/dub-availability/:slug/:ep", async (req, res, next) => {
   try {
     const { slug } = req.params;
     const epNum = toInt(req.params.ep, 1);
-    const title = db.prepare("SELECT mal_id FROM titles WHERE slug = ?").get(slug);
+    const title = db.prepare("SELECT mal_id, episodes FROM titles WHERE slug = ?").get(slug);
     if (!title) throw notFound("Title not found.");
+    /* Same range validation as /api/stream (fix #11): without it a probe
+       for a nonexistent episode would persist a bogus dub_checks row. */
+    if (!Number.isInteger(epNum) || epNum < 1 || (title.episodes != null && epNum > title.episodes)) {
+      throw notFound(`Episode ${epNum} not found.`);
+    }
     if (!title.mal_id) {
       persistDubCheck(slug, epNum, { available: false, reason: "no-mal-id" });
       return res.json({ ok: true, slug, ep: epNum, available: false, reason: "no-mal-id" });
@@ -1422,6 +1435,20 @@ app.get("/:page", (req, res, next) => {
   res.sendFile(pageFile, (err) => {
     if (err) next();
   });
+});
+
+/* Final 404 (fix #10, 23 Nov audit): API paths get JSON, everything else
+   gets the branded 404 page — previously Express's raw "Cannot GET ..."
+   text. 404.html uses root-relative asset paths because it can be served
+   for a URL at any depth. */
+app.use((req, res) => {
+  if (req.path.startsWith("/api/")) {
+    return res.status(404).json({
+      ok: false,
+      error: { code: "NOT_FOUND", message: "Not found." },
+    });
+  }
+  res.status(404).sendFile(path.join(SITE_ROOT, "404.html"));
 });
 
 /* ==========================================================================

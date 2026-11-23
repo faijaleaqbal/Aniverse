@@ -360,6 +360,57 @@ async function runTests() {
       assert.equal(data.ok, false);
     });
 
+    // 4a. /api/stream validates the episode range (23 Nov audit fix #11):
+    // One Piece has 1180 episodes — ep 9999 must 404, not 200 with a dead URL.
+    await test("GET /api/stream/ronin-of-the-neon-ward/9999 returns HTTP 404", async () => {
+      const res = await fetch(`${baseUrl}/api/stream/ronin-of-the-neon-ward/9999`);
+      assert.equal(res.status, 404);
+      const data = await res.json();
+      assert.equal(data.ok, false);
+    });
+
+    await test("GET /api/stream/ronin-of-the-neon-ward/0 returns HTTP 404", async () => {
+      const res = await fetch(`${baseUrl}/api/stream/ronin-of-the-neon-ward/0`);
+      assert.equal(res.status, 404);
+      const data = await res.json();
+      assert.equal(data.ok, false);
+    });
+
+    await test("GET /api/stream/ronin-of-the-neon-ward/1180 (last ep) still returns HTTP 200", async () => {
+      const res = await fetch(`${baseUrl}/api/stream/ronin-of-the-neon-ward/1180`);
+      assert.equal(res.status, 200);
+      const data = await res.json();
+      assert.equal(data.ok, true);
+      assert.equal(data.episode, 1180);
+    });
+
+    // 4b. /api/dub-availability validates the range too (no bogus dub_checks
+    // row for a nonexistent episode; the 404 fires before any probe).
+    await test("GET /api/dub-availability/ronin-of-the-neon-ward/9999 returns HTTP 404", async () => {
+      const res = await fetch(`${baseUrl}/api/dub-availability/ronin-of-the-neon-ward/9999`);
+      assert.equal(res.status, 404);
+      const data = await res.json();
+      assert.equal(data.ok, false);
+    });
+
+    // 4c. Branded 404 (23 Nov audit fix #10): unknown pages get the branded
+    // HTML page, unknown API paths get JSON — never Express's raw text.
+    await test("GET /definitely-not-a-page returns branded 404 HTML", async () => {
+      const res = await fetch(`${baseUrl}/definitely-not-a-page`);
+      assert.equal(res.status, 404);
+      assert.ok((res.headers.get("content-type") || "").includes("text/html"));
+      const body = await res.text();
+      assert.ok(body.includes("drifted off the map"), "branded 404 page not served");
+    });
+
+    await test("GET /api/definitely-not-an-endpoint returns 404 JSON", async () => {
+      const res = await fetch(`${baseUrl}/api/definitely-not-an-endpoint`);
+      assert.equal(res.status, 404);
+      const data = await res.json();
+      assert.equal(data.ok, false);
+      assert.equal(data.error.code, "NOT_FOUND");
+    });
+
     // 5. /api/stream supports ?mal_id= query override
     await test("GET /api/stream supports ?mal_id= query override", async () => {
       const res = await fetch(`${baseUrl}/api/stream/ronin-of-the-neon-ward/1?mal_id=9999`);

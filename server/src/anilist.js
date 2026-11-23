@@ -290,10 +290,12 @@ export function liveDetailView(media) {
   const base = mediaView(media);
   if (!base) return null;
 
+  /* AniList can return the same studio twice in nodes (Demon Slayer showed
+     "ufotable, ufotable") — dedupe, keeping first-seen order. */
   const studios = (media.studios && Array.isArray(media.studios.nodes))
-    ? media.studios.nodes
+    ? [...new Set(media.studios.nodes
         .filter((n) => n && n.isAnimationStudio && n.name)
-        .map((n) => n.name)
+        .map((n) => n.name))]
     : [];
 
   const characterEdges = (media.characters && Array.isArray(media.characters.edges))
