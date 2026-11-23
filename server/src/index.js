@@ -1416,13 +1416,32 @@ app.get("/api/health", (req, res) => {
    revalidated so page markup never goes stale. */
 const STATIC_MAX_AGE_MS = 5 * 60 * 1000;
 
+/* Versioned assets (?v= cache-buster) are immutable (fix #5, 23 Nov audit):
+   the version string IS the cache invalidation, so browsers never need to
+   revalidate them. Done here, not in Caddy: Caddy's `header` runs before the
+   reverse proxy copies upstream headers, so it ADDED a second Cache-Control
+   instead of replacing the no-cache one (verified live — two headers, and
+   no-cache wins). setHeaders has no access to the request, so this small
+   middleware ahead of the static handler records the decision on res.locals. */
+app.use((req, res, next) => {
+  if (
+    req.query.v != null &&
+    (req.path.endsWith(".js") || req.path.endsWith(".css"))
+  ) {
+    res.locals.versionedAsset = true;
+  }
+  next();
+});
+
 app.use(
   express.static(SITE_ROOT, {
     maxAge: STATIC_MAX_AGE_MS,
     etag: true,
     lastModified: true,
     setHeaders(res, filePath) {
-      if (filePath.endsWith(".html") || filePath.endsWith(".js") || filePath.endsWith(".css")) {
+      if (res.locals.versionedAsset) {
+        res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+      } else if (filePath.endsWith(".html") || filePath.endsWith(".js") || filePath.endsWith(".css")) {
         res.setHeader("Cache-Control", "no-cache, must-revalidate");
       }
     },

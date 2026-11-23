@@ -411,6 +411,22 @@ async function runTests() {
       assert.equal(data.error.code, "NOT_FOUND");
     });
 
+    // 4d. Versioned assets are immutable, unversioned ones revalidate
+    // (23 Nov audit fix #5 — exactly ONE Cache-Control header each).
+    await test("GET /js/zoro-aizen.js?v=21 serves a single immutable Cache-Control", async () => {
+      const res = await fetch(`${baseUrl}/js/zoro-aizen.js?v=21`);
+      assert.equal(res.status, 200);
+      const cc = res.headers.get("cache-control");
+      assert.ok(cc && cc.includes("immutable"), `expected immutable, got: ${cc}`);
+      assert.ok(!cc.includes("no-cache"), `immutable asset must not also be no-cache: ${cc}`);
+    });
+
+    await test("GET /js/zoro-aizen.js (unversioned) still revalidates", async () => {
+      const res = await fetch(`${baseUrl}/js/zoro-aizen.js`);
+      assert.equal(res.status, 200);
+      assert.ok((res.headers.get("cache-control") || "").includes("no-cache"));
+    });
+
     // 5. /api/stream supports ?mal_id= query override
     await test("GET /api/stream supports ?mal_id= query override", async () => {
       const res = await fetch(`${baseUrl}/api/stream/ronin-of-the-neon-ward/1?mal_id=9999`);
