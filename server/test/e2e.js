@@ -2118,6 +2118,7 @@ async function runTests() {
       assert.equal(malIdOverride(149939), 210);
       assert.equal(malIdOverride(206425), 56885);
       assert.equal(malIdOverride(2627), 2627);
+      assert.equal(malIdOverride(204221), 35593);
       assert.equal(malIdOverride(999999), null, "an unknown id has no override");
 
       /* A null idMal gets the override. */

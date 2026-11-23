@@ -26,6 +26,9 @@
  *          has no file for this MAL id — the mapping is real, the player
  *          simply does not carry the title)
  *
+ * Verified 2026-11-23:
+ *   204221 Meiken Lassie: Yume ni Mukatte Hashire! (OVA, 1997) -> 35593 (TVplus catalog anilist_id 204221 + Kitsu 41572; Zoko embed player payload verified 2026-11-23)
+ *
  * Deliberately NOT in the map (no real MAL entry / no verified stream):
  *   186337 Taxi to the Moon (MUSIC), 213317 Roman Jet Charisma (MUSIC) —
  *     Kitsu has no matching entry (the only hits are unrelated titles).
@@ -43,6 +46,7 @@ export const MAL_ID_OVERRIDES = {
   149939: 210,
   206425: 56885,
   2627: 2627,
+  204221: 35593,
 };
 
 /* True when an AniList id has a MAL override. Exported for tests. */
