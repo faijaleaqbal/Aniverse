@@ -143,8 +143,8 @@ The server works out of the box with sensible defaults, or can be configured via
 Forgot-password and the set-password email for new social accounts send via
 SMTP (Nodemailer). Mail is **optional**: the app runs fine without it, and
 until SMTP is configured the forgot-password endpoint still answers its
-generic message — it just sends nothing (and logs one generic warning per
-process, with no address or token in it).
+generic message — it just sends nothing and stores no token (and logs
+nothing about the request).
 
 | Variable | Default | Description |
 |---|---|---|
