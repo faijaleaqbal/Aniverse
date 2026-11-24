@@ -192,9 +192,12 @@ This enrichment is only for the running app — the test suite does not depend o
 ---
 
 ## 👤 Demo User Account
-- **Email**: `demo@aniflick.org`
-- **Password**: `password123`
-*(Or click "Quick Fill Demo Account" inside the Sign In modal).*
+
+A demo account (`Akihiro`) is seeded automatically — but **only in
+development and test environments** (`NODE_ENV !== "production"`). It never
+exists on the production site, and its credentials are not published here.
+To sign in locally, register your own account or check the seed in
+`server/src/seed.js`.
 
 ---
 

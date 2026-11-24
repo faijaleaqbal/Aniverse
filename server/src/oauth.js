@@ -160,7 +160,8 @@ async function postForm(url, params) {
   return data;
 }
 
-async function fetchProfile(cfg, accessToken) {
+/* Exported for the test suite (H-2 regression test). */
+export async function fetchProfile(cfg, accessToken) {
   const headers = { Authorization: `Bearer ${accessToken}`, Accept: "application/json" };
   if (cfg.id === "anilist") {
     /* AniList has no REST profile endpoint — the Viewer query is the way. */
@@ -195,11 +196,14 @@ async function fetchProfile(cfg, accessToken) {
   }
   if (cfg.id === "discord") {
     if (data.id == null) throw new Error("Discord profile has no id");
-    /* Discord only includes `email` when the address is verified and the
-       email scope was granted; it may be null when hidden. */
+    /* H-2: only trust the email when Discord says it is verified — exactly
+       like Google. Discord lets an account OAuth before its email is
+       verified, so an unverified address must never link or create an
+       account by email (account takeover otherwise). */
+    const email = data.verified === true ? data.email : null;
     return {
       providerUserId: String(data.id),
-      email: data.email || null,
+      email: email || null,
       name: data.global_name || data.username || "",
     };
   }

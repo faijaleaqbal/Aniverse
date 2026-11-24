@@ -736,9 +736,11 @@
 
     const toast = document.createElement("div");
     toast.className = "aizen-toast";
+    /* Escape both slots: callers pass user display names and AniList
+       titles, so raw interpolation is an XSS sink (audit M-3). */
     toast.innerHTML = `
-      <div class="aizen-toast-icon">${icon}</div>
-      <span>${message}</span>
+      <div class="aizen-toast-icon">${escapeHtml(icon)}</div>
+      <span>${escapeHtml(message)}</span>
     `;
 
     container.appendChild(toast);
@@ -898,7 +900,6 @@
           <div class="social-login-divider"><span>or continue with</span></div>
           <div id="zoro-social-logins" class="social-login-list"></div>
         </div>
-        <button class="btn-demo-quick" id="btn-quick-demo" type="button">⚡ Quick Demo Login (Akihiro)</button>
       </div>
     `;
 
@@ -916,7 +917,6 @@
     const errorBox = modal.querySelector("#modal-error-msg");
     const tabBtns = modal.querySelectorAll(".modal-tab-btn");
     const closeBtn = modal.querySelector(".modal-close-cross");
-    const demoBtn = modal.querySelector("#btn-quick-demo");
 
     function setTab(tab) {
       activeTab = tab;
@@ -935,27 +935,6 @@
     closeBtn.addEventListener("click", () => modal.classList.remove("is-active"));
     modal.addEventListener("click", (e) => {
       if (e.target === modal) modal.classList.remove("is-active");
-    });
-
-    demoBtn.addEventListener("click", async () => {
-      errorBox.style.display = "none";
-      demoBtn.disabled = true;
-      demoBtn.textContent = "Logging in...";
-      const res = await api("/api/auth/login", {
-        method: "POST",
-        body: { email: "demo@aniflick.org", password: "password123" },
-      });
-      demoBtn.disabled = false;
-      demoBtn.textContent = "⚡ Quick Demo Login (Akihiro)";
-      if (res.ok && res.data.user) {
-        currentUser = res.data.user;
-        modal.classList.remove("is-active");
-        updateHeaderUser();
-        window.dispatchEvent(new CustomEvent("zoro:auth", { detail: currentUser }));
-      } else {
-        errorBox.textContent = (res.data && res.data.error && res.data.error.message) || "Login failed";
-        errorBox.style.display = "block";
-      }
     });
 
     form.addEventListener("submit", async (e) => {

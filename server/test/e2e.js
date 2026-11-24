@@ -14,7 +14,8 @@ const { clearAniListCache } = await import("../src/anilist.js");
 /* Dynamic import AFTER setup-db (like anilist.js above): oauth.js pulls in
    db.js, which reads DB_PATH at import time — a static import here would
    open the live database instead of the temp test one. */
-const { linkOrCreateAccount } = await import("../src/oauth.js");
+const { linkOrCreateAccount, fetchProfile } = await import("../src/oauth.js");
+const { providerConfig } = await import("../src/oauth-providers.js");
 
 /* The shipped frontend logic lives in a plain browser script (no module
    exports), so these tests extract its marked pure-function blocks and
@@ -3092,6 +3093,44 @@ async function runTests() {
         social.id,
         db.prepare("SELECT id FROM users WHERE email = ?").get(email).id
       );
+    });
+
+    // 85. H-2: Discord OAuth must not trust an unverified email — Discord
+    //     lets an account OAuth before its email is verified, and
+    //     linkOrCreateAccount matches by email, so trusting it is an
+    //     account takeover. Verified emails stay trusted, exactly like
+    //     Google's email_verified rule.
+    await test("OAuth: Discord profile trusts email only when verified === true", async () => {
+      const cfg = providerConfig("discord");
+      const currentFetch = globalThis.fetch;
+      let payload = null;
+      globalThis.fetch = async (input, init) => {
+        const url = typeof input === "string" ? input : (input && input.url) || "";
+        if (url === "https://discord.com/api/users/@me") {
+          return jsonResponse(payload);
+        }
+        return currentFetch(input, init);
+      };
+      try {
+        /* Unverified email → dropped, even though Discord sent it. */
+        payload = { id: "111", email: "victim@example.com", verified: false, username: "attacker" };
+        const unverified = await fetchProfile(cfg, "token-unverified");
+        assert.equal(unverified.providerUserId, "111");
+        assert.equal(unverified.email, null, "an unverified Discord email must not be trusted");
+
+        /* Verified email → trusted. */
+        payload = { id: "222", email: "real@example.com", verified: true, global_name: "Real Name" };
+        const verified = await fetchProfile(cfg, "token-verified");
+        assert.equal(verified.email, "real@example.com");
+        assert.equal(verified.name, "Real Name");
+
+        /* Missing `verified` field entirely → not trusted (strict === true). */
+        payload = { id: "333", email: "noflag@example.com", username: "noflag" };
+        const noFlag = await fetchProfile(cfg, "token-noflag");
+        assert.equal(noFlag.email, null, "a missing verified flag must not be trusted");
+      } finally {
+        globalThis.fetch = currentFetch;
+      }
     });
 
     console.log(`\nAll ${passed} E2E integration tests passed successfully!\n`);

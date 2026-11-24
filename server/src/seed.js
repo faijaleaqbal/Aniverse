@@ -1,5 +1,6 @@
 import { db } from "./db.js";
 import { CATALOG } from "./catalog.js";
+import { IS_PROD } from "./config.js";
 import { hashPassword, nowIso } from "./utils.js";
 
 /* Episode titles are seeded as generic "Episode N" placeholders. REAL episode
@@ -143,49 +144,58 @@ export async function seed() {
   const { titleCount, episodeCount } = tx();
   console.log(`Seeded ${titleCount} titles and ${episodeCount} episodes with ZokoAnime streams.`);
 
-  // Seed default demo user if not existing
-  const existingUser = db.prepare("SELECT id FROM users WHERE email = ?").get("demo@aniflick.org");
-  let userId;
-  if (!existingUser) {
-    const passwordHash = await hashPassword("password123");
-    const res = db.prepare(`
-      INSERT INTO users (email, password_hash, name, avatar_tone, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run("demo@aniflick.org", passwordHash, "Akihiro", 2, now, now);
-    userId = res.lastInsertRowid;
-    console.log("Seeded demo user: demo@aniflick.org (password: password123)");
-
-    const insertWatchlist = db.prepare(`
-      INSERT OR IGNORE INTO watchlist (user_id, title_slug, added_at) VALUES (?, ?, ?)
-    `);
-    insertWatchlist.run(userId, "kagerou-protocol", now);
-    insertWatchlist.run(userId, "ronin-of-the-neon-ward", now);
-    insertWatchlist.run(userId, "iron-bloom", now);
-
-    db.prepare(`
-      INSERT OR REPLACE INTO watch_progress (user_id, title_slug, episode_num, position_sec, duration_sec, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(userId, "kagerou-protocol", 7, 521, 1440, now);
-
-    console.log("Seeded demo user watchlist and progress.");
-  } else {
-    userId = existingUser.id;
-    console.log("Demo user already exists.");
-  }
-
-  /* Demo comment seeding is IDEMPOTENT: insert only when this exact
-     comment (user + episode + content) is absent, so re-running the seed
-     never stacks duplicates. (It used to live inside the new-user branch,
-     which meant an existing DB never got the demo comment at all.) */
+  /* Demo account (audit H-1): seeded ONLY outside production. The demo
+     credentials were public (hardcoded in client JS + README), so the
+     account must never exist on a production database. Tests and local
+     dev still get it — NODE_ENV is unset/"test" there. */
   const demoComment = "The ZokoAnime stream loads instantly — great player!";
-  const hasDemoComment = db.prepare(
-    "SELECT id FROM comments WHERE user_id = ? AND title_slug = ? AND episode_num = ? AND content = ?"
-  ).get(userId, "kagerou-protocol", 7, demoComment);
-  if (!hasDemoComment) {
-    db.prepare(
-      `INSERT INTO comments (user_id, title_slug, episode_num, content, created_at)
-      VALUES (?, ?, ?, ?, ?)`
-    ).run(userId, "kagerou-protocol", 7, demoComment, now);
+  if (IS_PROD) {
+    console.log("Production mode: demo user seeding skipped.");
+  } else {
+    // Seed default demo user if not existing
+    const existingUser = db.prepare("SELECT id FROM users WHERE email = ?").get("demo@aniflick.org");
+    let userId;
+    if (!existingUser) {
+      const passwordHash = await hashPassword("password123");
+      const res = db.prepare(`
+        INSERT INTO users (email, password_hash, name, avatar_tone, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run("demo@aniflick.org", passwordHash, "Akihiro", 2, now, now);
+      userId = res.lastInsertRowid;
+      /* Never print the password — it used to be logged to stdout. */
+      console.log("Seeded demo user: demo@aniflick.org (dev/test only)");
+
+      const insertWatchlist = db.prepare(`
+        INSERT OR IGNORE INTO watchlist (user_id, title_slug, added_at) VALUES (?, ?, ?)
+      `);
+      insertWatchlist.run(userId, "kagerou-protocol", now);
+      insertWatchlist.run(userId, "ronin-of-the-neon-ward", now);
+      insertWatchlist.run(userId, "iron-bloom", now);
+
+      db.prepare(`
+        INSERT OR REPLACE INTO watch_progress (user_id, title_slug, episode_num, position_sec, duration_sec, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run(userId, "kagerou-protocol", 7, 521, 1440, now);
+
+      console.log("Seeded demo user watchlist and progress.");
+    } else {
+      userId = existingUser.id;
+      console.log("Demo user already exists.");
+    }
+
+    /* Demo comment seeding is IDEMPOTENT: insert only when this exact
+       comment (user + episode + content) is absent, so re-running the seed
+       never stacks duplicates. (It used to live inside the new-user branch,
+       which meant an existing DB never got the demo comment at all.) */
+    const hasDemoComment = db.prepare(
+      "SELECT id FROM comments WHERE user_id = ? AND title_slug = ? AND episode_num = ? AND content = ?"
+    ).get(userId, "kagerou-protocol", 7, demoComment);
+    if (!hasDemoComment) {
+      db.prepare(
+        `INSERT INTO comments (user_id, title_slug, episode_num, content, created_at)
+        VALUES (?, ?, ?, ?, ?)`
+      ).run(userId, "kagerou-protocol", 7, demoComment, now);
+    }
   }
 
   /* Idempotent cleanup: the original demo comment claimed "1080p", a

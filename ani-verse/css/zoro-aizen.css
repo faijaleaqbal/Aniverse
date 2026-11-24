@@ -2163,24 +2163,6 @@ main.grid-is-empty .zoro-empty-state {
   box-shadow: 0 0 12px var(--zoro-lime-glow);
 }
 
-.btn-demo-quick {
-  width: 100%;
-  margin-top: 1rem;
-  padding: 0.7rem;
-  background: transparent;
-  border: 1px dashed var(--zoro-lime);
-  color: var(--zoro-lime);
-  border-radius: 8px;
-  font-weight: 700;
-  font-size: 0.85rem;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.btn-demo-quick:hover {
-  background: rgba(202, 233, 98, 0.12);
-}
-
 /* Social logins (Google / Discord / MAL / AniList) in the auth modal.
    Brand colours, fixed in both themes; the block is hidden entirely when
    no provider is configured. */
