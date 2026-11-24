@@ -138,6 +138,29 @@ The server works out of the box with sensible defaults, or can be configured via
 | `DATA_DIR` | `<SERVER_ROOT>/data` | Directory containing SQLite database |
 | `DB_PATH` | `<DATA_DIR>/aniverse.db` | Path to SQLite database file |
 
+### 📧 Email setup (password reset + social set-password)
+
+Forgot-password and the set-password email for new social accounts send via
+SMTP (Nodemailer). Mail is **optional**: the app runs fine without it, and
+until SMTP is configured the forgot-password endpoint still answers its
+generic message — it just sends nothing (and logs one generic warning per
+process, with no address or token in it).
+
+| Variable | Default | Description |
+|---|---|---|
+| `SMTP_HOST` | — | SMTP server hostname (required for mail to send) |
+| `SMTP_PORT` | `587` | SMTP port |
+| `SMTP_SECURE` | `false` | `"true"` for implicit TLS (port 465) |
+| `SMTP_USER` | — | SMTP username (optional — some relays need none) |
+| `SMTP_PASS` | — | SMTP password |
+| `MAIL_FROM` | — | Sender address shown in the inbox (required for mail to send) |
+
+Privacy notes: only the SHA-256 hash of a reset token is stored (never the
+raw token); tokens are single-use (reset links 1 hour, set-password links
+24 hours); a password change deletes all of the user's tokens and sessions;
+the forgot-password response is identical for registered and unregistered
+emails; no email address or token is ever written to a log line.
+
 ---
 
 ## 🚀 Quick Start

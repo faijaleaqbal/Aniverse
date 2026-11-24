@@ -16,6 +16,11 @@ const { clearAniListCache } = await import("../src/anilist.js");
    open the live database instead of the temp test one. */
 const { linkOrCreateAccount, fetchProfile } = await import("../src/oauth.js");
 const { providerConfig } = await import("../src/oauth-providers.js");
+/* Password-reset mailer seam: the suite injects a capture transport so no
+   real SMTP is ever used in tests (same dynamic-import-after-setup-db rule
+   as oauth.js above). */
+const { _setMailTransportForTests } = await import("../src/mailer.js");
+const { hashResetToken } = await import("../src/password-reset.js");
 
 /* The shipped frontend logic lives in a plain browser script (no module
    exports), so these tests extract its marked pure-function blocks and
@@ -3131,6 +3136,367 @@ async function runTests() {
       } finally {
         globalThis.fetch = currentFetch;
       }
+    });
+
+    /* ======================================================================
+       PASSWORD RESET (magic-link email) — privacy-first flow.
+       The mailer runs on a capture transport (no real SMTP in tests): every
+       "sent" mail lands in capturedMail for assertion.
+       ====================================================================== */
+
+    const capturedMail = [];
+    const captureTransport = {
+      async sendMail(mail) {
+        capturedMail.push({ to: mail.to, subject: mail.subject, text: mail.text });
+        return { messageId: `test-${capturedMail.length}` };
+      },
+    };
+    const FORGOT_GENERIC = "If an account exists for that email, a reset link has been sent.";
+    const TOKEN_GENERIC = "This password link is invalid or has expired.";
+
+    function tokenFromMail(mail) {
+      const m = String(mail.text).match(/\/reset-password\?token=([A-Za-z0-9_-]+)/);
+      return m ? decodeURIComponent(m[1]) : null;
+    }
+
+    _setMailTransportForTests(captureTransport);
+
+    // 86. Forgot-password answers IDENTICALLY for a registered and an
+    //     unregistered email — same status, same body. An attacker learns
+    //     nothing from the response.
+    await test("Password reset: forgot-password answers identically for registered and unregistered emails", async () => {
+      const stamp = Date.now();
+      const email = `reset-ident-${stamp}@example.com`;
+      const reg = await postJson("/api/auth/register", { email, password: "password123", name: "Ident User" }, "198.51.100.100");
+      assert.equal(reg.status, 201);
+
+      capturedMail.length = 0;
+      const known = await postJson("/api/auth/forgot-password", { email }, "198.51.100.101");
+      assert.equal(known.status, 200);
+      const knownBody = await known.json();
+      assert.deepEqual(knownBody, { ok: true, message: FORGOT_GENERIC });
+
+      const unknown = await postJson(
+        "/api/auth/forgot-password",
+        { email: `nobody-${stamp}@example.com` },
+        "198.51.100.102"
+      );
+      assert.equal(unknown.status, 200);
+      const unknownBody = await unknown.json();
+      assert.deepEqual(unknownBody, knownBody, "the unknown-email response must be byte-identical");
+
+      /* Only the registered account got mail (exactly one message). */
+      assert.equal(capturedMail.length, 1, "exactly one mail for the registered account");
+      assert.equal(capturedMail[0].to, email);
+      assert.ok(tokenFromMail(capturedMail[0]), "the mail carries a reset link");
+
+      db.prepare("DELETE FROM users WHERE email = ?").run(email);
+    });
+
+    // 87. The token is stored HASHED (never raw), the mail carries the
+    //     link, and an unknown email creates no token and no mail.
+    await test("Password reset: token stored hashed, mail carries the link, unknown email creates nothing", async () => {
+      const stamp = Date.now();
+      const email = `reset-hash-${stamp}@example.com`;
+      const reg = await postJson("/api/auth/register", { email, password: "password123", name: "Hash User" }, "198.51.100.110");
+      assert.equal(reg.status, 201);
+      const userId = db.prepare("SELECT id FROM users WHERE email = ?").get(email).id;
+
+      const tokensBefore = db.prepare("SELECT COUNT(*) c FROM password_reset_tokens").get().c;
+      capturedMail.length = 0;
+      const res = await postJson("/api/auth/forgot-password", { email }, "198.51.100.111");
+      assert.equal(res.status, 200);
+      assert.equal(capturedMail.length, 1);
+
+      const rawToken = tokenFromMail(capturedMail[0]);
+      assert.ok(rawToken, "mail must contain a reset token");
+      const row = db.prepare("SELECT * FROM password_reset_tokens WHERE user_id = ?").get(userId);
+      assert.ok(row, "a token row is created for the user");
+      assert.equal(row.purpose, "reset");
+      assert.equal(row.used_at, null, "the token starts unused");
+      assert.equal(row.token_hash, hashResetToken(rawToken), "the stored value is the SHA-256 hash of the token");
+      assert.notEqual(row.token_hash, rawToken, "the raw token is never stored");
+      const ttlMs = Date.parse(row.expires_at) - Date.now();
+      assert.ok(ttlMs > 50 * 60 * 1000 && ttlMs <= 60 * 60 * 1000, `reset token must live ~1h, got ${ttlMs}ms`);
+
+      /* An unknown email creates no token row and no mail. */
+      capturedMail.length = 0;
+      const ghost = await postJson(
+        "/api/auth/forgot-password",
+        { email: `ghost-${stamp}@example.com` },
+        "198.51.100.112"
+      );
+      assert.equal(ghost.status, 200);
+      assert.equal(capturedMail.length, 0, "no mail for an unknown email");
+      assert.equal(
+        db.prepare("SELECT COUNT(*) c FROM password_reset_tokens").get().c,
+        tokensBefore + 1,
+        "no token row is created for an unknown email"
+      );
+
+      db.prepare("DELETE FROM users WHERE email = ?").run(email);
+    });
+
+    // 88. Happy path: the link sets a new password; the old one stops
+    //     working and the new one works.
+    await test("Password reset: happy path sets the password (old stops, new works)", async () => {
+      const stamp = Date.now();
+      const email = `reset-happy-${stamp}@example.com`;
+      const reg = await postJson("/api/auth/register", { email, password: "old-password-1", name: "Happy User" }, "198.51.100.120");
+      assert.equal(reg.status, 201);
+
+      capturedMail.length = 0;
+      const fp = await postJson("/api/auth/forgot-password", { email }, "198.51.100.121");
+      assert.equal(fp.status, 200);
+      const rawToken = tokenFromMail(capturedMail[0]);
+      assert.ok(rawToken);
+
+      const reset = await postJson(
+        "/api/auth/reset-password",
+        { token: rawToken, newPassword: "new-password-2" },
+        "198.51.100.122"
+      );
+      assert.equal(reset.status, 200);
+      assert.deepEqual(await reset.json(), { ok: true, message: "Your password has been set. You can now sign in." });
+
+      const row = db.prepare("SELECT used_at FROM password_reset_tokens WHERE token_hash = ?").get(hashResetToken(rawToken));
+      assert.ok(row && row.used_at, "the token is marked used after the reset");
+
+      const oldLogin = await postJson("/api/auth/login", { email, password: "old-password-1" }, "198.51.100.123");
+      assert.equal(oldLogin.status, 401, "the old password must stop working");
+      const newLogin = await postJson("/api/auth/login", { email, password: "new-password-2" }, "198.51.100.124");
+      assert.equal(newLogin.status, 200, "the new password must work");
+
+      db.prepare("DELETE FROM users WHERE email = ?").run(email);
+    });
+
+    // 89. Single-use: the same token a second time is rejected with the
+    //     generic error.
+    await test("Password reset: token is single-use (second use rejected)", async () => {
+      const stamp = Date.now();
+      const email = `reset-once-${stamp}@example.com`;
+      const reg = await postJson("/api/auth/register", { email, password: "password123", name: "Once User" }, "198.51.100.130");
+      assert.equal(reg.status, 201);
+
+      capturedMail.length = 0;
+      await postJson("/api/auth/forgot-password", { email }, "198.51.100.131");
+      const rawToken = tokenFromMail(capturedMail[0]);
+      const first = await postJson("/api/auth/reset-password", { token: rawToken, newPassword: "first-new-pass" }, "198.51.100.132");
+      assert.equal(first.status, 200);
+
+      const second = await postJson("/api/auth/reset-password", { token: rawToken, newPassword: "second-new-pass" }, "198.51.100.133");
+      assert.equal(second.status, 400, "a used token must be rejected");
+      assert.equal((await second.json()).error.message, TOKEN_GENERIC);
+
+      /* The second password was NOT set. */
+      const login = await postJson("/api/auth/login", { email, password: "first-new-pass" }, "198.51.100.134");
+      assert.equal(login.status, 200, "only the first reset took effect");
+
+      db.prepare("DELETE FROM users WHERE email = ?").run(email);
+    });
+
+    // 90. Expired and unknown tokens are rejected with the SAME generic
+    //     error (identical bodies) — no state is leaked.
+    await test("Password reset: expired and unknown tokens share one generic error", async () => {
+      const stamp = Date.now();
+      const email = `reset-exp-${stamp}@example.com`;
+      const reg = await postJson("/api/auth/register", { email, password: "password123", name: "Exp User" }, "198.51.100.140");
+      assert.equal(reg.status, 201);
+      const userId = db.prepare("SELECT id FROM users WHERE email = ?").get(email).id;
+
+      /* An expired token, inserted directly (raw value known to the test). */
+      const expiredRaw = "expired-token-value-for-test";
+      const past = new Date(Date.now() - 60 * 1000).toISOString();
+      db.prepare(`
+        INSERT INTO password_reset_tokens (user_id, token_hash, purpose, expires_at, used_at, created_at)
+        VALUES (?, ?, 'reset', ?, NULL, ?)
+      `).run(userId, hashResetToken(expiredRaw), past, new Date().toISOString());
+
+      const expired = await postJson("/api/auth/reset-password", { token: expiredRaw, newPassword: "some-new-pass" }, "198.51.100.141");
+      assert.equal(expired.status, 400);
+      const expiredBody = await expired.json();
+
+      const unknown = await postJson("/api/auth/reset-password", { token: "never-existed-token", newPassword: "some-new-pass" }, "198.51.100.142");
+      assert.equal(unknown.status, 400);
+      const unknownBody = await unknown.json();
+
+      assert.deepEqual(unknownBody, expiredBody, "expired and unknown tokens must be indistinguishable");
+      assert.equal(expiredBody.error.message, TOKEN_GENERIC);
+
+      /* A too-short password is a validation error (same rules as
+         registration), not a token-state leak. */
+      const short = await postJson("/api/auth/reset-password", { token: "whatever", newPassword: "short" }, "198.51.100.143");
+      assert.equal(short.status, 400);
+      assert.ok(/between 8 and 200/.test((await short.json()).error.message));
+
+      db.prepare("DELETE FROM users WHERE email = ?").run(email);
+    });
+
+    // 91. Forgot-password is rate-limited per IP and per email (5/hour
+    //     each, 6th -> 429 with Retry-After).
+    await test("Password reset: forgot-password rate limit trips per IP and per email", async () => {
+      const stamp = Date.now();
+      const ip = "198.51.100.150";
+      for (let i = 0; i < 5; i++) {
+        const r = await postJson("/api/auth/forgot-password", { email: `rl-ip-${stamp}-${i}@example.com` }, ip);
+        assert.equal(r.status, 200, `request ${i + 1} from the IP must be allowed`);
+      }
+      const sixth = await postJson("/api/auth/forgot-password", { email: `rl-ip-${stamp}-6@example.com` }, ip);
+      assert.equal(sixth.status, 429, "the 6th rapid request from one IP is throttled");
+      assert.equal((await sixth.json()).error.code, "RATE_LIMITED");
+      assert.ok(sixth.headers.get("retry-after") != null, "the 429 carries Retry-After");
+
+      /* Per-email: the same address from 5 fresh IPs is allowed, the 6th
+         (from yet another IP) trips the per-email bucket. */
+      const victim = `rl-email-${stamp}@example.com`;
+      for (let i = 0; i < 5; i++) {
+        const r = await postJson("/api/auth/forgot-password", { email: victim }, `198.51.100.${160 + i}`);
+        assert.equal(r.status, 200, `request ${i + 1} for the email must be allowed`);
+      }
+      const sixthEmail = await postJson("/api/auth/forgot-password", { email: victim }, "198.51.100.165");
+      assert.equal(sixthEmail.status, 429, "the 6th request for one email is throttled even from a new IP");
+    });
+
+    // 92. A reset invalidates ALL of the user's sessions and ALL of their
+    //     other tokens (forced re-login everywhere).
+    await test("Password reset: sessions invalidated and other tokens die after a reset", async () => {
+      const stamp = Date.now();
+      const email = `reset-sess-${stamp}@example.com`;
+      const reg = await postJson("/api/auth/register", { email, password: "password123", name: "Sess User" }, "198.51.100.170");
+      assert.equal(reg.status, 201);
+      const userId = db.prepare("SELECT id FROM users WHERE email = ?").get(email).id;
+
+      const login = await postJson("/api/auth/login", { email, password: "password123" }, "198.51.100.171");
+      assert.equal(login.status, 200);
+      const cookie = login.headers.get("set-cookie").split(";")[0];
+      const meBefore = await fetch(`${baseUrl}/api/auth/me`, { headers: { Cookie: cookie } });
+      assert.equal((await meBefore.json()).user.email, email, "the session works before the reset");
+
+      /* Two tokens for the same user (two forgot-password requests). */
+      capturedMail.length = 0;
+      await postJson("/api/auth/forgot-password", { email }, "198.51.100.172");
+      await postJson("/api/auth/forgot-password", { email }, "198.51.100.173");
+      assert.equal(capturedMail.length, 2);
+      const tokenA = tokenFromMail(capturedMail[0]);
+      const tokenB = tokenFromMail(capturedMail[1]);
+      assert.notEqual(tokenA, tokenB, "each request mints a distinct token");
+
+      const reset = await postJson("/api/auth/reset-password", { token: tokenA, newPassword: "after-reset-pass" }, "198.51.100.174");
+      assert.equal(reset.status, 200);
+
+      /* The old session is dead. */
+      const meAfter = await fetch(`${baseUrl}/api/auth/me`, { headers: { Cookie: cookie } });
+      assert.equal((await meAfter.json()).user, null, "the pre-reset session must be invalidated");
+
+      /* The other token is gone (deleted, not just expired). */
+      assert.equal(
+        db.prepare("SELECT COUNT(*) c FROM password_reset_tokens WHERE user_id = ? AND token_hash = ?").get(userId, hashResetToken(tokenB)).c,
+        0,
+        "the unused token must be deleted by the reset"
+      );
+      const reuseB = await postJson("/api/auth/reset-password", { token: tokenB, newPassword: "another-pass" }, "198.51.100.175");
+      assert.equal(reuseB.status, 400, "the deleted token must be rejected");
+
+      const loginNew = await postJson("/api/auth/login", { email, password: "after-reset-pass" }, "198.51.100.176");
+      assert.equal(loginNew.status, 200, "login with the new password works");
+
+      db.prepare("DELETE FROM users WHERE email = ?").run(email);
+    });
+
+    // 93. GET /reset-password serves the reset page (200, form present) and
+    //     the page shows no email address (Discord-only support rule).
+    await test("Password reset: GET /reset-password serves the reset page with no email on it", async () => {
+      const res = await fetch(`${baseUrl}/reset-password?token=abc123`);
+      assert.equal(res.status, 200);
+      const html = await res.text();
+      assert.ok(html.includes("Set a new password"), "the page has its heading");
+      assert.ok(html.includes('id="reset-form"'), "the page has the reset form");
+      assert.ok(!html.includes("@"), "the reset page must show no email address");
+    });
+
+    // 94. A NEW social account gets a set-password email (24h setup token);
+    //     a returning login does not. The setup token sets a password the
+    //     user can then log in with.
+    await test("OAuth setup email: new social account gets a set-password email; returning login does not", async () => {
+      const stamp = Date.now();
+      capturedMail.length = 0;
+      const user = linkOrCreateAccount({
+        provider: "google",
+        providerUserId: `setup-${stamp}`,
+        email: `oauth-setup-${stamp}@example.com`,
+        name: "Setup User",
+      });
+      assert.equal(user.password_hash, null, "the social account starts without a password");
+      assert.equal(capturedMail.length, 1, "exactly one setup email for the new account");
+      assert.ok(/set a password/i.test(capturedMail[0].subject), `setup subject, got: ${capturedMail[0].subject}`);
+      assert.equal(capturedMail[0].to, `oauth-setup-${stamp}@example.com`);
+      const setupToken = tokenFromMail(capturedMail[0]);
+      assert.ok(setupToken, "the setup mail carries a link");
+      const row = db.prepare("SELECT * FROM password_reset_tokens WHERE user_id = ?").get(user.id);
+      assert.ok(row && row.purpose === "setup", "the setup token is stored with purpose 'setup'");
+      const ttlMs = Date.parse(row.expires_at) - Date.now();
+      assert.ok(ttlMs > 23 * 60 * 60 * 1000 && ttlMs <= 24 * 60 * 60 * 1000, `setup token must live ~24h, got ${ttlMs}ms`);
+
+      /* A returning login with the same identity sends nothing more. */
+      linkOrCreateAccount({
+        provider: "google",
+        providerUserId: `setup-${stamp}`,
+        email: `oauth-setup-${stamp}@example.com`,
+        name: "Setup User",
+      });
+      assert.equal(capturedMail.length, 1, "no second setup email on a returning login");
+
+      /* The setup token sets a password the user can log in with. */
+      const reset = await postJson("/api/auth/reset-password", { token: setupToken, newPassword: "social-set-pass" }, "198.51.100.180");
+      assert.equal(reset.status, 200);
+      const login = await postJson("/api/auth/login", { email: `oauth-setup-${stamp}@example.com`, password: "social-set-pass" }, "198.51.100.181");
+      assert.equal(login.status, 200, "the social account can now log in with its new password");
+
+      db.prepare("DELETE FROM users WHERE id = ?").run(user.id);
+    });
+
+    // 95. No setup email for a no-email provider account (MAL/AniList
+    //     placeholder .invalid addresses have nowhere to send to).
+    await test("OAuth setup email: no email for placeholder (no-email provider) accounts", async () => {
+      const stamp = Date.now();
+      capturedMail.length = 0;
+      const user = linkOrCreateAccount({
+        provider: "mal",
+        providerUserId: `nosetup-${stamp}`,
+        email: null,
+        name: "MAL Fan",
+      });
+      assert.ok(user.email.endsWith("@aniflick.invalid"));
+      assert.equal(capturedMail.length, 0, "no setup email without a real address");
+      assert.equal(
+        db.prepare("SELECT COUNT(*) c FROM password_reset_tokens WHERE user_id = ?").get(user.id).c,
+        0,
+        "no setup token is created without a real address"
+      );
+      db.prepare("DELETE FROM users WHERE id = ?").run(user.id);
+    });
+
+    // 96. Without SMTP configured, forgot-password still answers the
+    //     generic 200 — it just sends nothing and stores no token.
+    await test("Password reset: without SMTP configured, forgot-password degrades gracefully", async () => {
+      _setMailTransportForTests(null);
+      assert.ok(!process.env.SMTP_HOST, "the test environment must have no SMTP_HOST set");
+      const stamp = Date.now();
+      const email = `reset-nosmtp-${stamp}@example.com`;
+      const reg = await postJson("/api/auth/register", { email, password: "password123", name: "NoSmtp User" }, "198.51.100.190");
+      assert.equal(reg.status, 201);
+      const userId = db.prepare("SELECT id FROM users WHERE email = ?").get(email).id;
+
+      const res = await postJson("/api/auth/forgot-password", { email }, "198.51.100.191");
+      assert.equal(res.status, 200, "the endpoint must not fail without SMTP");
+      assert.deepEqual(await res.json(), { ok: true, message: FORGOT_GENERIC });
+      assert.equal(
+        db.prepare("SELECT COUNT(*) c FROM password_reset_tokens WHERE user_id = ?").get(userId).c,
+        0,
+        "no token is stored when no mail can be sent"
+      );
+
+      db.prepare("DELETE FROM users WHERE email = ?").run(email);
     });
 
     console.log(`\nAll ${passed} E2E integration tests passed successfully!\n`);

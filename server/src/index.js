@@ -19,6 +19,10 @@ import {
   LOGIN_WINDOW_MS,
   REGISTER_MAX_ATTEMPTS,
   REGISTER_WINDOW_MS,
+  FORGOT_PASSWORD_MAX_ATTEMPTS,
+  FORGOT_PASSWORD_WINDOW_MS,
+  RESET_PASSWORD_MAX_ATTEMPTS,
+  RESET_PASSWORD_WINDOW_MS,
   TRUST_PROXY,
   HISTORY_LIMIT,
   CONTINUE_LIMIT,
@@ -33,6 +37,14 @@ import { checkDubAvailability } from "./dub-check.js";
 import { resolveAnimegg } from "./animegg.js";
 import { createRateLimiter } from "./ratelimit.js";
 import { mountOAuthRoutes } from "./oauth.js";
+import { isPlaceholderEmail } from "./oauth-providers.js";
+import { isMailConfigured, sendPasswordEmail } from "./mailer.js";
+import {
+  createResetToken,
+  findValidResetToken,
+  resetLink,
+  applyPasswordReset,
+} from "./password-reset.js";
 import {
   AniListBusyError,
   searchAniList,
@@ -89,6 +101,11 @@ const loginIpLimiter = createRateLimiter({ max: LOGIN_MAX_ATTEMPTS, windowMs: LO
 const loginAccountLimiter = createRateLimiter({ max: LOGIN_MAX_ATTEMPTS, windowMs: LOGIN_WINDOW_MS });
 const registerLimiter = createRateLimiter({ max: REGISTER_MAX_ATTEMPTS, windowMs: REGISTER_WINDOW_MS });
 const commentLimiter = createRateLimiter({ max: 1, windowMs: COMMENT_RATE_LIMIT_MS });
+/* Forgot-password is limited per IP AND per email address (whichever trips
+   first); the reset endpoint is limited per IP. */
+const forgotPasswordIpLimiter = createRateLimiter({ max: FORGOT_PASSWORD_MAX_ATTEMPTS, windowMs: FORGOT_PASSWORD_WINDOW_MS });
+const forgotPasswordEmailLimiter = createRateLimiter({ max: FORGOT_PASSWORD_MAX_ATTEMPTS, windowMs: FORGOT_PASSWORD_WINDOW_MS });
+const resetPasswordLimiter = createRateLimiter({ max: RESET_PASSWORD_MAX_ATTEMPTS, windowMs: RESET_PASSWORD_WINDOW_MS });
 
 // Body parser
 app.use(express.json());
@@ -315,6 +332,100 @@ app.post("/api/auth/logout", (req, res) => {
   }
   clearSessionCookie(res);
   res.json({ ok: true });
+});
+
+/* ==========================================================================
+   PASSWORD RESET (magic-link email)
+   Privacy is the whole point of this flow:
+   - The forgot-password response is IDENTICAL whether or not the email is
+     registered — same status, same body. An attacker learns nothing from
+     the response. (The per-IP / per-email rate limit also caps how many
+     probes anyone can make in an hour.)
+   - No email address or token ever appears in a log line (see mailer.js).
+   - Only the token HASH is stored; the raw token exists only in the email.
+   - A reset also works for social-only accounts (NULL password_hash): the
+     same link lets them SET a password. The response never says which
+     case applied.
+   ========================================================================== */
+
+/* The one generic message the forgot-password endpoint ever returns. */
+const FORGOT_PASSWORD_MESSAGE = "If an account exists for that email, a reset link has been sent.";
+
+app.post("/api/auth/forgot-password", async (req, res, next) => {
+  try {
+    /* 5 requests per hour per IP AND per email address — counted before
+       any work, so a flood cannot burn token creation or mail sends. The
+       limiter keys on the SUBMITTED email string, so it behaves the same
+       for registered and unregistered addresses (no leak). */
+    const email = normalizeEmail(req.body.email);
+    const ip = clientIp(req);
+    const ipCheck = forgotPasswordIpLimiter.check(`ip:${ip}`);
+    const emailCheck = forgotPasswordEmailLimiter.check(`email:${email}`);
+    if (!ipCheck.allowed || !emailCheck.allowed) {
+      const retryMs = Math.max(ipCheck.retryAfterMs, emailCheck.retryAfterMs);
+      throw tooManyRequests(
+        "Too many password reset requests. Please try again later.",
+        Math.ceil(retryMs / 1000)
+      );
+    }
+
+    /* Only a registered account with a REAL email gets a token + mail.
+       Placeholder .invalid addresses (MAL/AniList accounts with no email)
+       have nowhere to send to. When mail is unconfigured, no token is
+       created at all — there is nothing to send, so nothing is stored. */
+    const user = email
+      ? db.prepare("SELECT id, email FROM users WHERE email = ?").get(email)
+      : null;
+    if (user && !isPlaceholderEmail(user.email) && isMailConfigured()) {
+      const rawToken = createResetToken(user.id, "reset");
+      /* Awaited (not fire-and-forget) so a transport failure is logged
+         before the response — the response itself stays generic either
+         way, and sendPasswordEmail never throws for mail failures. */
+      await sendPasswordEmail({ to: user.email, link: resetLink(rawToken), purpose: "reset" });
+    }
+    res.json({ ok: true, message: FORGOT_PASSWORD_MESSAGE });
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.post("/api/auth/reset-password", async (req, res, next) => {
+  try {
+    const ip = clientIp(req);
+    const rl = resetPasswordLimiter.check(`ip:${ip}`);
+    if (!rl.allowed) {
+      throw tooManyRequests(
+        "Too many password reset attempts. Please try again later.",
+        Math.ceil(rl.retryAfterMs / 1000)
+      );
+    }
+
+    const token = typeof req.body.token === "string" ? req.body.token : "";
+    const newPassword = typeof req.body.newPassword === "string" ? req.body.newPassword : "";
+
+    /* The password rules match registration exactly (same message), so a
+       bad password is a validation error, not a token-state leak. */
+    if (!newPassword || newPassword.length < PASSWORD_MIN || newPassword.length > PASSWORD_MAX) {
+      throw badRequest(`Password must be between ${PASSWORD_MIN} and ${PASSWORD_MAX} characters.`);
+    }
+
+    /* ONE generic failure for every token problem — unknown, expired, or
+       already used are indistinguishable by design. */
+    const tokenRow = findValidResetToken(token);
+    if (!tokenRow) {
+      throw badRequest("This password link is invalid or has expired.");
+    }
+
+    /* The hash is computed BEFORE the transaction (scrypt is async;
+       better-sqlite3 transactions are sync). The transaction sets the new
+       password, marks this token used, deletes every other token for the
+       user, and deletes all of the user's sessions. */
+    const passwordHash = await hashPassword(newPassword);
+    applyPasswordReset({ tokenId: tokenRow.id, userId: tokenRow.user_id, passwordHash });
+    res.json({ ok: true, message: "Your password has been set. You can now sign in." });
+  } catch (err) {
+    next(err);
+  }
 });
 
 app.get("/api/auth/me", (req, res) => {
@@ -1475,6 +1586,9 @@ const NAMED_PAGES = {
   dmca: "dmca.html",
   about: "about.html",
   contact: "contact.html",
+  /* Password-reset landing page (magic-link target). The token is NOT
+     validated on GET — the page is static; the POST endpoint validates. */
+  "reset-password": "reset-password.html",
 };
 for (const [name, file] of Object.entries(NAMED_PAGES)) {
   app.get(`/${name}`, (req, res) => {

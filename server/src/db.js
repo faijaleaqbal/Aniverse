@@ -109,6 +109,25 @@ export function initSchema() {
     CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
     CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
 
+    /* Password-reset / set-password magic links (Nov 2026). Only the
+       SHA-256 HASH of the token is stored — the raw token exists only in
+       the email. purpose: 'reset' (forgot-password, 1h) or 'setup' (new
+       social account sets a local password, 24h). Single-use: used_at is
+       set when the token is consumed; a used or expired token is dead. */
+    CREATE TABLE IF NOT EXISTS password_reset_tokens (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      token_hash TEXT NOT NULL UNIQUE,
+      purpose TEXT NOT NULL CHECK (purpose IN ('reset', 'setup')),
+      expires_at TEXT NOT NULL,
+      used_at TEXT,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_reset_tokens_user ON password_reset_tokens(user_id);
+    CREATE INDEX IF NOT EXISTS idx_reset_tokens_expires ON password_reset_tokens(expires_at);
+
     CREATE TABLE IF NOT EXISTS watchlist (
       user_id INTEGER NOT NULL,
       title_slug TEXT NOT NULL,

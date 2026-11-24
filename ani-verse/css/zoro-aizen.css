@@ -2136,6 +2136,21 @@ main.grid-is-empty .zoro-empty-state {
   border-bottom-color: var(--zoro-lime);
 }
 
+/* "Forgot password?" / "Back to sign in" links in the auth modal. */
+.forgot-password-link {
+  background: none;
+  border: none;
+  color: var(--text-sub);
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 0;
+  margin: -0.5rem 0 0.25rem auto;
+  display: block;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.forgot-password-link:hover { color: var(--zoro-lime); }
+
 .input-field-group {
   margin-bottom: 1.15rem;
   display: flex;

@@ -21,12 +21,15 @@
 import { db } from "./db.js";
 import { createRateLimiter } from "./ratelimit.js";
 import { nowIso, randomToken, normalizeEmail } from "./utils.js";
+import { isMailConfigured, sendPasswordEmail } from "./mailer.js";
+import { createResetToken, resetLink } from "./password-reset.js";
 import {
   providerConfig,
   enabledProviders,
   buildRedirectUri,
   pkceChallenge,
   placeholderEmail,
+  isPlaceholderEmail,
   cleanSocialName,
 } from "./oauth-providers.js";
 
@@ -58,13 +61,15 @@ export function linkOrCreateAccount({ provider, providerUserId, email, name }) {
   const cleanEmail = email ? normalizeEmail(email) : "";
   const now = nowIso();
   const displayName = cleanSocialName(name);
+  let isNewAccount = false;
 
-  return db.transaction(() => {
-    let user = null;
+  const user = db.transaction(() => {
+    let found = null;
     if (cleanEmail) {
-      user = db.prepare("SELECT * FROM users WHERE email = ?").get(cleanEmail);
+      found = db.prepare("SELECT * FROM users WHERE email = ?").get(cleanEmail);
     }
-    if (!user) {
+    if (!found) {
+      isNewAccount = true;
       const accountEmail = cleanEmail || placeholderEmail(provider, pid);
       const avatarTone = Math.floor(Math.random() * 6) + 1;
       const result = db
@@ -73,14 +78,34 @@ export function linkOrCreateAccount({ provider, providerUserId, email, name }) {
           VALUES (?, NULL, ?, ?, ?, ?)
         `)
         .run(accountEmail, displayName, avatarTone, now, now);
-      user = db.prepare("SELECT * FROM users WHERE id = ?").get(result.lastInsertRowid);
+      found = db.prepare("SELECT * FROM users WHERE id = ?").get(result.lastInsertRowid);
     }
     db.prepare(`
       INSERT OR IGNORE INTO linked_identities (user_id, provider, provider_user_id, created_at)
       VALUES (?, ?, ?, ?)
-    `).run(user.id, provider, pid, now);
-    return user;
+    `).run(found.id, provider, pid, now);
+    return found;
   })();
+
+  /* A BRAND-NEW social account gets a set-password email (24h link) so the
+     user can also sign in with their email address later. Only on creation
+     — never on a returning login, and never when the provider gave no real
+     email (MAL/AniList placeholder .invalid addresses have nowhere to send
+     to). The email is provider-verified by construction: fetchProfile only
+     returns an email when the provider says it is verified (Google
+     email_verified, Discord verified).
+     Fire-and-forget: the OAuth callback already redirects, so a mail
+     failure must never break sign-in. sendPasswordEmail never throws for
+     transport failures (it returns { sent: false }), and the mailer logs
+     no address or token. When mail is unconfigured, no token is created. */
+  if (isNewAccount && cleanEmail && !isPlaceholderEmail(cleanEmail) && isMailConfigured()) {
+    const rawToken = createResetToken(user.id, "setup");
+    sendPasswordEmail({ to: cleanEmail, link: resetLink(rawToken), purpose: "setup" }).catch(() => {
+      /* Guard only — sendPasswordEmail already handles mail failures. */
+    });
+  }
+
+  return user;
 }
 
 /* ==========================================================================

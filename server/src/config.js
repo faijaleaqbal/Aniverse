@@ -62,6 +62,22 @@ export const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 export const REGISTER_MAX_ATTEMPTS = 5;
 export const REGISTER_WINDOW_MS = 60 * 60 * 1000;
 
+/* Password-reset rate limits. Forgot-password is limited per IP AND per
+   email address (whichever trips first) so one address cannot be spammed
+   from many addresses and one address cannot enumerate accounts. The reset
+   endpoint itself is limited per IP — the token is 256 bits of randomness,
+   so this is belt-and-braces against probing, not the main defence. */
+export const FORGOT_PASSWORD_MAX_ATTEMPTS = 5;
+export const FORGOT_PASSWORD_WINDOW_MS = 60 * 60 * 1000;
+export const RESET_PASSWORD_MAX_ATTEMPTS = 10;
+export const RESET_PASSWORD_WINDOW_MS = 60 * 60 * 1000;
+
+/* Password-reset token lifetimes. A reset link is short-lived (1 hour);
+   the set-password link for a new social account lives a day, because the
+   user may not open it right after signing up. */
+export const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
+export const SETUP_TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
+
 /* ZokoAnime embed player configuration (never hardcoded in the frontend). */
 export const ZOKO_EMBED_ORIGIN = (process.env.ZOKO_EMBED_ORIGIN || "https://zokoanime.video").replace(/\/+$/, "");
 export const ZOKO_DEFAULT_SOURCE = process.env.ZOKO_DEFAULT_SOURCE || "mal";

@@ -894,8 +894,22 @@
             <label for="reg-password">Password</label>
             <input id="reg-password" name="password" type="password" placeholder="At least 8 characters" required>
           </div>
+          <button class="forgot-password-link" id="btn-forgot-password" type="button">Forgot password?</button>
           <button class="btn-zoro-primary" id="btn-auth-submit" type="submit" style="width: 100%; justify-content: center; margin-top: 1rem; padding: 0.75rem;">Sign In</button>
         </form>
+        <div id="zoro-forgot-view" style="display: none;">
+          <h3 style="margin: 0 0 0.5rem; font-size: 1.1rem;">Reset your password</h3>
+          <p style="margin: 0 0 1.25rem; color: var(--text-sub); font-size: 0.9rem; line-height: 1.5;">Enter the email address for your account and we'll send you a link to set a new password.</p>
+          <div id="forgot-msg" style="display: none; padding: 8px 12px; margin-bottom: 12px; background: rgba(202,233,98,0.12); border: 1px solid #cae962; border-radius: 6px; font-size: 0.8rem; color: #d9f99d;"></div>
+          <form id="zoro-forgot-form">
+            <div class="input-field-group">
+              <label for="forgot-email">Email Address</label>
+              <input id="forgot-email" name="email" type="email" placeholder="Your email address" required>
+            </div>
+            <button class="btn-zoro-primary" id="btn-forgot-submit" type="submit" style="width: 100%; justify-content: center; margin-top: 1rem; padding: 0.75rem;">Send reset link</button>
+          </form>
+          <button class="forgot-password-link" id="btn-forgot-back" type="button" style="margin-top: 1rem;">&larr; Back to sign in</button>
+        </div>
         <div id="zoro-social-block" style="display: none;">
           <div class="social-login-divider"><span>or continue with</span></div>
           <div id="zoro-social-logins" class="social-login-list"></div>
@@ -917,11 +931,35 @@
     const errorBox = modal.querySelector("#modal-error-msg");
     const tabBtns = modal.querySelectorAll(".modal-tab-btn");
     const closeBtn = modal.querySelector(".modal-close-cross");
+    const tabsRow = modal.querySelector(".modal-tabs");
+    const socialBlock = modal.querySelector("#zoro-social-block");
+    const forgotLink = modal.querySelector("#btn-forgot-password");
+    const forgotView = modal.querySelector("#zoro-forgot-view");
+    const forgotForm = modal.querySelector("#zoro-forgot-form");
+    const forgotMsg = modal.querySelector("#forgot-msg");
+    const forgotBack = modal.querySelector("#btn-forgot-back");
+    const forgotSubmit = modal.querySelector("#btn-forgot-submit");
+
+    /* Forgot password: the modal swaps the sign-in form for a small email
+       form. The server answers the SAME generic message whether or not the
+       email is registered, and the modal shows exactly that message — never
+       a hint about whether the account exists. */
+    function showForgotView(show) {
+      forgotView.style.display = show ? "block" : "none";
+      form.style.display = show ? "none" : "";
+      tabsRow.style.display = show ? "none" : "";
+      socialBlock.style.display =
+        show || !(socialProvidersCache && socialProvidersCache.length) ? "none" : "block";
+      errorBox.style.display = "none";
+      if (!show) forgotMsg.style.display = "none";
+    }
 
     function setTab(tab) {
       activeTab = tab;
+      showForgotView(false);
       errorBox.style.display = "none";
       tabBtns.forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
+      forgotLink.style.display = tab === "login" ? "" : "none";
       if (tab === "login") {
         nameGroup.style.display = "none";
         submitBtn.textContent = "Sign In";
@@ -935,6 +973,35 @@
     closeBtn.addEventListener("click", () => modal.classList.remove("is-active"));
     modal.addEventListener("click", (e) => {
       if (e.target === modal) modal.classList.remove("is-active");
+    });
+    forgotLink.addEventListener("click", () => showForgotView(true));
+    forgotBack.addEventListener("click", () => showForgotView(false));
+
+    forgotForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      forgotMsg.style.display = "none";
+      forgotSubmit.disabled = true;
+      const res = await api("/api/auth/forgot-password", {
+        method: "POST",
+        body: { email: forgotForm.email.value.trim() },
+      });
+      forgotSubmit.disabled = false;
+      /* The server's message is the same for every email — show it
+         verbatim. A 429 (too many requests) shows the rate-limit message
+         instead, in the red style. */
+      forgotMsg.textContent =
+        (res.data && (res.data.message || (res.data.error && res.data.error.message))) ||
+        "If an account exists for that email, a reset link has been sent.";
+      if (res.ok) {
+        forgotMsg.style.background = "rgba(202,233,98,0.12)";
+        forgotMsg.style.borderColor = "#cae962";
+        forgotMsg.style.color = "#d9f99d";
+      } else {
+        forgotMsg.style.background = "rgba(255,80,80,0.15)";
+        forgotMsg.style.borderColor = "#ff5050";
+        forgotMsg.style.color = "#ff8080";
+      }
+      forgotMsg.style.display = "block";
     });
 
     form.addEventListener("submit", async (e) => {
