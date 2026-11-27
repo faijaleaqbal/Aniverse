@@ -146,7 +146,7 @@
                js/zoro-aizen.js (applyIframeSandbox / PLAYER_IFRAME_SANDBOX_BY_SERVER):
                Zoko — the default player — is UNSANDBOXED because it refuses to
                run inside a sandboxed iframe ("EMBED BLOCKED: This player does
-               not run inside a sandboxed iframe"); TVplus (backup), MegaPlay
+               not run inside a sandboxed iframe"); TVplus (backup)
                and animegg get the sandboxed value (allow-scripts
                allow-same-origin allow-forms allow-presentation — no
                allow-popups / allow-top-navigation / allow-modals /
@@ -223,15 +223,14 @@
              plays (embed hangs on "Please wait", confirmed on the user's own
              phone) — the server routes stay live, only the pill is gone. -->
         <section class="watch-controls" aria-label="Player controls">
-          <!-- Server: Zoko stays the PRIMARY player; TVplus and MegaPlay are
-               alternates the viewer chooses (or is offered when a player
+          <!-- Server: Zoko stays the PRIMARY player; TVplus is the
+               alternate the viewer chooses (or is offered when a player
                fails). Session-scoped choice; swaps the iframe src in place. -->
           <div class="watch-controls-row">
             <span class="watch-controls-label">Server</span>
             <div class="zoko-track-switcher" id="zoko-server-switcher" role="group" aria-label="Streaming server">
               <button class="server-pill active" data-server="zoko" type="button" title="ZokoAnime — primary player (Sub / Hard-sub / Dub)">Zoko</button>
               <button class="server-pill" data-server="backup" type="button" title="TVplus — audio &amp; subs depend on the source file; the site can't switch tracks. Press Play inside the player.">TVplus</button>
-              <button class="server-pill" data-server="megaplay" type="button" title="MegaPlay — Sub &amp; Dub, auto-play. Hard-sub isn't a MegaPlay track.">MegaPlay</button>
             </div>
           </div>
 

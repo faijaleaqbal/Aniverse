@@ -32,6 +32,7 @@ import {
   ZOKO_DEFAULT_COLOR,
 } from "./config.js";
 import { db } from "./db.js";
+import { resolveSlug } from "./catalog.js";
 import { buildEmbedUrl, ZOKO_SOURCES, ZOKO_TRACKS } from "./zoko.js";
 import { checkDubAvailability } from "./dub-check.js";
 import { resolveAnimegg } from "./animegg.js";
@@ -581,7 +582,7 @@ app.get("/api/genres", async (req, res, next) => {
 });
 
 app.get("/api/titles/:slug", (req, res) => {
-  const { slug } = req.params;
+  const slug = resolveSlug(req.params.slug);
   const row = db.prepare("SELECT * FROM titles WHERE slug = ?").get(slug);
   if (!row) throw notFound("Title not found.");
 
@@ -624,7 +625,7 @@ app.get("/api/titles/:slug", (req, res) => {
 });
 
 app.get("/api/titles/:slug/episodes/:ep", (req, res) => {
-  const { slug } = req.params;
+  const slug = resolveSlug(req.params.slug);
   const epNum = toInt(req.params.ep, 1);
 
   const title = db.prepare("SELECT * FROM titles WHERE slug = ?").get(slug);
@@ -1089,7 +1090,7 @@ app.get("/api/cover", async (req, res, next) => {
 });
 
 app.get("/api/stream/:slug/:ep", (req, res) => {
-  const { slug } = req.params;
+  const slug = resolveSlug(req.params.slug);
   const epNum = toInt(req.params.ep, 1);
   const title = db.prepare("SELECT * FROM titles WHERE slug = ?").get(slug);
   if (!title) throw notFound("Title not found.");
@@ -1156,7 +1157,7 @@ app.get("/api/stream/:slug/:ep", (req, res) => {
    playing Japanese. */
 app.get("/api/dub-availability/:slug/:ep", async (req, res, next) => {
   try {
-    const { slug } = req.params;
+    const slug = resolveSlug(req.params.slug);
     const epNum = toInt(req.params.ep, 1);
     const title = db.prepare("SELECT mal_id, episodes FROM titles WHERE slug = ?").get(slug);
     if (!title) throw notFound("Title not found.");
@@ -1223,12 +1224,13 @@ app.get("/api/animegg/:anilistId/:ep", async (req, res, next) => {
 app.get("/api/animegg/by-slug/:slug/:ep", async (req, res, next) => {
   try {
     const epNum = toInt(req.params.ep, null);
-    const title = db.prepare("SELECT anilist_id FROM titles WHERE slug = ?").get(req.params.slug);
+    const slug = resolveSlug(req.params.slug);
+    const title = db.prepare("SELECT anilist_id FROM titles WHERE slug = ?").get(slug);
     if (!title) throw notFound("Title not found.");
     if (!title.anilist_id) {
       return res.json({
         ok: true,
-        slug: req.params.slug,
+        slug,
         ep: epNum,
         available: false,
         embedUrl: null,
@@ -1237,12 +1239,12 @@ app.get("/api/animegg/by-slug/:slug/:ep", async (req, res, next) => {
       });
     }
     const result = await resolveAnimegg(title.anilist_id, epNum == null ? 1 : epNum);
-    return res.json({ ok: true, slug: req.params.slug, ...result });
+    return res.json({ ok: true, slug, ...result });
   } catch (err) {
     if (err instanceof ApiError) return next(err);
     return res.json({
       ok: true,
-      slug: req.params.slug,
+      slug,
       ep: toInt(req.params.ep, 0),
       available: false,
       embedUrl: null,
@@ -1298,7 +1300,7 @@ app.get("/api/watchlist", requireAuth, (req, res) => {
 });
 
 app.post("/api/watchlist/:slug", requireAuth, (req, res) => {
-  const { slug } = req.params;
+  const slug = resolveSlug(req.params.slug);
   const title = db.prepare("SELECT slug FROM titles WHERE slug = ?").get(slug);
   if (!title) throw notFound("Title not found.");
 
@@ -1312,7 +1314,7 @@ app.post("/api/watchlist/:slug", requireAuth, (req, res) => {
 });
 
 app.delete("/api/watchlist/:slug", requireAuth, (req, res) => {
-  const { slug } = req.params;
+  const slug = resolveSlug(req.params.slug);
   db.prepare("DELETE FROM watchlist WHERE user_id = ? AND title_slug = ?").run(req.user.id, slug);
   res.json({ ok: true, inWatchlist: false });
 });

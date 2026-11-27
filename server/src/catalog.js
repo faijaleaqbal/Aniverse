@@ -313,3 +313,15 @@ export const CATALOG = [
       "When the Quincy army emerges from the shadows, Ichigo Kurosaki enters the fray with newly forged dual blades.",
   },
 ];
+
+/* Renamed slugs: old slug -> canonical slug. Old/bookmarked/shared links
+   using a retired slug resolve to the same title instead of 404ing.
+   paper-cranes was the pre-rename slug for A Silent Voice (malId 28851),
+   now paper-cranes-at-dawn. */
+export const SLUG_ALIASES = {
+  "paper-cranes": "paper-cranes-at-dawn",
+};
+
+export function resolveSlug(slug) {
+  return SLUG_ALIASES[slug] || slug;
+}

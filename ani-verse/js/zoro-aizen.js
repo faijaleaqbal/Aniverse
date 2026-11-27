@@ -3568,12 +3568,15 @@
     preferredTrack = readPreferredTrack();
 
     /* ------------------------------------------------------------------
-       SERVER STATE — Zoko is PRIMARY; TVplus, MegaPlay and animegg are
+       SERVER STATE — Zoko is PRIMARY; TVplus and animegg are
        alternates the viewer chooses (never auto-switched to). The choice is
        session-scoped (sessionStorage): a fresh tab always starts on Zoko,
        a reload inside the same tab keeps the choice. ?player=backup /
-       ?player=megaplay / ?player=animegg are harmless test hooks
+       ?player=animegg are harmless test hooks
        (loadEpisode's replaceState strips the param from the URL after load).
+       NOTE: MegaPlay was removed as a player option (dead upstream, HTTP
+       410) — it is no longer offered in the switcher and is not accepted
+       as a stored or ?player= choice; such a choice falls back to Zoko.
        ------------------------------------------------------------------ */
     const SS_SERVER_KEY = "av_player_server";
     const BACKUP_ORIGIN = "https://embed.animetvplus.site";
@@ -3585,12 +3588,12 @@
     let activeServer = "zoko";
     try {
       const storedServer = sessionStorage.getItem(SS_SERVER_KEY);
-      if (storedServer === "backup" || storedServer === "megaplay" || storedServer === ANIMEGG_SERVER_ID) {
+      if (storedServer === "backup" || storedServer === ANIMEGG_SERVER_ID) {
         activeServer = storedServer;
       }
     } catch {}
     const playerHook = params.get("player");
-    if (playerHook === "backup" || playerHook === "megaplay" || playerHook === ANIMEGG_SERVER_ID) {
+    if (playerHook === "backup" || playerHook === ANIMEGG_SERVER_ID) {
       activeServer = playerHook;
       try { sessionStorage.setItem(SS_SERVER_KEY, playerHook); } catch {}
     }
@@ -4173,7 +4176,7 @@
        the viewer's own click — that lock used to make the server pills dead
        for up to 40s on a failed MegaPlay load). */
     function switchServer(server) {
-      if (server !== "zoko" && server !== "backup" && server !== "megaplay" && server !== ANIMEGG_SERVER_ID) return;
+      if (server !== "zoko" && server !== "backup" && server !== ANIMEGG_SERVER_ID) return;
       if (server === activeServer) return;
       /* Cancel the in-flight load/probes BEFORE swapping: the token bump
          makes every awaiting loadEpisode abort at its next guard. */
