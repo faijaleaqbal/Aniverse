@@ -14,6 +14,7 @@ import {
 } from "../src/oauth-providers.js";
 import { buildDetailSeo, truncateDescription } from "../src/seo.js";
 import { extractTmdbFromExternalLinks, resolveTmdbInfo } from "../src/tmdb.js";
+import { extractRavokUrl, isBlakiteUnavailableHtml } from "../src/hindi.js";
 
 console.log("=== Running ZokoAnime Unit / Smoke Tests ===");
 
@@ -401,6 +402,43 @@ test("extractTmdbFromExternalLinks and resolveTmdbInfo resolve TV TMDB ids and r
   assert.deepEqual(
     resolveTmdbInfo({ anilistId: 99999999, format: "TV", externalLinks: [] }),
     { tmdbId: null, tmdbSeason: null, tmdbEpisodeOffset: 0 }
+  );
+});
+
+test("extractRavokUrl extracts ravok.buzz/video URLs and returns null when absent", () => {
+  assert.equal(
+    extractRavokUrl('<iframe src="https://ravok.buzz/video/4c12343400ce0c1454ad4bc3860602b9" allowfullscreen></iframe>'),
+    "https://ravok.buzz/video/4c12343400ce0c1454ad4bc3860602b9"
+  );
+  assert.equal(
+    extractRavokUrl('<iframe src="http://ravok.buzz/video/abcdef1234567890abcdef1234567890"></iframe>'),
+    "https://ravok.buzz/video/abcdef1234567890abcdef1234567890"
+  );
+  assert.equal(extractRavokUrl("<title>Series not found</title>"), null);
+  assert.equal(extractRavokUrl(""), null);
+});
+
+test("isBlakiteUnavailableHtml detects CFG errors and visible unavailable markers without false positives on JS templates", () => {
+  assert.equal(
+    isBlakiteUnavailableHtml(
+      '<script>window.CFG={"err":"Content not available","dataId":""};</script><script>showMsg("<h1>Video Unavailable</h1>");</script>'
+    ),
+    true
+  );
+  assert.equal(
+    isBlakiteUnavailableHtml(
+      '<script>window.CFG={"err":"","dataId":"fww1/46/s8/2/W/W/-/a/WW-aA"};</script><script>showMsg("<h1>Video Unavailable</h1>");</script>'
+    ),
+    false,
+    "JS template string inside <script> must not mark a valid CFG.dataId page unavailable"
+  );
+  assert.equal(
+    isBlakiteUnavailableHtml("<html><body><h1>Video Unavailable</h1></body></html>"),
+    true
+  );
+  assert.equal(
+    isBlakiteUnavailableHtml("<html><body><video></video></body></html>"),
+    false
   );
 });
 

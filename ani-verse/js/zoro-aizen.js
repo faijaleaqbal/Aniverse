@@ -370,7 +370,6 @@
   /* __HINDI_PLAYER_LOGIC_START__ */
   const VIDSTREAM_SERVER_ID = "vidstream";
   const VIDSTREAM3_SERVER_ID = "vidstream3";
-  const VIDSTREAM_ORIGIN = "https://animedekho.tv";
   const VIDSTREAM3_ORIGIN = "https://blakiteapi.xyz";
 
   function isHindiServer(server) {
@@ -384,6 +383,10 @@
 
   function multiAudioBadge(t) {
     return hasHindiPlayers(t) ? `<span class="badge-mini-multi-audio">Multi Audio</span>` : "";
+  }
+
+  function multiAudioInlineBadge(t) {
+    return hasHindiPlayers(t) ? `<span class="badge-mini-multi-audio-inline">Multi Audio</span>` : "";
   }
 
   function multiAudioDetailBadge(t) {
@@ -400,10 +403,16 @@
     return { season, ep };
   }
 
-  function getVidstreamEmbedUrl(t, epNum) {
+  function getVidstreamApiPath(t, epNum) {
     if (!hasHindiPlayers(t)) return null;
     const { season, ep } = getHindiSeasonEpisode(t, epNum);
-    return `${VIDSTREAM_ORIGIN}/embed/${Math.floor(Number(t.tmdbId))}/${season}-${ep}`;
+    return `/api/hindi/vidstream?tmdbId=${Math.floor(Number(t.tmdbId))}&season=${season}&episode=${ep}`;
+  }
+
+  function getVidstream3ApiPath(t, epNum) {
+    if (!hasHindiPlayers(t)) return null;
+    const { season, ep } = getHindiSeasonEpisode(t, epNum);
+    return `/api/hindi/vidstream3?tmdbId=${Math.floor(Number(t.tmdbId))}&season=${season}&episode=${ep}`;
   }
 
   function getVidstream3EmbedUrl(t, epNum) {
@@ -595,8 +604,8 @@
   function searchRowHtml(t, href) {
     const isLive = !!(t && t.live);
     const meta = isLive
-      ? `<span>${escapeHtml(liveFormatLabel(t))}</span> • <span>${escapeHtml(String(t.year || "—"))}</span> • <span class="text-zoro-sub">${t.episodes != null ? `EP ${t.episodes}` : "ONGOING"}</span>`
-      : `<span>${t.year || 2025}</span> • <span>${t.kind || "Series"}</span>${subCount(t) ? ` • <span class="text-zoro-sub">SUB ${subCount(t)}</span>` : ""}`;
+      ? `<span>${escapeHtml(liveFormatLabel(t))}</span> • <span>${escapeHtml(String(t.year || "—"))}</span> • <span class="text-zoro-sub">${t.episodes != null ? `EP ${t.episodes}` : "ONGOING"}</span>${multiAudioInlineBadge(t)}`
+      : `<span>${t.year || 2025}</span> • <span>${t.kind || "Series"}</span>${subCount(t) ? ` • <span class="text-zoro-sub">SUB ${subCount(t)}</span>` : ""}${multiAudioInlineBadge(t)}`;
     return `
       <a class="search-result-item" href="${href}">
         <img class="search-result-thumb" src="${escapeHtml(coverOf(t))}" alt="${escapeHtml(t.name)}" loading="lazy" ${livePosterAttrs()}>
@@ -1464,6 +1473,7 @@
             <div class="spotlight-badges">
               ${subCount(t) ? `<span class="badge badge-sub">SUB ${subCount(t)}</span>` : ""}
               ${t.dubCount > 0 ? `<span class="badge badge-dub">DUB ${t.dubCount}</span>` : ""}
+              ${multiAudioDetailBadge(t)}
               <span class="badge badge-type">${t.kind}</span>
               <span class="badge badge-hd">HD</span>
               <span class="spotlight-runtime-meta">${t.year} • ${t.runtimeMin}m</span>
@@ -1623,6 +1633,7 @@
             <div class="col-item-meta">
               ${subBadge(t)}
               ${dubBadge(t)}
+              ${multiAudioInlineBadge(t)}
             </div>
           </div>
         </a>
@@ -1721,11 +1732,12 @@
         <a class="trending-item" href="${liveDetailHref(t)}">
           <div class="trending-poster-wrap">
             <img src="${escapeHtml(coverOf(t))}" alt="${escapeHtml(t.name)}" loading="lazy" decoding="async" fetchpriority="low">
+            ${multiAudioBadge(t)}
             <div class="trending-rank-num">${(i + 1 < 10 ? "0" : "") + (i + 1)}</div>
             <div class="trending-info-overlay">
               <div class="trending-anime-title">${escapeHtml(t.name)}</div>
-              <div class="col-item-submeta">
-                ${subCount(t) ? `<span class="text-zoro-sub">SUB ${subCount(t)}</span>` : ""}<span>${t.year}</span>
+              <div class="col-item-submeta trending-card-meta">
+                ${subCount(t) ? `<span class="text-zoro-sub">SUB ${subCount(t)}</span>` : ""}${t.year ? `<span>${escapeHtml(String(t.year))}</span>` : ""}
               </div>
             </div>
           </div>
@@ -3408,6 +3420,52 @@
       }
     }
 
+    let vidstreamState = "unknown";
+    let vidstream3State = "unknown";
+    let hindiProbedKey = "";
+    let hindiProbeToken = 0;
+
+    async function probeVidstream(epNum) {
+      const path = getVidstreamApiPath(titleData, epNum);
+      if (!path) {
+        vidstreamState = "unavailable";
+        return null;
+      }
+      const token = hindiProbeToken;
+      try {
+        const res = await api(path, { timeoutMs: 15000 });
+        if (token !== hindiProbeToken) return null;
+        const d = res && res.data;
+        const ok = !!(res && res.ok && d && d.available && d.url);
+        vidstreamState = ok ? "available" : "unavailable";
+        return ok ? d.url : null;
+      } catch {
+        if (token === hindiProbeToken) vidstreamState = "unavailable";
+        return null;
+      }
+    }
+
+    async function probeVidstream3(epNum) {
+      const path = getVidstream3ApiPath(titleData, epNum);
+      if (!path) {
+        vidstream3State = "unavailable";
+        return false;
+      }
+      const token = hindiProbeToken;
+      try {
+        const res = await api(path, { timeoutMs: 15000 });
+        if (token !== hindiProbeToken) return false;
+        const d = res && res.data;
+        // Fail open on transient API error so a working title is not hidden.
+        const ok = !(res && res.ok && d && d.available === false);
+        vidstream3State = ok ? "available" : "unavailable";
+        return ok;
+      } catch {
+        if (token === hindiProbeToken) vidstream3State = "available";
+        return true;
+      }
+    }
+
     const BACKUP_ID_EXCEPTIONS = {
       
       "encore-one-more": { route: "anilist", id: 125367 },
@@ -3546,7 +3604,7 @@
           settleAttempt = 1;
           switchBusy = false;
           rebuildIframe();
-          loadEpisode(currentEp, null, false, Math.floor(currentPosition || 0));
+          loadEpisode(currentEp, null, false, Math.floor(currentPosition || 0), { skipScroll: true });
           armSettleWatchdog(loadToken, server, 1);
           return;
         }
@@ -3654,7 +3712,10 @@
       fallbackOfferVisible = false;
       const altServer = activeServer === VIDSTREAM_SERVER_ID ? VIDSTREAM3_SERVER_ID : VIDSTREAM_SERVER_ID;
       const altLabel = altServer === VIDSTREAM3_SERVER_ID ? "Try Vidstream-3 (Hindi)" : "Try Vidstream (Hindi)";
-      const altBtnHtml = hasHindiPlayers(titleData)
+      const altAvailable = altServer === VIDSTREAM3_SERVER_ID
+        ? vidstream3State === "available"
+        : vidstreamState === "available";
+      const altBtnHtml = hasHindiPlayers(titleData) && altAvailable
         ? `<button class="btn-zoro-primary" id="fallback-alt-hindi-btn" type="button">${altLabel}</button>`
         : "";
       fallbackNote.innerHTML = `
@@ -3768,6 +3829,8 @@
     function switchServer(server) {
       if (server !== "zoko" && server !== "backup" && server !== ANIMEGG_SERVER_ID && !isHindiServer(server)) return;
       if (isHindiServer(server) && !hasHindiPlayers(titleData)) return;
+      if (server === VIDSTREAM_SERVER_ID && vidstreamState === "unavailable") return;
+      if (server === VIDSTREAM3_SERVER_ID && vidstream3State === "unavailable") return;
       if (server === activeServer) return;
       
       loadToken++;
@@ -3796,7 +3859,7 @@
       
       hideFallbackNote();
       pendingSwitchWatchdog = true;
-      loadEpisode(currentEp, null, false, pos);
+      loadEpisode(currentEp, null, false, pos, { skipScroll: true });
     }
 
     function applyServerUI() {
@@ -3810,8 +3873,10 @@
       if (serverSwitcher) {
         serverSwitcher.querySelectorAll(".server-pill").forEach((p) => {
           p.classList.toggle("active", p.dataset.server === activeServer);
-          if (isHindiServer(p.dataset.server)) {
-            p.hidden = !hindiAvailable;
+          if (p.dataset.server === VIDSTREAM_SERVER_ID) {
+            p.hidden = !hindiAvailable || vidstreamState !== "available";
+          } else if (p.dataset.server === VIDSTREAM3_SERVER_ID) {
+            p.hidden = !hindiAvailable || vidstream3State !== "available";
           }
           if (p.dataset.server === ANIMEGG_SERVER_ID) {
             const off = animeggState === "unavailable";
@@ -4418,7 +4483,7 @@
       resumeNoteTimer = setTimeout(hideResumeNote, 6000);
     }
 
-    async function loadEpisode(epNum, prefetched, startFromBeginning = false, positionOverride = null) {
+    async function loadEpisode(epNum, prefetched, startFromBeginning = false, positionOverride = null, opts = {}) {
       if (!titleData) {
         loadInFlight = false;
         if (spinner) spinner.hidden = true;
@@ -4426,6 +4491,7 @@
         if (bigPlay) bigPlay.style.display = "none";
         return;
       }
+      const epChanged = Number(epNum) !== Number(currentEp);
       currentEp = epNum;
       activeEpisode = epNum;
       loadInFlight = true;
@@ -4489,6 +4555,24 @@
 
       const probePromise = activeServer === "zoko" && !isLive ? probeDubAvailability(epNum) : null;
 
+      if (hasHindiPlayers(titleData)) {
+        const { season, ep } = getHindiSeasonEpisode(titleData, epNum);
+        const nextHindiKey = `${titleData.tmdbId}:${season}-${ep}`;
+        if (nextHindiKey !== hindiProbedKey) {
+          hindiProbedKey = nextHindiKey;
+          hindiProbeToken++;
+          vidstreamState = "unknown";
+          vidstream3State = "unknown";
+          applyServerUI();
+        }
+        if (activeServer !== VIDSTREAM_SERVER_ID && vidstreamState === "unknown") {
+          probeVidstream(epNum).then(() => applyServerUI()).catch(() => {});
+        }
+        if (activeServer !== VIDSTREAM3_SERVER_ID && vidstream3State === "unknown") {
+          probeVidstream3(epNum).then(() => applyServerUI()).catch(() => {});
+        }
+      }
+
       if (activeServer !== ANIMEGG_SERVER_ID) {
         const bgToken = animeggLoadToken;
         probeAnimegg(epNum).then(() => {
@@ -4527,9 +4611,11 @@
       document.querySelectorAll("#zoro-episodes-grid .ep-btn").forEach((btn) => {
         btn.classList.toggle("active", parseInt(btn.dataset.ep, 10) === epNum);
       });
-      const activeBtn = epGrid ? epGrid.querySelector(`.ep-btn[data-ep="${epNum}"]`) : null;
-      if (activeBtn) {
-        activeBtn.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      if (!opts.skipScroll && epChanged) {
+        const activeBtn = epGrid ? epGrid.querySelector(`.ep-btn[data-ep="${epNum}"]`) : null;
+        if (activeBtn) {
+          activeBtn.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        }
       }
 
       updateEpisodeNavState();
@@ -4623,8 +4709,32 @@
       if (activeServer === "backup") {
         streamUrl = getBackupEmbedUrl(currentEp, resumeTime, startFromBeginning === true);
       } else if (activeServer === VIDSTREAM_SERVER_ID) {
-        streamUrl = getVidstreamEmbedUrl(titleData, currentEp);
+        const resolvedUrl = await probeVidstream(currentEp);
+        if (token !== loadToken || currentEp !== epNum) return;
+        applyServerUI();
+        if (!resolvedUrl) {
+          loadInFlight = false;
+          if (spinner) spinner.hidden = true;
+          if (coverOverlay) coverOverlay.style.display = "none";
+          showHindiFailureOffer("Vidstream (Hindi) isn't available for this episode.");
+          return;
+        }
+        streamUrl = resolvedUrl;
       } else if (activeServer === VIDSTREAM3_SERVER_ID) {
+        const avail = vidstream3State === "available"
+          ? true
+          : vidstream3State === "unavailable"
+          ? false
+          : await probeVidstream3(currentEp);
+        if (token !== loadToken || currentEp !== epNum) return;
+        applyServerUI();
+        if (!avail) {
+          loadInFlight = false;
+          if (spinner) spinner.hidden = true;
+          if (coverOverlay) coverOverlay.style.display = "none";
+          showHindiFailureOffer("Vidstream-3 (Hindi) isn't available for this episode.");
+          return;
+        }
         streamUrl = getVidstream3EmbedUrl(titleData, currentEp);
       } else if (activeServer === "megaplay") {
         streamUrl = getMegaPlayEmbedUrl(currentEp, currentTrack);
@@ -6358,6 +6468,7 @@
               <div class="schedule-meta-badges">
                 ${subBadge(real)}
                 ${dubBadge(real)}
+                ${multiAudioInlineBadge(real)}
                 <span class="schedule-studio-meta">• ${escapeHtml(studio)}</span>
               </div>
             </div>

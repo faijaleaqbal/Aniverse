@@ -85,6 +85,7 @@ import {
 import { getTurnstileSiteKey, verifyTurnstile } from "./turnstile.js";
 import { renderDetailHtml } from "./seo.js";
 import { resolveTmdbInfo } from "./tmdb.js";
+import { resolveVidstreamUrl, checkVidstream3Availability } from "./hindi.js";
 
 const app = express();
 
@@ -98,7 +99,7 @@ const CSP_HEADER = [
   "style-src 'self'",
   "font-src 'self'",
   "img-src 'self' data: https://s4.anilist.co",
-  "frame-src 'self' https://zokoanime.video https://embed.animetvplus.site https://challenges.cloudflare.com https://animedekho.tv https://blakiteapi.xyz",
+  "frame-src 'self' https://zokoanime.video https://embed.animetvplus.site https://challenges.cloudflare.com https://animedekho.tv https://blakiteapi.xyz https://ravok.buzz",
   "frame-ancestors 'self'",
   "connect-src 'self' https://zokoanime.video",
   "object-src 'none'",
@@ -1313,6 +1314,47 @@ app.get("/api/animegg/by-slug/:slug/:ep", async (req, res, next) => {
       url: null,
       reason: "unavailable",
     });
+  }
+});
+
+/* ==========================================================================
+   HINDI PLAYERS (Vidstream / ravok.buzz & Vidstream-3 / blakiteapi.xyz)
+   ========================================================================== */
+
+function parseHindiQuery(query = {}) {
+  const tmdbId = toInt(query.tmdbId, null);
+  const season = query.season != null && query.season !== "" ? toInt(query.season, null) : 1;
+  const episode = query.episode != null && query.episode !== "" ? toInt(query.episode, null) : 1;
+  if (tmdbId == null || tmdbId <= 0 || season == null || season <= 0 || episode == null || episode <= 0) {
+    return null;
+  }
+  return { tmdbId, season, episode };
+}
+
+app.get("/api/hindi/vidstream", async (req, res, next) => {
+  try {
+    const parsed = parseHindiQuery(req.query);
+    if (!parsed) {
+      return res.status(400).json({ ok: false, error: "Valid positive numeric tmdbId, season, and episode are required." });
+    }
+    const bypassCache = req.query.fresh === "1" || req.query.fresh === "true";
+    const result = await resolveVidstreamUrl({ ...parsed, bypassCache });
+    return res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.get("/api/hindi/vidstream3", async (req, res, next) => {
+  try {
+    const parsed = parseHindiQuery(req.query);
+    if (!parsed) {
+      return res.status(400).json({ ok: false, error: "Valid positive numeric tmdbId, season, and episode are required." });
+    }
+    const result = await checkVidstream3Availability(parsed);
+    return res.json(result);
+  } catch (err) {
+    next(err);
   }
 });
 

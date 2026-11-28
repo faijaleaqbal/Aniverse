@@ -26,6 +26,18 @@
           } else if (dub) {
             dub.remove();
           }
+          var ma = badges.querySelector(".badge-multi-audio");
+          if (t.tmdbId > 0) {
+            if (!ma) {
+              ma = document.createElement("span");
+              ma.className = "badge badge-multi-audio";
+              ma.textContent = "Multi Audio";
+              var anchor = dub || sub;
+              if (anchor) anchor.insertAdjacentElement("afterend", ma); else badges.appendChild(ma);
+            }
+          } else if (ma) {
+            ma.remove();
+          }
         }
         return { ok: r.ok, status: r.status, data: d, error: null };
       });

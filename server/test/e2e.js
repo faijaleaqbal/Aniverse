@@ -21,6 +21,7 @@ const { providerConfig } = await import("../src/oauth-providers.js");
    as oauth.js above). */
 const { _setMailTransportForTests } = await import("../src/mailer.js");
 const { hashResetToken } = await import("../src/password-reset.js");
+const { _setHindiOriginsForTests, clearHindiCaches } = await import("../src/hindi.js");
 
 /* The shipped frontend logic lives in a plain browser script (no module
    exports), so these tests extract its marked pure-function blocks and
@@ -3809,12 +3810,14 @@ async function runTests() {
       assert.ok(!PLAYER_IFRAME_SANDBOX_BY_SERVER.vidstream.includes("allow-popups"));
       assert.ok(!PLAYER_IFRAME_SANDBOX_BY_SERVER.vidstream.includes("allow-top-navigation"));
 
-      // 3. Hindi player URL builder and Multi Audio badge visibility logic
+      // 3. Hindi player API paths, Vidstream-3 URL builder, and Multi Audio badge visibility logic
       const hindi = evalZoroBlock("HINDI_PLAYER_LOGIC", [
         "hasHindiPlayers",
         "multiAudioBadge",
+        "multiAudioInlineBadge",
         "multiAudioDetailBadge",
-        "getVidstreamEmbedUrl",
+        "getVidstreamApiPath",
+        "getVidstream3ApiPath",
         "getVidstream3EmbedUrl",
       ]);
       assert.equal(hindi.hasHindiPlayers({ tmdbId: 31910 }), true);
@@ -3822,18 +3825,22 @@ async function runTests() {
       assert.equal(hindi.hasHindiPlayers(null), false);
       assert.ok(hindi.multiAudioBadge({ tmdbId: 31910 }).includes("Multi Audio"));
       assert.equal(hindi.multiAudioBadge({ tmdbId: null }), "");
+      assert.ok(hindi.multiAudioInlineBadge({ tmdbId: 31910 }).includes("Multi Audio"));
+      assert.equal(hindi.multiAudioInlineBadge({ tmdbId: null }), "");
       assert.ok(hindi.multiAudioDetailBadge({ tmdbId: 31910 }).includes("Multi Audio"));
       assert.equal(hindi.multiAudioDetailBadge({ tmdbId: null }), "");
-      assert.equal(hindi.getVidstreamEmbedUrl({ tmdbId: 280042 }, 1), "https://animedekho.tv/embed/280042/1-1");
+      assert.equal(hindi.getVidstreamApiPath({ tmdbId: 280042 }, 1), "/api/hindi/vidstream?tmdbId=280042&season=1&episode=1");
+      assert.equal(hindi.getVidstream3ApiPath({ tmdbId: 85937 }, 1), "/api/hindi/vidstream3?tmdbId=85937&season=1&episode=1");
       assert.equal(hindi.getVidstream3EmbedUrl({ tmdbId: 85937 }, 1), "https://blakiteapi.xyz/embed/85937/1-1");
       assert.equal(
-        hindi.getVidstreamEmbedUrl({ tmdbId: 120089, tmdbSeason: 1, tmdbEpisodeOffset: 12 }, 1),
-        "https://animedekho.tv/embed/120089/1-13"
+        hindi.getVidstreamApiPath({ tmdbId: 120089, tmdbSeason: 1, tmdbEpisodeOffset: 12 }, 1),
+        "/api/hindi/vidstream?tmdbId=120089&season=1&episode=13"
       );
-      assert.equal(hindi.getVidstreamEmbedUrl({ tmdbId: null }, 1), null);
+      assert.equal(hindi.getVidstreamApiPath({ tmdbId: null }, 1), null);
       assert.equal(hindi.getVidstream3EmbedUrl({ tmdbId: null }, 1), null);
+      assert.ok(!js.includes("https://animedekho.tv"), "client JS must never iframe animedekho.tv directly");
 
-      // 4. CSP frame-src includes animedekho.tv and blakiteapi.xyz alongside existing origins
+      // 4. CSP frame-src includes ravok.buzz and blakiteapi.xyz alongside existing origins
       const watchRes = await fetch(`${baseUrl}/watch`);
       assert.equal(watchRes.status, 200);
       const csp = watchRes.headers.get("content-security-policy") || "";
@@ -3841,7 +3848,7 @@ async function runTests() {
         "https://zokoanime.video",
         "https://embed.animetvplus.site",
         "https://challenges.cloudflare.com",
-        "https://animedekho.tv",
+        "https://ravok.buzz",
         "https://blakiteapi.xyz",
       ]) {
         assert.ok(csp.includes(origin), `CSP frame-src keeps ${origin}`);
@@ -3884,6 +3891,189 @@ async function runTests() {
       const liveWithoutTmdb = await fetch(`${baseUrl}/api/live/987222`);
       assert.equal(liveWithoutTmdb.status, 200);
       assert.equal((await liveWithoutTmdb.json()).title.tmdbId, null);
+    });
+
+    await test("Hindi endpoint: GET /api/hindi/vidstream resolves ravok URL server-side and hides when missing/failing", async () => {
+      let calls = 0;
+      let mode = "ok";
+      const stub = http.createServer((req, res) => {
+        calls++;
+        if (mode === "error") {
+          res.writeHead(502);
+          res.end("Bad Gateway");
+          return;
+        }
+        if (req.url === "/embed/209867/1-1") {
+          const vid = calls === 1 ? "4c12343400ce0c1454ad4bc3860602b9" : "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+          res.writeHead(200, { "Content-Type": "text/html" });
+          res.end(`<html><body><iframe src="https://ravok.buzz/video/${vid}" allowfullscreen></iframe></body></html>`);
+          return;
+        }
+        res.writeHead(200, { "Content-Type": "text/html" });
+        res.end("<html><head><title>Series not found</title></head><body></body></html>");
+      });
+      await new Promise((resolve) => stub.listen(0, "127.0.0.1", resolve));
+      const { port } = stub.address();
+      _setHindiOriginsForTests({ animedekho: `http://127.0.0.1:${port}` });
+      clearHindiCaches();
+      try {
+        const bad = await fetch(`${baseUrl}/api/hindi/vidstream?tmdbId=abc&season=1&episode=1`);
+        assert.equal(bad.status, 400);
+
+        const okRes = await fetch(`${baseUrl}/api/hindi/vidstream?tmdbId=209867&season=1&episode=1`);
+        assert.equal(okRes.status, 200);
+        const okJson = await okRes.json();
+        assert.equal(okJson.ok, true);
+        assert.equal(okJson.available, true);
+        assert.equal(okJson.url, "https://ravok.buzz/video/4c12343400ce0c1454ad4bc3860602b9");
+
+        // Fresh parameter bypasses the short cache and fetches a new session URL
+        const freshRes = await fetch(`${baseUrl}/api/hindi/vidstream?tmdbId=209867&season=1&episode=1&fresh=1`);
+        assert.equal(freshRes.status, 200);
+        assert.equal((await freshRes.json()).url, "https://ravok.buzz/video/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+
+        // Missing ravok URL -> available: false, url: null
+        const missRes = await fetch(`${baseUrl}/api/hindi/vidstream?tmdbId=999999&season=1&episode=1`);
+        assert.equal(missRes.status, 200);
+        const missJson = await missRes.json();
+        assert.equal(missJson.available, false);
+        assert.equal(missJson.url, null);
+
+        // Upstream 502 -> available: false, not cached
+        mode = "error";
+        const errRes = await fetch(`${baseUrl}/api/hindi/vidstream?tmdbId=777777&season=1&episode=1`);
+        assert.equal(errRes.status, 200);
+        assert.equal((await errRes.json()).available, false);
+      } finally {
+        _setHindiOriginsForTests();
+        clearHindiCaches();
+        stub.close();
+      }
+    });
+
+    await test("Hindi endpoint: GET /api/hindi/vidstream3 checks availability, caches briefly, and fails open on network errors", async () => {
+      let calls = 0;
+      let mode = "normal";
+      const stub = http.createServer((req, res) => {
+        calls++;
+        if (mode === "error") {
+          res.writeHead(500);
+          res.end("err");
+          return;
+        }
+        if (req.url === "/embed/209867/1-1") {
+          res.writeHead(200, { "Content-Type": "text/html" });
+          res.end(`<script>window.CFG={"err":"Content not available","dataId":""};</script><script>showMsg('<h1>Video Unavailable</h1>');</script>`);
+          return;
+        }
+        res.writeHead(200, { "Content-Type": "text/html" });
+        res.end(`<script>window.CFG={"err":"","dataId":"fww1/46/s8/2/W/W/-/a/WW-aA"};</script><script>showMsg('<h1>Video Unavailable</h1>');</script>`);
+      });
+      await new Promise((resolve) => stub.listen(0, "127.0.0.1", resolve));
+      const { port } = stub.address();
+      _setHindiOriginsForTests({ blakite: `http://127.0.0.1:${port}` });
+      clearHindiCaches();
+      try {
+        const bad = await fetch(`${baseUrl}/api/hindi/vidstream3?tmdbId=0&season=1&episode=1`);
+        assert.equal(bad.status, 400);
+
+        const unavailRes = await fetch(`${baseUrl}/api/hindi/vidstream3?tmdbId=209867&season=1&episode=1`);
+        assert.equal(unavailRes.status, 200);
+        const unavailJson = await unavailRes.json();
+        assert.equal(unavailJson.available, false);
+        assert.equal(unavailJson.embedUrl, null);
+
+        // Cached second request does not hit upstream again
+        const callsBefore = calls;
+        const cachedRes = await fetch(`${baseUrl}/api/hindi/vidstream3?tmdbId=209867&season=1&episode=1`);
+        assert.equal((await cachedRes.json()).available, false);
+        assert.equal(calls, callsBefore, "availability check should be cached briefly");
+
+        // Working title (280042) returns available: true even though JS contains 'Video Unavailable'
+        const availRes = await fetch(`${baseUrl}/api/hindi/vidstream3?tmdbId=280042&season=1&episode=1`);
+        assert.equal(availRes.status, 200);
+        const availJson = await availRes.json();
+        assert.equal(availJson.available, true);
+        assert.ok(availJson.embedUrl.endsWith("/embed/280042/1-1"));
+
+        // Transient upstream failure fails open (available: true, checked: false)
+        mode = "error";
+        const failOpenRes = await fetch(`${baseUrl}/api/hindi/vidstream3?tmdbId=555555&season=1&episode=1`);
+        assert.equal(failOpenRes.status, 200);
+        const failOpenJson = await failOpenRes.json();
+        assert.equal(failOpenJson.available, true);
+        assert.equal(failOpenJson.checked, false);
+      } finally {
+        _setHindiOriginsForTests();
+        clearHindiCaches();
+        stub.close();
+      }
+    });
+
+    await test("No auto-scroll on server switch: switchServer skips scrollIntoView and bindIframeListeners does not scroll", async () => {
+      const js = readFileSync(ZORO_JS_PATH, "utf8");
+      const switchSrc = js.match(/function switchServer\(server\)\s*\{[\s\S]*?\n    \}/);
+      assert.ok(switchSrc, "switchServer must exist");
+      assert.ok(switchSrc[0].includes("skipScroll: true"), "switchServer must pass { skipScroll: true } to loadEpisode");
+      assert.ok(!/scrollIntoView|scrollTo\(/.test(switchSrc[0]), "switchServer must never call scrollIntoView or scrollTo");
+
+      const loadSrc = js.match(/async function loadEpisode\([\s\S]*?\n    \}/);
+      assert.ok(loadSrc, "loadEpisode must exist");
+      assert.ok(/!opts\.skipScroll\s*&&\s*epChanged/.test(loadSrc[0]), "loadEpisode must guard scrollIntoView with !opts.skipScroll && epChanged");
+
+      const bindSrc = js.match(/function bindIframeListeners\(\)\s*\{[\s\S]*?\n    \}/);
+      assert.ok(bindSrc && !/scrollIntoView|scrollTo\(/.test(bindSrc[0]), "bindIframeListeners must never scroll");
+    });
+
+    await test("Multi Audio badge renders on homepage Top 10 and all card renderers using server tmdbId", async () => {
+      const js = readFileSync(ZORO_JS_PATH, "utf8");
+      const spotlightJs = readFileSync(fileURLToPath(new URL("../../ani-verse/js/index-spotlight.js", import.meta.url)), "utf8");
+
+      // Top 10 carousel renders multiAudioBadge(t)
+      const top10Src = js.match(/async function initTopTenTabs\(\)\s*\{[\s\S]*?\n  \}/);
+      assert.ok(top10Src && top10Src[0].includes("multiAudioBadge(t)"), "Top 10 carousel must render multiAudioBadge(t)");
+      assert.ok(top10Src[0].includes("trending-card-meta"), "Top 10 carousel must use trending-card-meta spacing");
+
+      // Column items, search dropdown, schedule cards, and spotlight all render Multi Audio badge
+      assert.ok(js.includes("multiAudioInlineBadge(t)"), "column/search renderers must include multiAudioInlineBadge(t)");
+      assert.ok(js.includes("multiAudioInlineBadge(real)"), "schedule cards must include multiAudioInlineBadge(real)");
+      assert.ok(js.includes("multiAudioDetailBadge(t)"), "spotlight slides must include multiAudioDetailBadge(t)");
+      assert.ok(spotlightJs.includes("badge-multi-audio"), "index-spotlight.js must render badge-multi-audio on static slide");
+
+      // Server browse/search/airing responses carry tmdbId
+      mockAniList({
+        mediaList: [
+          fakeMedia({
+            id: 1735,
+            idMal: 1735,
+            title: { english: "Naruto: Shippuden", romaji: "Naruto: Shippuuden" },
+            format: "TV",
+          }),
+          fakeMedia({
+            id: 20954,
+            idMal: 28851,
+            title: { english: "A Silent Voice", romaji: "Koe no Katachi" },
+            format: "MOVIE",
+          }),
+        ],
+      });
+      const browseRes = await fetch(`${baseUrl}/api/browse?sort=trending&perPage=10&page=1`);
+      assert.equal(browseRes.status, 200);
+      const browseJson = await browseRes.json();
+      assert.equal(browseJson.results[0].tmdbId, 31910);
+      assert.equal(browseJson.results[1].tmdbId, null);
+    });
+
+    await test("Mobile homepage carousel CSS prevents cramped overlap at <=480px and <=390px", async () => {
+      const css = readFileSync(fileURLToPath(new URL("../../ani-verse/css/zoro-aizen.css", import.meta.url)), "utf8");
+      assert.ok(css.includes("@media (max-width: 480px)"), "CSS must include <=480px mobile breakpoint");
+      assert.ok(css.includes("@media (max-width: 390px)"), "CSS must include <=390px mobile breakpoint");
+      assert.ok(css.includes(".trending-card-meta"), "CSS must style .trending-card-meta");
+      assert.ok(css.includes(".badge-mini-multi-audio-inline"), "CSS must style .badge-mini-multi-audio-inline");
+      assert.ok(
+        /@media\s*\(max-width:\s*480px\)[\s\S]*?\.trending-nav\s*\{[^}]*position:\s*static;/m.test(css),
+        "mobile <=480px carousel nav must un-float (position: static) so arrows do not overlap cards"
+      );
     });
 
     console.log(`\nAll ${passed} E2E integration tests passed successfully!\n`);
