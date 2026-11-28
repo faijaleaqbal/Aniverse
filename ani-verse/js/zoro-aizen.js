@@ -4149,11 +4149,16 @@
       const totalEps = totalEpisodes();
       const prevBtn = document.getElementById("btn-prev-ep");
       const nextBtn = document.getElementById("btn-next-ep");
+      // Movies / single-episode titles have no previous or next episode:
+      // hide both buttons entirely instead of showing them greyed out.
+      const isSingleEp = totalEps === 1;
       if (prevBtn) {
+        prevBtn.style.display = isSingleEp ? "none" : "";
         prevBtn.disabled = currentEp <= 1;
         prevBtn.style.opacity = currentEp <= 1 ? "0.5" : "1";
       }
       if (nextBtn) {
+        nextBtn.style.display = isSingleEp ? "none" : "";
         const atEnd = totalEps > 0 && currentEp >= totalEps;
         
         const cont = atEnd ? titleContinuation() : null;
