@@ -4778,28 +4778,6 @@
       });
     }
 
-    const LS_THEATER_KEY = "av_theater_mode";
-    const watchLayout = document.querySelector(".watch-layout");
-    const theaterBtn = document.getElementById("btn-theater-mode");
-    function applyTheaterMode(on) {
-      if (watchLayout) watchLayout.classList.toggle("theater-mode", on);
-      if (theaterBtn) {
-        theaterBtn.classList.toggle("active", on);
-        theaterBtn.setAttribute("aria-pressed", on ? "true" : "false");
-      }
-    }
-    try {
-      applyTheaterMode(localStorage.getItem(LS_THEATER_KEY) === "1");
-    } catch {}
-    if (theaterBtn) {
-      theaterBtn.addEventListener("click", () => {
-        const on = !(watchLayout && watchLayout.classList.contains("theater-mode"));
-        applyTheaterMode(on);
-        try { localStorage.setItem(LS_THEATER_KEY, on ? "1" : "0"); } catch {}
-        showToast(on ? "Theater mode on" : "Theater mode off");
-      });
-    }
-
     // Play/Pause button
     if (playPauseBtn) {
       playPauseBtn.addEventListener("click", () => {

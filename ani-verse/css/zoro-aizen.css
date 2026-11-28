@@ -4260,21 +4260,6 @@ body.drawer-open .zoro-header {
 [data-theme="light"] #btn-theme-toggle .icon-moon { display: none; }
 
 /* ==========================================================================
-   PHASE 3b — THEATER MODE (watch page)
-   Layout only: the player column takes the full content width and the
-   episode sidebar is hidden. The iframe is never touched, so this is
-   identical on Zoko / TVplus / MegaPlay.
-   ========================================================================== */
-.watch-layout.theater-mode { grid-template-columns: minmax(0, 1fr); }
-.watch-layout.theater-mode .watch-sidebar { display: none; }
-#btn-theater-mode { margin-left: auto; }
-#btn-theater-mode.active {
-  background: var(--zoro-lime);
-  color: #0c0d12;
-  border-color: var(--zoro-lime);
-}
-
-/* ==========================================================================
    PHASE 3b — 390px RESPONSIVE FIXES (code-level)
    The header is the one real overflow: at 390px the brand text + search +
    three action buttons exceed the viewport. Hide the brand WORDMARK (the Z
