@@ -2544,27 +2544,38 @@ main.grid-is-empty .zoro-empty-state {
 
 .social-login-list {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 0.6rem;
 }
 
+/* Logo-only OAuth buttons: 48px square icon buttons, no visible text.
+   The provider name lives only in aria-label / title for screen readers. */
 .btn-social {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 100%;
-  min-height: 44px;
-  padding: 0.65rem 1rem;
-  border-radius: 8px;
+  width: 48px;
+  height: 48px;
+  min-height: 48px;
+  padding: 0;
+  border-radius: 12px;
   border: 1px solid transparent;
-  font-weight: 600;
-  font-size: 0.9rem;
   text-decoration: none;
   cursor: pointer;
-  transition: filter 0.15s ease;
+  transition: filter 0.15s ease, transform 0.15s ease;
 }
 
-.btn-social:hover { filter: brightness(1.08); }
+.btn-social:hover { filter: brightness(1.08); transform: translateY(-1px); }
+
+.btn-social:focus-visible { outline: 2px solid var(--zoro-lime, #cae962); outline-offset: 2px; }
+
+.btn-social svg {
+  width: 22px;
+  height: 22px;
+  display: block;
+  flex-shrink: 0;
+}
 
 .btn-social-google { background: #ffffff; color: #1f1f1f; border-color: #dadce0; }
 .btn-social-discord { background: #5865f2; color: #ffffff; }

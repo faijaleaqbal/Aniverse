@@ -648,24 +648,26 @@ body.login-page {
 }
 
 .social-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.6rem;
 }
 
+/* Logo-only OAuth buttons: 48px square icon buttons, no visible text.
+   The provider name lives only in aria-label / title for screen readers. */
 .social-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.45rem;
-  padding: 0.58rem 0.75rem;
-  border-radius: 10px;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border-radius: 12px;
   border: 1px solid var(--af-border);
   background: rgba(255, 255, 255, 0.04);
   color: var(--af-text);
   text-decoration: none;
-  font-size: 0.83rem;
-  font-weight: 600;
   transition: border-color 0.2s ease, background-color 0.2s ease, transform 0.15s ease;
 }
 
@@ -675,18 +677,22 @@ body.login-page {
   transform: translateY(-1px);
 }
 
-.social-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--af-lime);
+.social-btn:focus-visible {
+  outline: 2px solid var(--af-lime);
+  outline-offset: 2px;
+}
+
+.social-btn svg {
+  width: 22px;
+  height: 22px;
+  display: block;
   flex-shrink: 0;
 }
 
-.social-btn--google .social-dot { background: #ea4335; }
-.social-btn--discord .social-dot { background: #5865f2; }
-.social-btn--mal .social-dot { background: #2e51a2; }
-.social-btn--anilist .social-dot { background: #02a9ff; }
+.social-btn--google { background: #ffffff; border-color: #dadce0; }
+.social-btn--discord { background: #5865f2; border-color: #5865f2; }
+.social-btn--mal { background: #2e51a2; border-color: #2e51a2; }
+.social-btn--anilist { background: #02a9ff; border-color: #02a9ff; }
 
 /* ==========================================================================
    RESPONSIVE STACKED LAYOUT (MOBILE / TABLET)
@@ -810,7 +816,7 @@ body.login-page {
 
 @media (max-width: 440px) {
   .social-grid {
-    grid-template-columns: 1fr;
+    justify-content: center;
   }
 }
 

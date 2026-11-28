@@ -1132,6 +1132,43 @@
 
   let socialProvidersCache = null;
 
+  /* Logo-only OAuth buttons: inline SVG per provider (no external images,
+     no visible text). aria-label keeps the button accessible. Unknown
+     provider ids fall back to a first-letter monogram, still logo-only. */
+  const PROVIDER_LOGOS = {
+    google:
+      '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false">' +
+      '<path fill="#4285F4" d="M23.49 12.27c0-.79-.07-1.54-.19-2.27H12v4.51h6.47c-.29 1.48-1.14 2.73-2.4 3.58v3h3.86c2.26-2.09 3.56-5.17 3.56-8.82z"/>' +
+      '<path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.86-3c-1.08.72-2.45 1.16-4.07 1.16-3.13 0-5.78-2.11-6.73-4.96H1.29v3.09C3.26 21.3 7.31 24 12 24z"/>' +
+      '<path fill="#FBBC05" d="M5.27 14.29c-.25-.72-.38-1.49-.38-2.29s.14-1.57.38-2.29V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.98-3.09z"/>' +
+      '<path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.62l3.98 3.09C6.22 6.86 8.87 4.75 12 4.75z"/>' +
+      "</svg>",
+    discord:
+      '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false">' +
+      '<path fill="#fff" d="M20.317 4.37a19.79 19.79 0 0 0-4.885 1.515.074.074 0 0 0-.079.037c-.21.375-.444.865-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.475 17.933a.08.08 0 0 0 .032.031 19.98 19.98 0 0 0 5.593 1.534.077.077 0 0 0 .084-.045c.406-.652.773-1.348 1.098-2.075a.077.077 0 0 0-.026-.092 16.3 16.3 0 0 1-1.378-.659.077.077 0 0 1-.006-.13c.093-.072.186-.147.276-.221a.077.077 0 0 1 .086-.01 19.2 19.2 0 0 0 16.437 0 .077.077 0 0 1 .086.01c.09.074.183.149.276.221a.077.077 0 0 1-.006.13 16.5 16.5 0 0 1-1.378.659.077.077 0 0 0-.025.092c.325.727.692 1.423 1.098 2.075a.077.077 0 0 0 .084.044 19.97 19.97 0 0 0 5.588-1.534.08.08 0 0 0 .032-.032c.498-5.044-.838-9.422-3.557-13.524a.07.07 0 0 0-.032-.027ZM8.02 15.331c-1.183 0-2.157-1.086-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.095 2.157 2.419 0 1.333-.956 2.419-2.157 2.419Zm7.975 0c-1.183 0-2.157-1.086-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.095 2.157 2.419 0 1.333-.946 2.419-2.157 2.419Z"/>' +
+      "</svg>",
+    anilist:
+      '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false">' +
+      '<path fill="#fff" fill-rule="evenodd" d="M12 2.8 20.5 21.2h-3.6l-1.6-3.9H8.7l-1.6 3.9H3.5L12 2.8Zm-2.5 11.4h5l-2.5-6-2.5 6Z"/>' +
+      "</svg>",
+    mal:
+      '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false">' +
+      '<text x="12" y="17.5" text-anchor="middle" font-family="Outfit, Arial, sans-serif" font-size="15" font-weight="800" fill="#fff">M</text>' +
+      "</svg>",
+  };
+
+  function providerLogoSvg(p) {
+    const id = String(p.id || "").toLowerCase();
+    if (PROVIDER_LOGOS[id]) return PROVIDER_LOGOS[id];
+    const initial = escapeHtml(String(p.name || p.id || "?").charAt(0).toUpperCase());
+    return (
+      '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false">' +
+      '<text x="12" y="17.5" text-anchor="middle" font-family="Outfit, Arial, sans-serif" font-size="15" font-weight="800" fill="#fff">' +
+      initial +
+      "</text></svg>"
+    );
+  }
+
   async function renderSocialLogins(block, list) {
     if (!block || !list) return;
     if (socialProvidersCache === null) {
@@ -1144,7 +1181,7 @@
     list.innerHTML = socialProvidersCache
       .map(
         (p) =>
-          `<a class="btn-social btn-social-${escapeHtml(p.id)}" href="/auth/${encodeURIComponent(p.id)}?next=${next}">Continue with ${escapeHtml(p.name)}</a>`
+          `<a class="btn-social btn-social-${escapeHtml(p.id)}" href="/auth/${encodeURIComponent(p.id)}?next=${next}" aria-label="Continue with ${escapeHtml(p.name)}" title="Continue with ${escapeHtml(p.name)}">${providerLogoSvg(p)}</a>`
       )
       .join("");
     block.style.display = "block";
