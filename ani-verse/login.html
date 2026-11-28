@@ -71,7 +71,7 @@
 
           <div class="auth-alert" id="signin-error" role="alert" hidden></div>
 
-          <form class="auth-form" id="signin-form" novalidate>
+          <form class="auth-form" id="signin-form" method="post" action="/api/auth/login" novalidate>
             <div class="field-group">
               <label class="field-label" for="signin-email">Email Address</label>
               <input class="field-input" id="signin-email" name="email" type="email" autocomplete="email" placeholder="you@example.com" required>
@@ -106,7 +106,7 @@
 
           <div class="auth-alert" id="forgot-msg" role="alert" hidden></div>
 
-          <form class="auth-form" id="forgot-form" novalidate>
+          <form class="auth-form" id="forgot-form" method="post" action="/api/auth/forgot-password" novalidate>
             <div class="field-group">
               <label class="field-label" for="forgot-email">Email Address</label>
               <input class="field-input" id="forgot-email" name="email" type="email" autocomplete="email" placeholder="you@example.com" required>
@@ -127,7 +127,7 @@
 
           <div class="auth-alert" id="register-error" role="alert" hidden></div>
 
-          <form class="auth-form" id="register-form" novalidate>
+          <form class="auth-form" id="register-form" method="post" action="/api/auth/register" novalidate>
             <div class="field-group">
               <label class="field-label" for="register-name">Display Name</label>
               <input class="field-input" id="register-name" name="name" type="text" autocomplete="name" maxlength="40" placeholder="e.g. ZoroFan99" required>
