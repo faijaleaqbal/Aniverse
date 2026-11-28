@@ -72,6 +72,24 @@ export const FORGOT_PASSWORD_WINDOW_MS = 60 * 60 * 1000;
 export const RESET_PASSWORD_MAX_ATTEMPTS = 10;
 export const RESET_PASSWORD_WINDOW_MS = 60 * 60 * 1000;
 
+/* Per-user progress sync (audit D2/C2-history): the player posts ~every 5 s
+   (12/min); 60/min leaves room for seeking bursts while stopping a scripted
+   flood from growing the history table. */
+export const PROGRESS_MAX_ATTEMPTS = 60;
+export const PROGRESS_WINDOW_MS = 60 * 1000;
+
+/* Expensive unauthenticated proxy/probe routes (audit C4-cover + hunter C):
+   each call costs upstream fetches, so they get their own generous per-IP
+   caps. The watch page and normal browsing stay far below these. */
+export const COVER_MAX_ATTEMPTS = 120;
+export const COVER_WINDOW_MS = 60 * 1000;
+export const ANIME_GG_MAX_ATTEMPTS = 60;
+export const ANIME_GG_WINDOW_MS = 60 * 1000;
+export const DUB_CHECK_MAX_ATTEMPTS = 30;
+export const DUB_CHECK_WINDOW_MS = 60 * 1000;
+export const HINDI_MAX_ATTEMPTS = 60;
+export const HINDI_WINDOW_MS = 60 * 1000;
+
 /* Password-reset token lifetimes. A reset link is short-lived (1 hour);
    the set-password link for a new social account lives a day, because the
    user may not open it right after signing up. */

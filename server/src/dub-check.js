@@ -37,11 +37,20 @@ function deobfuscate(blob) {
   return JSON.parse(out.toString("utf8"));
 }
 
-async function fetchWithTimeout(url, as = "text") {
+async function fetchWithTimeout(url, as = "text", base) {
+  /* SSRF guard (audit C5-SSRF): every URL this probe fetches comes from the
+     provider (embed payload src, playlist variant/segment lines). Validate
+     before fetching and re-validate the final URL after redirects, so a
+     poisoned playlist cannot steer the server at an internal address
+     (127.0.0.1, 169.254.169.254, 10/172.16/192.168). A rejected URL throws
+     -> the probe returns available: null (unknown), never a false positive.
+     Residual: a hostname that DNS-rebinds to a private IP is not caught
+     here (no DNS resolution check); only the provider can steer it. */
+  const safeUrl = resolveProbeUrl(url, base);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
-    const res = await fetch(url, {
+    const res = await fetch(safeUrl, {
       signal: controller.signal,
       headers: {
         Referer: `${ZOKO_EMBED_ORIGIN}/`,
@@ -56,11 +65,42 @@ async function fetchWithTimeout(url, as = "text") {
         Accept: as === "text" ? "text/html,*/*" : "*/*",
       },
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status} for ${safeUrl}`);
+    /* fetch() follows redirects: re-validate the FINAL URL, so a redirect
+       off to an internal host is caught even if the original URL was fine. */
+    resolveProbeUrl(res.url);
     return as === "text" ? await res.text() : Buffer.from(await res.arrayBuffer());
   } finally {
     clearTimeout(timer);
   }
+}
+
+/* Resolve a provider-supplied URL (absolute, or relative to a playlist base)
+   and reject anything that is not a public https target. */
+function resolveProbeUrl(raw, base) {
+  let u;
+  try {
+    u = new URL(raw, base);
+  } catch {
+    throw new Error("invalid probe url");
+  }
+  if (u.protocol !== "https:") throw new Error("probe url must be https");
+  if (!isPublicHost(u.hostname)) throw new Error("probe url host not allowed");
+  return u.href;
+}
+
+function isPublicHost(hostname) {
+  const h = hostname.toLowerCase();
+  if (h === "localhost" || h.endsWith(".localhost") || h.endsWith(".local")) return false;
+  const v4 = h.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
+  if (v4) {
+    const [a, b] = v4.slice(1, 3).map(Number);
+    if (a === 0 || a === 10 || a === 127 || a >= 224) return false;
+    if (a === 172 && b >= 16 && b <= 31) return false;
+    if (a === 192 && b === 168) return false;
+    if (a === 169 && b === 254) return false;
+  }
+  return true;
 }
 
 function payloadOf(html) {
@@ -113,11 +153,12 @@ async function probe(malId, ep) {
     fetchWithTimeout(sub.src),
     fetchWithTimeout(dub.src),
   ]);
-  const subBase = sub.src.slice(0, sub.src.lastIndexOf("/"));
-  const dubBase = dub.src.slice(0, dub.src.lastIndexOf("/"));
+  /* Variant lines are relative to the master playlist; resolve them against
+     it (a bare filename resolves to the master's directory, exactly like the
+     old string-concat did) so they go through the same SSRF validation. */
   const [subPlaylist, dubPlaylist] = await Promise.all([
-    fetchWithTimeout(`${subBase}/${firstVariant(subMaster)}`),
-    fetchWithTimeout(`${dubBase}/${firstVariant(dubMaster)}`),
+    fetchWithTimeout(firstVariant(subMaster), "text", sub.src),
+    fetchWithTimeout(firstVariant(dubMaster), "text", dub.src),
   ]);
   const subSegs = segmentList(subPlaylist);
   const dubSegs = segmentList(dubPlaylist);
@@ -131,8 +172,8 @@ async function probe(malId, ep) {
   const idxs = [0, Math.floor(Math.min(subSegs.length, dubSegs.length) / 2)];
   for (const i of idxs) {
     const [a, b] = await Promise.all([
-      fetchWithTimeout(subSegs[i], "bytes"),
-      fetchWithTimeout(dubSegs[i], "bytes"),
+      fetchWithTimeout(subSegs[i], "bytes", sub.src),
+      fetchWithTimeout(dubSegs[i], "bytes", dub.src),
     ]);
     if (sha(a) !== sha(b)) {
       return { available: true, reason: "distinct-content" };

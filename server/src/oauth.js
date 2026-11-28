@@ -68,17 +68,41 @@ export function linkOrCreateAccount({ provider, providerUserId, email, name }) {
     if (cleanEmail) {
       found = db.prepare("SELECT * FROM users WHERE email = ?").get(cleanEmail);
     }
-    if (!found) {
+    if (found) {
+      /* SECURITY (audit C2): a local account can be pre-registered with a
+         victim's email without verification, so linking a verified social
+         identity by email must NOT preserve a pre-set password — the
+         attacker would keep access to the merged account. Clear the
+         password hash: the social identity becomes the sign-in path and
+         the owner can set a new password via forgot-password. */
+      if (found.password_hash) {
+        db.prepare("UPDATE users SET password_hash = NULL, updated_at = ? WHERE id = ?").run(now, found.id);
+        found.password_hash = null;
+      }
+    } else {
       isNewAccount = true;
       const accountEmail = cleanEmail || placeholderEmail(provider, pid);
       const avatarTone = Math.floor(Math.random() * 6) + 1;
-      const result = db
-        .prepare(`
-          INSERT INTO users (email, password_hash, name, avatar_tone, created_at, updated_at)
-          VALUES (?, NULL, ?, ?, ?, ?)
-        `)
-        .run(accountEmail, displayName, avatarTone, now, now);
-      found = db.prepare("SELECT * FROM users WHERE id = ?").get(result.lastInsertRowid);
+      /* A placeholder .invalid address can already exist if someone squatted
+         it locally — on UNIQUE conflict, link the existing row instead of
+         crashing (audit C9). */
+      try {
+        const result = db
+          .prepare(`
+            INSERT INTO users (email, password_hash, name, avatar_tone, created_at, updated_at)
+            VALUES (?, NULL, ?, ?, ?, ?)
+          `)
+          .run(accountEmail, displayName, avatarTone, now, now);
+        found = db.prepare("SELECT * FROM users WHERE id = ?").get(result.lastInsertRowid);
+      } catch (err) {
+        if (!err || err.code !== "SQLITE_CONSTRAINT_UNIQUE") throw err;
+        found = db.prepare("SELECT * FROM users WHERE email = ?").get(accountEmail);
+        if (!found) throw err;
+        if (found.password_hash) {
+          db.prepare("UPDATE users SET password_hash = NULL, updated_at = ? WHERE id = ?").run(now, found.id);
+          found.password_hash = null;
+        }
+      }
     }
     db.prepare(`
       INSERT OR IGNORE INTO linked_identities (user_id, provider, provider_user_id, created_at)

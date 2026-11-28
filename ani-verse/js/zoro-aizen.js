@@ -1569,7 +1569,7 @@
               ${subCount(t) ? `<span class="badge badge-sub">SUB ${subCount(t)}</span>` : ""}
               ${t.dubCount > 0 ? `<span class="badge badge-dub">DUB ${t.dubCount}</span>` : ""}
               ${multiAudioDetailBadge(t)}
-              <span class="badge badge-type">${t.kind}</span>
+              <span class="badge badge-type">${escapeHtml(t.kind)}</span>
               <span class="badge badge-hd">HD</span>
               <span class="spotlight-runtime-meta">${t.year} • ${t.runtimeMin}m</span>
             </div>
@@ -1722,7 +1722,7 @@
       if (!container) return;
       container.innerHTML = items.map((t) => `
         <a class="col-item" href="${detailHref(t.slug)}">
-          <img class="col-thumb" src="${coverOf(t)}" alt="${escapeHtml(t.name)}" loading="lazy" decoding="async" fetchpriority="low">
+          <img class="col-thumb" src="${escapeHtml(coverOf(t))}" alt="${escapeHtml(t.name)}" loading="lazy" decoding="async" fetchpriority="low">
           <div class="col-item-details">
             <div class="col-item-title" title="${escapeHtml(t.name)}">${escapeHtml(t.name)}</div>
             <div class="col-item-meta">
@@ -2090,7 +2090,7 @@
         return `
         <div class="zoro-card" data-slug="${t.slug}" data-genres="${t.genres ? t.genres.join(" ") : ""}" data-title="${escapeHtml(t.name)}">
           <a class="zoro-card-poster" href="${cardHref}">
-            <img src="${coverOf(t)}" alt="${escapeHtml(t.name)}" loading="${i < 6 ? "eager" : "lazy"}" decoding="async" fetchpriority="${i < 6 ? "high" : "low"}">
+            <img src="${escapeHtml(coverOf(t))}" alt="${escapeHtml(t.name)}" loading="${i < 6 ? "eager" : "lazy"}" decoding="async" fetchpriority="${i < 6 ? "high" : "low"}">
             <div class="zoro-play-overlay">
               <div class="zoro-play-circle">▶</div>
             </div>
@@ -2105,7 +2105,7 @@
           <div class="zoro-card-info">
             <a class="zoro-card-title" href="${cardHref}">${escapeHtml(t.name)}</a>
             <div class="zoro-card-submeta">
-              <span>${t.kind}</span> • <span>${t.runtimeMin}m</span>
+              <span>${escapeHtml(t.kind)}</span> • <span>${t.runtimeMin}m</span>
             </div>
           </div>
         </div>
@@ -2549,7 +2549,7 @@
       grid.innerHTML = titles.map((t, i) => `
         <div class="zoro-card" data-slug="${escapeHtml(t.slug)}" data-title="${escapeHtml(t.name)}">
           <a class="zoro-card-poster" href="${detailHref(t.slug)}">
-            <img src="${coverOf(t)}" alt="${escapeHtml(t.name)}" loading="${i < 6 ? "eager" : "lazy"}" decoding="async">
+            <img src="${escapeHtml(coverOf(t))}" alt="${escapeHtml(t.name)}" loading="${i < 6 ? "eager" : "lazy"}" decoding="async">
             <div class="zoro-play-overlay"><div class="zoro-play-circle">▶</div></div>
             ${multiAudioBadge(t)}
             <div class="zoro-poster-badges">
@@ -2655,7 +2655,7 @@
             ? `<div class="live-result-group"><div class="live-result-group-title">On <span class="accent">AniFlick</span><span class="live-result-group-count">${local.length} curated</span></div><div class="cards-grid-zoro" id="live-local-grid">${local.map((t) => `
               <div class="zoro-card" data-slug="${escapeHtml(t.slug)}" data-title="${escapeHtml(t.name)}">
                 <a class="zoro-card-poster" href="${detailHref(t.slug)}">
-                  <img src="${coverOf(t)}" alt="${escapeHtml(t.name)}" loading="lazy" decoding="async">
+                  <img src="${escapeHtml(coverOf(t))}" alt="${escapeHtml(t.name)}" loading="lazy" decoding="async">
                   <div class="zoro-play-overlay"><div class="zoro-play-circle">▶</div></div>
                   ${multiAudioBadge(t)}
                   <div class="zoro-poster-badges">
@@ -3011,7 +3011,7 @@
       grid.innerHTML = titles.map((t) => `
         <div class="zoro-card" data-slug="${escapeHtml(t.slug)}" data-title="${escapeHtml(t.name)}">
           <a class="zoro-card-poster" href="${detailHref(t.slug)}">
-            <img src="${coverOf(t)}" alt="${escapeHtml(t.name)}" loading="lazy" decoding="async">
+            <img src="${escapeHtml(coverOf(t))}" alt="${escapeHtml(t.name)}" loading="lazy" decoding="async">
             <div class="zoro-play-overlay"><div class="zoro-play-circle">▶</div></div>
             ${multiAudioBadge(t)}
             <div class="zoro-poster-badges">
@@ -3181,9 +3181,9 @@
           <div class="tooltip-rating">${rating ? `★ ${rating} <span class="tooltip-rating-meta">(AniList)</span>` : `<span class="tooltip-rating-meta">Not yet rated</span>`}</div>
           <div class="tooltip-synopsis">${escapeHtml(t.synopsis || t.tagline)}</div>
           <div class="tooltip-meta-rows">
-            <span><strong>Type:</strong> ${t.kind}</span>
+            <span><strong>Type:</strong> ${escapeHtml(t.kind)}</span>
             <span><strong>Studio:</strong> ${escapeHtml(t.studio)}</span>
-            <span><strong>Genres:</strong> ${t.genres ? t.genres.map(genreLabel).join(", ") : "Action"}</span>
+            <span><strong>Genres:</strong> ${t.genres ? t.genres.map((g) => escapeHtml(genreLabel(g))).join(", ") : "Action"}</span>
           </div>
           <a class="btn-zoro-primary btn-tooltip-watch" href="${watchHref(t.slug, 1)}">▶ Watch Now</a>
         `;
@@ -3330,8 +3330,14 @@
     let loadInFlight = false;
 
     /* __PLAYER_IFRAME_SANDBOX_START__ */
-    
-    const PLAYER_IFRAME_SANDBOX = "allow-scripts allow-same-origin allow-forms allow-presentation";
+    /* SECURITY (audit B1): NO allow-same-origin. With allow-scripts +
+       allow-same-origin a compromised/malicious player could self-navigate
+       to an AniFlick URL, regain our origin, remove its own sandbox and
+       reach the parent DOM. Without it the player runs in an opaque origin:
+       it can still play video (scripts, forms, presentation) but cannot
+       read cookies, storage or the parent page. Zoko stays unsandboxed by
+       design (it needs origin access for its fullscreen bridge). */
+    const PLAYER_IFRAME_SANDBOX = "allow-scripts allow-forms allow-presentation";
     
     const PLAYER_IFRAME_SANDBOX_BY_SERVER = {
       zoko: null,
@@ -6314,7 +6320,7 @@
         <span class="badge badge-sub">SUB ${epCount || 1}</span>
         ${t.dubCount > 0 ? `<span class="badge badge-dub">DUB ${t.dubCount}</span>` : ""}
         ${isHindiConfirmedAvailable(t) ? `<span class="badge badge-multi-audio">Multi Audio</span>` : ""}
-        <span class="badge badge-type">${t.kind}</span>
+        <span class="badge badge-type">${escapeHtml(t.kind)}</span>
         <span class="badge badge-hd">HD</span>
         ${scoreLabel(t) ? `<span class="badge badge-score">★ ${scoreLabel(t)}</span>` : ""}
       `;

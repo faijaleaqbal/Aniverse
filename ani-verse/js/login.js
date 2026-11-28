@@ -248,6 +248,14 @@
         window.location.assign(getSafeNext());
         return;
       }
+      /* An existing email answers 200 with a message and no user (audit C4):
+         show the message and offer sign-in instead of an error. */
+      if (res.ok && res.data && res.data.message) {
+        showAlert(registerError, res.data.message, false);
+        setMode("signin");
+        resetTurnstile();
+        return;
+      }
       showAlert(
         registerError,
         (res.data && res.data.error && res.data.error.message) || "Could not create account.",

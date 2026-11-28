@@ -6,6 +6,11 @@
 
 export function createRateLimiter({ max, windowMs }) {
   const hits = new Map();
+  /* Hard cap on the map itself (audit C6): entries only expired by time,
+     so an attacker spraying distinct keys (IPs, emails) could grow it
+     without bound. Evict the OLDEST entry once past the cap — a fixed
+     window is a throttle, not a database. */
+  const HARD_CAP = 10000;
 
   function prune(now) {
     for (const [key, rec] of hits) {
@@ -20,6 +25,10 @@ export function createRateLimiter({ max, windowMs }) {
       const now = Date.now();
       /* Bound memory: drop expired entries when the map grows. */
       if (hits.size > 5000) prune(now);
+      if (hits.size >= HARD_CAP) {
+        const oldest = hits.keys().next().value;
+        if (oldest !== undefined) hits.delete(oldest);
+      }
 
       const rec = hits.get(key);
       if (!rec || rec.resetAt <= now) {

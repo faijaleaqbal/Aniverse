@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync, unlinkSync } from "node:fs";
 import http from "node:http";
+import path from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 /* Self-contained test database: a temporary seeded + enriched DB (see
@@ -2740,7 +2741,7 @@ async function runTests() {
         "PLAYER_IFRAME_SANDBOX",
         ["PLAYER_IFRAME_SANDBOX", "PLAYER_IFRAME_SANDBOX_BY_SERVER"]
       );
-      const expected = "allow-scripts allow-same-origin allow-forms allow-presentation";
+      const expected = "allow-scripts allow-forms allow-presentation";
 
       /* watch.html ships the iframe with NO sandbox attribute: the default
          player (Zoko) is unsandboxed. */
@@ -2762,9 +2763,11 @@ async function runTests() {
       assert.equal(PLAYER_IFRAME_SANDBOX_BY_SERVER.animegg, expected, "animegg maps to the sandbox literal");
 
       /* The sandbox literal itself: the player's own JS must run, and the
-         popup-ad vectors stay blocked. */
+         popup-ad vectors stay blocked. allow-same-origin is DELIBERATELY
+         absent (audit B1): with allow-scripts it would let a compromised
+         player regain our origin and strip its own sandbox. */
       assert.ok(PLAYER_IFRAME_SANDBOX.includes("allow-scripts"), "sandbox keeps allow-scripts (the player's own JS must run)");
-      assert.ok(PLAYER_IFRAME_SANDBOX.includes("allow-same-origin"), "sandbox keeps allow-same-origin (same-origin iframe + allow-scripts is safe here)");
+      assert.ok(!PLAYER_IFRAME_SANDBOX.includes("allow-same-origin"), "sandbox must NOT contain allow-same-origin (audit B1)");
       for (const denied of ["allow-popups", "allow-top-navigation", "allow-modals", "allow-downloads"]) {
         assert.ok(!PLAYER_IFRAME_SANDBOX.includes(denied), `sandbox must NOT contain ${denied}`);
       }
@@ -3017,7 +3020,10 @@ async function runTests() {
     });
 
     // 83. Account linking: create → return → link-by-email (password
-    //     untouched) → no-email placeholder.
+    //     CLEARED — audit C2: a local account can be pre-registered with a
+    //     victim's email without verification, so linking a verified social
+    //     identity by email must not preserve a pre-set password) → no-email
+    //     placeholder.
     await test("OAuth: linkOrCreateAccount creates, reuses, links by email, and placeholders", async () => {
       const stamp = Date.now();
       /* New social user (Google, fresh email) → created, NULL hash. */
@@ -3046,7 +3052,11 @@ async function runTests() {
         1
       );
 
-      /* Email match → links to the LOCAL account, password untouched. */
+      /* Email match → links to the LOCAL account and CLEARS its password
+         hash (audit C2): the local password was set by whoever registered
+         the address first, unverified — it must not survive the merge, or
+         the pre-registrant keeps access. The owner recovers password login
+         via forgot-password. */
       const localEmail = `oauth-local-${stamp}@example.com`;
       const reg = await postJson("/api/auth/register", { email: localEmail, password: "password123", name: "Local User" }, "198.51.100.90");
       assert.equal(reg.status, 201);
@@ -3060,8 +3070,10 @@ async function runTests() {
       });
       assert.equal(linked.id, before.id, "same email = same account");
       const after = db.prepare("SELECT * FROM users WHERE email = ?").get(localEmail);
-      assert.equal(after.password_hash, before.password_hash, "linking NEVER overwrites the local password");
+      assert.equal(after.password_hash, null, "linking clears a pre-set local password (audit C2)");
       assert.equal(after.name, "Local User", "linking does not rename the local account");
+      const staleLogin = await postJson("/api/auth/login", { email: localEmail, password: "password123" }, "198.51.100.93");
+      assert.equal(staleLogin.status, 401, "the pre-registration password no longer works after linking");
 
       /* No-email provider (MAL) → placeholder .invalid address. */
       const u3 = linkOrCreateAccount({ provider: "mal", providerUserId: `m-${stamp}`, email: null, name: "MAL Fan" });
@@ -3378,7 +3390,9 @@ async function runTests() {
       const meBefore = await fetch(`${baseUrl}/api/auth/me`, { headers: { Cookie: cookie } });
       assert.equal((await meBefore.json()).user.email, email, "the session works before the reset");
 
-      /* Two tokens for the same user (two forgot-password requests). */
+      /* Two tokens for the same user (two forgot-password requests). Audit
+         D5: a new request invalidates the previous link, so only the latest
+         token is live — the first mail still goes out, but its link is dead. */
       capturedMail.length = 0;
       await postJson("/api/auth/forgot-password", { email }, "198.51.100.172");
       await postJson("/api/auth/forgot-password", { email }, "198.51.100.173");
@@ -3386,22 +3400,26 @@ async function runTests() {
       const tokenA = tokenFromMail(capturedMail[0]);
       const tokenB = tokenFromMail(capturedMail[1]);
       assert.notEqual(tokenA, tokenB, "each request mints a distinct token");
+      assert.equal(
+        db.prepare("SELECT COUNT(*) c FROM password_reset_tokens WHERE user_id = ? AND token_hash = ?").get(userId, hashResetToken(tokenA)).c,
+        0,
+        "the first token is already invalidated by the second request (audit D5)"
+      );
 
-      const reset = await postJson("/api/auth/reset-password", { token: tokenA, newPassword: "after-reset-pass" }, "198.51.100.174");
+      const staleReset = await postJson("/api/auth/reset-password", { token: tokenA, newPassword: "stale-pass" }, "198.51.100.174");
+      assert.equal(staleReset.status, 400, "the invalidated first token is rejected");
+      const reset = await postJson("/api/auth/reset-password", { token: tokenB, newPassword: "after-reset-pass" }, "198.51.100.174");
       assert.equal(reset.status, 200);
 
       /* The old session is dead. */
       const meAfter = await fetch(`${baseUrl}/api/auth/me`, { headers: { Cookie: cookie } });
       assert.equal((await meAfter.json()).user, null, "the pre-reset session must be invalidated");
 
-      /* The other token is gone (deleted, not just expired). */
-      assert.equal(
-        db.prepare("SELECT COUNT(*) c FROM password_reset_tokens WHERE user_id = ? AND token_hash = ?").get(userId, hashResetToken(tokenB)).c,
-        0,
-        "the unused token must be deleted by the reset"
-      );
+      /* The used token is marked used (single-use); other tokens are deleted. */
+      const usedRow = db.prepare("SELECT used_at FROM password_reset_tokens WHERE user_id = ? AND token_hash = ?").get(userId, hashResetToken(tokenB));
+      assert.ok(usedRow && usedRow.used_at != null, "the used token must be marked used by the reset");
       const reuseB = await postJson("/api/auth/reset-password", { token: tokenB, newPassword: "another-pass" }, "198.51.100.175");
-      assert.equal(reuseB.status, 400, "the deleted token must be rejected");
+      assert.equal(reuseB.status, 400, "the used token must be rejected on reuse");
 
       const loginNew = await postJson("/api/auth/login", { email, password: "after-reset-pass" }, "198.51.100.176");
       assert.equal(loginNew.status, 200, "login with the new password works");
@@ -3808,7 +3826,9 @@ async function runTests() {
       assert.equal(PLAYER_IFRAME_SANDBOX_BY_SERVER.vidstream, undefined, "removed vidstream has no sandbox entry");
       assert.equal(PLAYER_IFRAME_SANDBOX_BY_SERVER.vidstream3, PLAYER_IFRAME_SANDBOX, "vidstream3 is sandboxed");
       assert.ok(PLAYER_IFRAME_SANDBOX_BY_SERVER.vidstream3.includes("allow-scripts"));
-      assert.ok(PLAYER_IFRAME_SANDBOX_BY_SERVER.vidstream3.includes("allow-same-origin"));
+      /* allow-same-origin is DELIBERATELY absent (audit B1): with
+         allow-scripts it would let a compromised player regain our origin. */
+      assert.ok(!PLAYER_IFRAME_SANDBOX_BY_SERVER.vidstream3.includes("allow-same-origin"));
       assert.ok(!PLAYER_IFRAME_SANDBOX_BY_SERVER.vidstream3.includes("allow-popups"));
       assert.ok(!PLAYER_IFRAME_SANDBOX_BY_SERVER.vidstream3.includes("allow-top-navigation"));
 
@@ -4481,6 +4501,217 @@ async function runTests() {
         clearHindiCaches();
         hindiStub.close();
       }
+    });
+
+    /* ======================================================================
+       SECURITY AUDIT 2026-11-29 — regression tests for the confirmed
+       findings (see SECURITY-AUDIT-2026-11-29.md). Each test names the
+       finding it pins so a future refactor cannot silently re-open it.
+       ====================================================================== */
+
+    // C1: X-Forwarded-For spoofing must not defeat IP rate limits. The app
+    // trusts exactly one proxy hop, so the LAST XFF entry (the one Caddy
+    // appends) is req.ip — a client-supplied leftmost entry is ignored.
+    await test("AUDIT C1: spoofed X-Forwarded-For cannot bypass the register rate limit", async () => {
+      const stamp = Date.now();
+      const exhaustedIp = "203.0.113.77";
+      for (let i = 0; i < 5; i++) {
+        const r = await postJson("/api/auth/register", { email: `audit-c1-${stamp}-${i}@example.com`, password: "password123", name: "C1" }, exhaustedIp);
+        assert.equal(r.status, 201, `registration ${i + 1} from the exhausted IP succeeds`);
+      }
+      const sixth = await postJson("/api/auth/register", { email: `audit-c1-${stamp}-5@example.com`, password: "password123", name: "C1" }, exhaustedIp);
+      assert.equal(sixth.status, 429, "6th registration from the same IP is rate-limited");
+      /* Spoof: a fresh-looking leftmost entry in front of the exhausted IP
+         must NOT reset the bucket — the last entry is the real client. */
+      const spoofed = await postJson("/api/auth/register", { email: `audit-c1-${stamp}-spoof@example.com`, password: "password123", name: "C1" }, `198.51.100.201, ${exhaustedIp}`);
+      assert.equal(spoofed.status, 429, "spoofed leftmost XFF entry does not bypass the limit");
+      /* Control: the spoofed address on its own is a fresh IP. */
+      const control = await postJson("/api/auth/register", { email: `audit-c1-${stamp}-control@example.com`, password: "password123", name: "C1" }, "198.51.100.201");
+      assert.equal(control.status, 201, "the spoofed address alone is a fresh IP");
+      db.prepare("DELETE FROM users WHERE email LIKE ?").run(`audit-c1-${stamp}-%@example.com`);
+    });
+
+    // C4: registering an existing email must not leak account existence.
+    await test("AUDIT C4: registering an existing email returns a generic 200, no user, no session", async () => {
+      const stamp = Date.now();
+      const email = `audit-c4-${stamp}@example.com`;
+      const first = await postJson("/api/auth/register", { email, password: "password123", name: "C4" }, "203.0.113.78");
+      assert.equal(first.status, 201);
+      const again = await postJson("/api/auth/register", { email, password: "password123", name: "C4" }, "203.0.113.79");
+      assert.equal(again.status, 200, "existing email answers 200, not 409");
+      const body = await again.json();
+      assert.equal(body.user, undefined, "no user object is returned");
+      assert.ok(!again.headers.get("set-cookie"), "no session cookie is set");
+      assert.ok(body.message && /sign in/i.test(body.message), "a sign-in hint is shown instead of an oracle code");
+      db.prepare("DELETE FROM users WHERE email = ?").run(email);
+    });
+
+    // C5: a correct password must succeed even while the per-account failure
+    // bucket is tripped — otherwise anyone can lock any account out.
+    await test("AUDIT C5: correct password works while the per-account failure bucket is tripped", async () => {
+      const stamp = Date.now();
+      const email = `audit-c5-${stamp}@example.com`;
+      const reg = await postJson("/api/auth/register", { email, password: "password123", name: "C5" }, "203.0.113.80");
+      assert.equal(reg.status, 201);
+      /* 5 failures from 5 different IPs: the account bucket trips, no IP
+         bucket does (each IP only tried once). */
+      for (let i = 0; i < 5; i++) {
+        const bad = await postJson("/api/auth/login", { email, password: "wrong-password" }, `203.0.113.${90 + i}`);
+        assert.equal(bad.status, 401, `wrong password ${i + 1} is 401`);
+      }
+      const sixthWrong = await postJson("/api/auth/login", { email, password: "wrong-password" }, "203.0.113.99");
+      assert.equal(sixthWrong.status, 429, "6th wrong password is still rate-limited");
+      const good = await postJson("/api/auth/login", { email, password: "password123" }, "203.0.113.100");
+      assert.equal(good.status, 200, "the correct password succeeds despite the tripped account bucket");
+      db.prepare("DELETE FROM users WHERE email = ?").run(email);
+    });
+
+    // C9: placeholder .invalid addresses must not be registrable locally,
+    // and a squatted placeholder must not crash a social login.
+    await test("AUDIT C9: placeholder emails cannot be registered; squatted placeholder links instead of crashing", async () => {
+      const stamp = Date.now();
+      const placeholder = `no-email-mal-m-${stamp}@aniflick.invalid`;
+      const squat = await postJson("/api/auth/register", { email: placeholder, password: "password123", name: "Squat" }, "203.0.113.81");
+      assert.equal(squat.status, 400, "local registration of a placeholder address is rejected");
+      /* Pre-existing squat row (e.g. created before the fix): a MAL login
+         for that provider id must link the row, not throw 502. */
+      db.prepare("INSERT INTO users (email, password_hash, name, created_at, updated_at) VALUES (?, 'x', 'Squat', datetime('now'), datetime('now'))").run(placeholder);
+      const squatRow = db.prepare("SELECT * FROM users WHERE email = ?").get(placeholder);
+      const linked = linkOrCreateAccount({ provider: "mal", providerUserId: `m-${stamp}`, email: null, name: "MAL Fan" });
+      assert.equal(linked.id, squatRow.id, "the squatted row is linked, not duplicated");
+      assert.equal(linked.password_hash, null, "the squat's password is cleared on link (C2)");
+      const ident = db.prepare("SELECT * FROM linked_identities WHERE provider = 'mal' AND provider_user_id = ?").get(`m-${stamp}`);
+      assert.ok(ident && ident.user_id === squatRow.id, "the identity row links the squatted user");
+      db.prepare("DELETE FROM users WHERE id = ?").run(squatRow.id);
+    });
+
+    // Hunter C path traversal: /:page must stay inside the web root.
+    await test("AUDIT path traversal: GET /..%2f<file> outside the web root returns 404", async () => {
+      const siteRoot = path.dirname(path.dirname(ZORO_JS_PATH));
+      const probePath = path.join(path.dirname(siteRoot), "audit-traversal-probe.html");
+      writeFileSync(probePath, "<html><body>SECRET OUTSIDE WEB ROOT</body></html>");
+      try {
+        const res = await fetch(`${baseUrl}/..%2faudit-traversal-probe`);
+        assert.equal(res.status, 404, "a file outside the web root is not served");
+        assert.ok(!(await res.text()).includes("SECRET OUTSIDE WEB ROOT"), "the outside file's content never leaks");
+        const legit = await fetch(`${baseUrl}/browse`);
+        assert.equal(legit.status, 200, "a real page inside the web root still serves");
+      } finally {
+        unlinkSync(probePath);
+      }
+    });
+
+    // D2: history must not grow on every 5 s progress sync — one row per
+    // completion-state change, capped per user.
+    await test("AUDIT D2: repeated progress syncs do not grow history; a completion change adds one row", async () => {
+      const stamp = Date.now();
+      const email = `audit-d2-${stamp}@example.com`;
+      const reg = await postJson("/api/auth/register", { email, password: "password123", name: "D2" }, "203.0.113.82");
+      assert.equal(reg.status, 201);
+      const cookie = (reg.headers.get("set-cookie") || "").split(";")[0];
+      const userId = (await reg.json()).user.id;
+      const postProgress = (positionSec) =>
+        fetch(`${baseUrl}/api/progress`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Cookie: cookie },
+          body: JSON.stringify({ slug: "ronin-of-the-neon-ward", episode: 1, positionSec, durationSec: 1440 }),
+        });
+      for (let i = 0; i < 3; i++) {
+        const r = await postProgress(100 + i);
+        assert.equal(r.status, 200, `progress sync ${i + 1} succeeds`);
+      }
+      let rows = db.prepare("SELECT COUNT(*) c FROM history WHERE user_id = ?").get(userId).c;
+      assert.equal(rows, 1, "3 same-state syncs within 10 minutes leave exactly 1 history row");
+      /* A completion-state change (0% -> 95% watched) is a new row. */
+      const done = await postProgress(1400);
+      assert.equal(done.status, 200);
+      rows = db.prepare("SELECT COUNT(*) c FROM history WHERE user_id = ?").get(userId).c;
+      assert.equal(rows, 2, "a completion change adds exactly one more row");
+      /* Bogus slug / episode are rejected cleanly instead of 500 / phantom rows. */
+      const bogus = await fetch(`${baseUrl}/api/progress`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Cookie: cookie },
+        body: JSON.stringify({ slug: "no-such-title-xyz", episode: 1, positionSec: 10, durationSec: 100 }),
+      });
+      assert.equal(bogus.status, 404, "an unknown slug is a clean 404");
+      const badEp = await fetch(`${baseUrl}/api/progress`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Cookie: cookie },
+        body: JSON.stringify({ slug: "ronin-of-the-neon-ward", episode: 99999, positionSec: 10, durationSec: 100 }),
+      });
+      assert.equal(badEp.status, 400, "an out-of-range episode is a clean 400");
+      db.prepare("DELETE FROM history WHERE user_id = ?").run(userId);
+      db.prepare("DELETE FROM watch_progress WHERE user_id = ?").run(userId);
+      db.prepare("DELETE FROM users WHERE id = ?").run(userId);
+    });
+
+    // C3 + C8: change-password (current password required, other sessions
+    // die) and logout-all.
+    await test("AUDIT C3/C8: change-password requires the current password and logs out other sessions; logout-all works", async () => {
+      const stamp = Date.now();
+      const email = `audit-c8-${stamp}@example.com`;
+      const reg = await postJson("/api/auth/register", { email, password: "password123", name: "C8" }, "203.0.113.83");
+      assert.equal(reg.status, 201);
+      const cookieA = (reg.headers.get("set-cookie") || "").split(";")[0];
+      const loginB = await postJson("/api/auth/login", { email, password: "password123" }, "203.0.113.84");
+      assert.equal(loginB.status, 200);
+      const cookieB = (loginB.headers.get("set-cookie") || "").split(";")[0];
+      /* Wrong current password → 401, nothing changes. */
+      const wrong = await postJson("/api/auth/change-password", { currentPassword: "nope", newPassword: "newpassword123" });
+      assert.equal(wrong.status, 401, "change-password without a session is 401");
+      const authedWrong = await fetch(`${baseUrl}/api/auth/change-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Cookie: cookieA },
+        body: JSON.stringify({ currentPassword: "nope", newPassword: "newpassword123" }),
+      });
+      assert.equal(authedWrong.status, 401, "a wrong current password is 401");
+      /* Correct current password → 200, old password dies, other session dies. */
+      const ok = await fetch(`${baseUrl}/api/auth/change-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Cookie: cookieA },
+        body: JSON.stringify({ currentPassword: "password123", newPassword: "newpassword123" }),
+      });
+      assert.equal(ok.status, 200, "change-password with the right current password succeeds");
+      const oldLogin = await postJson("/api/auth/login", { email, password: "password123" }, "203.0.113.85");
+      assert.equal(oldLogin.status, 401, "the old password no longer works");
+      const newLogin = await postJson("/api/auth/login", { email, password: "newpassword123" }, "203.0.113.86");
+      assert.equal(newLogin.status, 200, "the new password works");
+      const meB = await fetch(`${baseUrl}/api/auth/me`, { headers: { Cookie: cookieB } });
+      assert.equal((await meB.json()).user, null, "the other session was killed by change-password");
+      /* logout-all kills every session except the caller's. */
+      const cookieC = (newLogin.headers.get("set-cookie") || "").split(";")[0];
+      const logoutAll = await fetch(`${baseUrl}/api/auth/logout-all`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Cookie: cookieC },
+      });
+      assert.equal(logoutAll.status, 200);
+      const meA = await fetch(`${baseUrl}/api/auth/me`, { headers: { Cookie: cookieA } });
+      assert.equal((await meA.json()).user, null, "logout-all killed the remaining other session");
+      const meC = await fetch(`${baseUrl}/api/auth/me`, { headers: { Cookie: cookieC } });
+      assert.equal((await meC.json()).user.email, email, "the caller's own session survives logout-all");
+      db.prepare("DELETE FROM users WHERE email = ?").run(email);
+    });
+
+    // B1: sandboxed players must not carry allow-same-origin.
+    await test("AUDIT B1: sandboxed player iframes do not use allow-same-origin", async () => {
+      const { PLAYER_IFRAME_SANDBOX, PLAYER_IFRAME_SANDBOX_BY_SERVER } = evalZoroBlock(
+        "PLAYER_IFRAME_SANDBOX",
+        ["PLAYER_IFRAME_SANDBOX", "PLAYER_IFRAME_SANDBOX_BY_SERVER"]
+      );
+      assert.ok(!PLAYER_IFRAME_SANDBOX.includes("allow-same-origin"), "the sandbox literal has no allow-same-origin");
+      assert.ok(PLAYER_IFRAME_SANDBOX.includes("allow-scripts"), "the sandbox literal keeps allow-scripts");
+      for (const server of ["backup", "megaplay", "animegg", "vidstream3"]) {
+        assert.ok(!PLAYER_IFRAME_SANDBOX_BY_SERVER[server].includes("allow-same-origin"), `${server} sandbox has no allow-same-origin`);
+      }
+      assert.equal(PLAYER_IFRAME_SANDBOX_BY_SERVER.zoko, null, "Zoko stays unsandboxed by design");
+    });
+
+    // B2/B3: cover URLs and kind/genre values are escaped in templates.
+    await test("AUDIT B2/B3: cover URLs and kind/genre values are HTML-escaped in card templates", async () => {
+      const zoroJsSrc = readFileSync(ZORO_JS_PATH, "utf8");
+      assert.ok(!/src="\$\{coverOf\(t\)\}"/.test(zoroJsSrc), "no unescaped coverOf(t) in a src attribute");
+      assert.ok(!/\$\{t\.kind\}/.test(zoroJsSrc), "no unescaped t.kind interpolation");
+      assert.ok(/escapeHtml\(coverOf\(t\)\)/.test(zoroJsSrc), "coverOf is escaped");
     });
 
     console.log(`\nAll ${passed} E2E integration tests passed successfully!\n`);

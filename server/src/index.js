@@ -25,7 +25,18 @@ import {
   RESET_PASSWORD_WINDOW_MS,
   TRUST_PROXY,
   HISTORY_LIMIT,
+  HISTORY_PER_USER_CAP,
   CONTINUE_LIMIT,
+  PROGRESS_MAX_ATTEMPTS,
+  PROGRESS_WINDOW_MS,
+  COVER_MAX_ATTEMPTS,
+  COVER_WINDOW_MS,
+  ANIME_GG_MAX_ATTEMPTS,
+  ANIME_GG_WINDOW_MS,
+  DUB_CHECK_MAX_ATTEMPTS,
+  DUB_CHECK_WINDOW_MS,
+  HINDI_MAX_ATTEMPTS,
+  HINDI_WINDOW_MS,
   ZOKO_EMBED_ORIGIN,
   ZOKO_DEFAULT_SOURCE,
   ZOKO_DEFAULT_TRACK,
@@ -43,6 +54,7 @@ import { isMailConfigured, sendPasswordEmail } from "./mailer.js";
 import {
   createResetToken,
   findValidResetToken,
+  invalidateUserTokens,
   resetLink,
   applyPasswordReset,
 } from "./password-reset.js";
@@ -90,8 +102,14 @@ import { checkVidstream3Availability, withHindiAvailability } from "./hindi.js";
 const app = express();
 
 /* Behind Caddy the peer is the proxy; trust X-Forwarded-For only when the
-   operator explicitly enables it (see config.TRUST_PROXY). */
-app.set("trust proxy", TRUST_PROXY);
+   operator explicitly enables it (see config.TRUST_PROXY).
+   SECURITY (audit C1): trust exactly ONE hop (Caddy), never `true`. With
+   `trust proxy: true` Express uses the LEFTMOST X-Forwarded-For entry, which
+   the client controls — Caddy appends the real IP but never strips a
+   client-supplied one, so any attacker could spoof req.ip and bypass every
+   IP-based rate limit. `1` makes Express use the LAST entry (the one Caddy
+   appended) and ignore client-supplied entries. */
+app.set("trust proxy", TRUST_PROXY ? 1 : false);
 
 const CSP_HEADER = [
   "default-src 'self'",
@@ -108,9 +126,12 @@ const CSP_HEADER = [
 ].join("; ");
 
 /* Security & default Cache-Control headers for all responses (Caddy copies
-   upstream headers verbatim, so set once here). */
+   upstream headers verbatim, so set once here). X-Content-Type-Options is
+   set in-app (not only in Caddy) so the app is safe without the proxy too
+   (audit C4-cover). */
 app.use((req, res, next) => {
   res.setHeader("Content-Security-Policy", CSP_HEADER);
+  res.setHeader("X-Content-Type-Options", "nosniff");
   if (req.path.startsWith("/api/") || req.path.startsWith("/auth/")) {
     res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
   }
@@ -135,6 +156,13 @@ const commentLimiter = createRateLimiter({ max: 1, windowMs: COMMENT_RATE_LIMIT_
 const forgotPasswordIpLimiter = createRateLimiter({ max: FORGOT_PASSWORD_MAX_ATTEMPTS, windowMs: FORGOT_PASSWORD_WINDOW_MS });
 const forgotPasswordEmailLimiter = createRateLimiter({ max: FORGOT_PASSWORD_MAX_ATTEMPTS, windowMs: FORGOT_PASSWORD_WINDOW_MS });
 const resetPasswordLimiter = createRateLimiter({ max: RESET_PASSWORD_MAX_ATTEMPTS, windowMs: RESET_PASSWORD_WINDOW_MS });
+/* Per-user progress sync + expensive unauthenticated probe/proxy routes
+   (audit D2, C4-cover, hunter C). Generous caps — normal use stays far below. */
+const progressLimiter = createRateLimiter({ max: PROGRESS_MAX_ATTEMPTS, windowMs: PROGRESS_WINDOW_MS });
+const coverLimiter = createRateLimiter({ max: COVER_MAX_ATTEMPTS, windowMs: COVER_WINDOW_MS });
+const animeggLimiter = createRateLimiter({ max: ANIME_GG_MAX_ATTEMPTS, windowMs: ANIME_GG_WINDOW_MS });
+const dubCheckLimiter = createRateLimiter({ max: DUB_CHECK_MAX_ATTEMPTS, windowMs: DUB_CHECK_WINDOW_MS });
+const hindiLimiter = createRateLimiter({ max: HINDI_MAX_ATTEMPTS, windowMs: HINDI_WINDOW_MS });
 
 // Body parser (default to {} for non-JSON requests so routes never 500 on req.body.*)
 app.use(express.json());
@@ -203,7 +231,7 @@ app.use((req, res, next) => {
   try {
     const session = db
       .prepare(`
-        SELECT s.id, s.user_id, s.expires_at,
+        SELECT s.id, s.user_id, s.expires_at, s.created_at,
                u.id as u_id, u.email, u.name, u.avatar_tone, u.created_at, u.updated_at
         FROM sessions s
         JOIN users u ON s.user_id = u.id
@@ -233,9 +261,18 @@ app.use((req, res, next) => {
       updatedAt: session.updated_at,
     };
 
-    // Auto-refresh session if close to expiry
+    // Auto-refresh session if close to expiry — but NEVER beyond the absolute
+    // lifetime cap (created_at + SESSION_TTL_DAYS), so an actively-used
+    // session still eventually expires instead of living forever (audit C3).
     if (expiresTime - Date.now() < SESSION_REFRESH_BELOW_MS) {
-      const newExpires = addMs(nowIso(), SESSION_TTL_DAYS * 24 * 60 * 60 * 1000);
+      const absoluteMax = Date.parse(session.created_at) + SESSION_TTL_DAYS * 24 * 60 * 60 * 1000;
+      if (absoluteMax <= Date.now()) {
+        db.prepare("DELETE FROM sessions WHERE id = ?").run(token);
+        clearSessionCookie(res);
+        return next();
+      }
+      const wanted = Date.now() + SESSION_TTL_DAYS * 24 * 60 * 60 * 1000;
+      const newExpires = new Date(Math.min(wanted, absoluteMax)).toISOString();
       db.prepare("UPDATE sessions SET expires_at = ? WHERE id = ?").run(newExpires, token);
       setSessionCookie(res, token, newExpires);
     }
@@ -299,7 +336,20 @@ app.post("/api/auth/register", async (req, res, next) => {
 
     const existing = db.prepare("SELECT id FROM users WHERE email = ?").get(email);
     if (existing) {
-      throw conflict("EMAIL_IN_USE", "An account with this email already exists.");
+      /* Generic response (audit C4): no EMAIL_IN_USE code, no session — the
+         caller cannot tell from the body whether the address was already
+         registered. (The 201-vs-200 status still differs from a fresh
+         registration; fully closing that needs dropping auto-sign-in.) */
+      return res.status(200).json({
+        ok: true,
+        message: "An account with this email already exists. Please sign in instead.",
+      });
+    }
+    /* Placeholder .invalid addresses belong to social accounts with no email
+       (audit C9): they must never be registrable locally, or the victim's
+       first social login breaks on a UNIQUE conflict. */
+    if (isPlaceholderEmail(email)) {
+      throw badRequest("That email address can't be used to register.");
     }
 
     const passwordHash = await hashPassword(password);
@@ -337,16 +387,17 @@ app.post("/api/auth/login", async (req, res, next) => {
     });
 
     /* 5 attempts per 15 minutes, per IP AND per account — whichever trips
-       first. Counted before the credential check so a spray is throttled
-       even when every guess is wrong. */
+       first. The per-IP limiter counts every attempt up front (flood
+       protection). The per-ACCOUNT limiter counts only FAILURES (audit C5):
+       it is checked after the credential check, so a correct password always
+       works even while the account bucket is tripped — otherwise anyone
+       could lock any account out for 15 minutes with 5 Turnstile solves. */
     const email = normalizeEmail(req.body.email);
     const ipCheck = loginIpLimiter.check(`ip:${ip}`);
-    const accountCheck = loginAccountLimiter.check(`acct:${email}`);
-    if (!ipCheck.allowed || !accountCheck.allowed) {
-      const retryMs = Math.max(ipCheck.retryAfterMs, accountCheck.retryAfterMs);
+    if (!ipCheck.allowed) {
       throw tooManyRequests(
         "Too many sign-in attempts. Please wait a few minutes and try again.",
-        Math.ceil(retryMs / 1000)
+        Math.ceil(ipCheck.retryAfterMs / 1000)
       );
     }
 
@@ -359,11 +410,13 @@ app.post("/api/auth/login", async (req, res, next) => {
     const user = db.prepare("SELECT * FROM users WHERE email = ?").get(email);
     if (!user) {
       await burnPasswordCheck(password);
+      recordLoginFailure(email);
       throw unauthorized("Invalid email or password.");
     }
 
     const valid = await verifyPassword(password, user.password_hash);
     if (!valid) {
+      recordLoginFailure(email);
       throw unauthorized("Invalid email or password.");
     }
 
@@ -379,12 +432,66 @@ app.post("/api/auth/login", async (req, res, next) => {
   }
 });
 
+/* Count one failed sign-in against the per-account bucket; throw 429 once
+   the bucket is tripped. Called only for failures, so a correct password
+   is never blocked by a tripped bucket (audit C5). */
+function recordLoginFailure(email) {
+  const acctCheck = loginAccountLimiter.check(`acct:${email}`);
+  if (!acctCheck.allowed) {
+    throw tooManyRequests(
+      "Too many sign-in attempts. Please wait a few minutes and try again.",
+      Math.ceil(acctCheck.retryAfterMs / 1000)
+    );
+  }
+}
+
 app.post("/api/auth/logout", (req, res) => {
   if (req.session) {
     db.prepare("DELETE FROM sessions WHERE id = ?").run(req.session.id);
   }
   clearSessionCookie(res);
   res.json({ ok: true });
+});
+
+/* Log out everywhere else (audit C3): deletes all of the user's sessions
+   except the current one, so a stolen token can be evicted in-app. */
+app.post("/api/auth/logout-all", requireAuth, (req, res) => {
+  db.prepare("DELETE FROM sessions WHERE user_id = ? AND id != ?").run(req.user.id, req.session.id);
+  res.json({ ok: true });
+});
+
+/* Change password while signed in (audit C8): requires the current password,
+   sets the new hash, and logs the account out everywhere else. Social-only
+   accounts (NULL password_hash) have no local password to change — they use
+   the emailed reset link instead. */
+app.post("/api/auth/change-password", requireAuth, async (req, res, next) => {
+  try {
+    const currentPassword = typeof req.body.currentPassword === "string" ? req.body.currentPassword : "";
+    const newPassword = typeof req.body.newPassword === "string" ? req.body.newPassword : "";
+    if (!newPassword || newPassword.length < PASSWORD_MIN || newPassword.length > PASSWORD_MAX) {
+      throw badRequest(`Password must be between ${PASSWORD_MIN} and ${PASSWORD_MAX} characters.`);
+    }
+    const user = db.prepare("SELECT * FROM users WHERE id = ?").get(req.user.id);
+    if (!user || !user.password_hash) {
+      throw badRequest("Your account has no local password to change. Use the reset link instead.");
+    }
+    const valid = await verifyPassword(currentPassword, user.password_hash);
+    if (!valid) {
+      throw unauthorized("Your current password is incorrect.");
+    }
+    const passwordHash = await hashPassword(newPassword);
+    db.transaction(() => {
+      db.prepare("UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?").run(
+        passwordHash,
+        nowIso(),
+        req.user.id
+      );
+      db.prepare("DELETE FROM sessions WHERE user_id = ? AND id != ?").run(req.user.id, req.session.id);
+    })();
+    res.json({ ok: true, message: "Your password has been changed." });
+  } catch (err) {
+    next(err);
+  }
 });
 
 /* ==========================================================================
@@ -430,6 +537,9 @@ app.post("/api/auth/forgot-password", async (req, res, next) => {
       ? db.prepare("SELECT id, email FROM users WHERE email = ?").get(email)
       : null;
     if (user && !isPlaceholderEmail(user.email) && isMailConfigured()) {
+      /* One live reset link at a time: a new request revokes the previous
+         link before minting a fresh one (audit D5). */
+      invalidateUserTokens(user.id);
       const rawToken = createResetToken(user.id, "reset");
       /* Awaited (not fire-and-forget) so a transport failure is logged
          before the response — the response itself stays generic either
@@ -1120,6 +1230,13 @@ const COVER_PROXY_HOSTS = new Set(["s4.anilist.co"]);
 const COVER_PROXY_MAX_BYTES = 8 * 1024 * 1024;
 app.get("/api/cover", async (req, res, next) => {
   try {
+    /* Unauthenticated image proxy: per-IP cap (each call costs an upstream
+       fetch of up to 8 MB). */
+    const rl = coverLimiter.check(`ip:${clientIp(req)}`);
+    if (!rl.allowed) {
+      return res.status(429).json({ ok: false, error: "rate_limited" });
+    }
+
     let target;
     try {
       target = new URL(String(req.query.url || ""));
@@ -1146,11 +1263,29 @@ app.get("/api/cover", async (req, res, next) => {
     if (!upstream.ok) {
       return res.status(upstream.status).json({ ok: false, error: "cover_unavailable" });
     }
+    /* fetch() follows redirects: re-validate the FINAL host (audit C4-cover),
+       so a redirect off the allowlisted host cannot smuggle content in. */
+    let finalUrl;
+    try {
+      finalUrl = new URL(upstream.url);
+    } catch {
+      return res.status(502).json({ ok: false, error: "cover_unavailable" });
+    }
+    if (finalUrl.protocol !== "https:" || !COVER_PROXY_HOSTS.has(finalUrl.hostname)) {
+      return res.status(502).json({ ok: false, error: "cover_unavailable" });
+    }
     const buf = Buffer.from(await upstream.arrayBuffer());
     if (buf.length > COVER_PROXY_MAX_BYTES) {
       return res.status(413).json({ ok: false, error: "cover_too_large" });
     }
-    res.set("Content-Type", upstream.headers.get("content-type") || "image/jpeg");
+    /* Never serve the upstream Content-Type verbatim (audit C4-cover): an
+       image proxy must only ever serve images. A text/html or SVG response
+       from the upstream would otherwise render as AniFlick-origin content. */
+    const upstreamCt = (upstream.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
+    if (!/^(image\/jpeg|image\/png|image\/gif|image\/webp|image\/avif)$/.test(upstreamCt)) {
+      return res.status(502).json({ ok: false, error: "cover_unavailable" });
+    }
+    res.set("Content-Type", upstreamCt);
     res.set("Cache-Control", "public, max-age=86400");
     res.send(buf);
   } catch (err) {
@@ -1173,8 +1308,18 @@ app.get("/api/stream/:slug/:ep", (req, res) => {
   }
 
   const source = String(req.query.source || ZOKO_DEFAULT_SOURCE).toLowerCase();
-  const malId = req.query.mal_id != null ? toInt(req.query.mal_id, null) : (title.mal_id || null);
-  const anilistId = req.query.anilist_id != null ? toInt(req.query.anilist_id, null) : (title.anilist_id || null);
+  /* Validate the source up front (audit, hunter C): an unknown source used to
+     throw inside buildEmbedUrl and answer 500 instead of 400. */
+  if (!ZOKO_SOURCES.includes(source)) {
+    return res.status(400).json({ ok: false, error: "Unsupported source." });
+  }
+  /* Query ids only override the catalog ids when they are valid positive
+     numbers; garbage (e.g. mal_id=abc) used to shadow the catalog id with
+     null and answer 400 for a real title. */
+  const malIdParam = req.query.mal_id != null ? toInt(req.query.mal_id, null) : null;
+  const anilistIdParam = req.query.anilist_id != null ? toInt(req.query.anilist_id, null) : null;
+  const malId = malIdParam != null && malIdParam > 0 ? malIdParam : (title.mal_id || null);
+  const anilistId = anilistIdParam != null && anilistIdParam > 0 ? anilistIdParam : (title.anilist_id || null);
   const animeId = source === "anilist" ? anilistId : malId;
 
   if (!animeId) {
@@ -1183,7 +1328,10 @@ app.get("/api/stream/:slug/:ep", (req, res) => {
       error: "No MAL/AniList id mapped for this title.",
     });
   }
-  const color = (req.query.color || ZOKO_DEFAULT_COLOR).replace(/^#/, "");
+  /* Only a 3-8 digit hex colour is accepted; anything else falls back to the
+     default instead of being passed through verbatim. */
+  const colorRaw = String(req.query.color || ZOKO_DEFAULT_COLOR).replace(/^#/, "");
+  const color = /^[0-9a-fA-F]{3,8}$/.test(colorRaw) ? colorRaw : ZOKO_DEFAULT_COLOR;
   const startTime = toInt(req.query.t, 0);
 
   const trackUrl = (track) =>
@@ -1226,6 +1374,11 @@ app.get("/api/stream/:slug/:ep", (req, res) => {
    playing Japanese. */
 app.get("/api/dub-availability/:slug/:ep", async (req, res, next) => {
   try {
+    /* Each probe costs ~8 upstream fetches; per-IP cap (audit, hunter C). */
+    const rl = dubCheckLimiter.check(`ip:${clientIp(req)}`);
+    if (!rl.allowed) {
+      return res.status(429).json({ ok: false, error: "rate_limited" });
+    }
     const slug = resolveSlug(req.params.slug);
     const epNum = toInt(req.params.ep, 1);
     const title = db.prepare("SELECT mal_id, episodes FROM titles WHERE slug = ?").get(slug);
@@ -1267,6 +1420,11 @@ app.get("/api/dub-availability/:slug/:ep", async (req, res, next) => {
    always fresh. */
 app.get("/api/animegg/:anilistId/:ep", async (req, res, next) => {
   try {
+    /* A live /watch call per request; per-IP cap (audit, hunter C). */
+    const rl = animeggLimiter.check(`ip:${clientIp(req)}`);
+    if (!rl.allowed) {
+      return res.status(429).json({ ok: false, error: "rate_limited" });
+    }
     const anilistId = toInt(req.params.anilistId, null);
     const epNum = toInt(req.params.ep, null);
     if (anilistId == null || anilistId <= 0 || epNum == null || epNum <= 0) {
@@ -1292,6 +1450,10 @@ app.get("/api/animegg/:anilistId/:ep", async (req, res, next) => {
    the DB (same resolution /api/stream uses). */
 app.get("/api/animegg/by-slug/:slug/:ep", async (req, res, next) => {
   try {
+    const rl = animeggLimiter.check(`ip:${clientIp(req)}`);
+    if (!rl.allowed) {
+      return res.status(429).json({ ok: false, error: "rate_limited" });
+    }
     const epNum = toInt(req.params.ep, null);
     const slug = resolveSlug(req.params.slug);
     const title = db.prepare("SELECT anilist_id FROM titles WHERE slug = ?").get(slug);
@@ -1339,6 +1501,10 @@ function parseHindiQuery(query = {}) {
 
 app.get("/api/hindi/vidstream3", async (req, res, next) => {
   try {
+    const rl = hindiLimiter.check(`ip:${clientIp(req)}`);
+    if (!rl.allowed) {
+      return res.status(429).json({ ok: false, error: "rate_limited" });
+    }
     const parsed = parseHindiQuery(req.query);
     if (!parsed) {
       return res.status(400).json({ ok: false, error: "Valid positive numeric tmdbId, season, and episode are required." });
@@ -1471,7 +1637,27 @@ app.post("/api/progress", requireAuth, (req, res) => {
     throw badRequest("Missing required playback progress fields.");
   }
 
+  /* Per-user rate limit (audit D2): the player syncs ~every 5 s; 60/min is
+     generous for seeking bursts and stops a scripted flood. */
+  const rl = progressLimiter.check(`user:${req.user.id}`);
+  if (!rl.allowed) {
+    throw tooManyRequests(
+      "Too many progress updates. Please wait a moment.",
+      Math.ceil(rl.retryAfterMs / 1000)
+    );
+  }
+
+  /* Validate the slug and episode range (audit C3): an unvalidated slug used
+     to throw a 500 (FK constraint) and episode 99999 persisted a phantom
+     history row. */
+  const resolvedSlug = resolveSlug(slug);
+  const title = db.prepare("SELECT slug, episodes FROM titles WHERE slug = ?").get(resolvedSlug);
+  if (!title) throw notFound("Title not found.");
   const epNum = toInt(episode, 1);
+  if (!Number.isInteger(epNum) || epNum < 1 || (title.episodes != null && epNum > title.episodes)) {
+    throw badRequest(`Episode ${epNum} not found.`);
+  }
+
   const pos = Math.max(0, toInt(positionSec, 0));
   const dur = Math.max(pos, toInt(durationSec, 1440));
   const now = nowIso();
@@ -1484,14 +1670,36 @@ app.post("/api/progress", requireAuth, (req, res) => {
       position_sec = excluded.position_sec,
       duration_sec = excluded.duration_sec,
       updated_at = excluded.updated_at
-  `).run(req.user.id, slug, epNum, pos, dur, now);
+  `).run(req.user.id, resolvedSlug, epNum, pos, dur, now);
 
-  // Record history
+  /* History (audit D2): a row on EVERY 5 s sync grew the table without bound
+     (~288 rows/episode) while HISTORY_PER_USER_CAP sat unused. Insert only
+     when this episode has no recent row with the same completion state, and
+     prune to the cap after every insert. */
   const isCompleted = dur > 0 && pos / dur >= 0.9 ? 1 : 0;
-  db.prepare(`
-    INSERT INTO history (user_id, title_slug, episode_num, position_sec, completed, watched_at)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `).run(req.user.id, slug, epNum, pos, isCompleted, now);
+  const last = db
+    .prepare(`
+      SELECT completed, watched_at FROM history
+      WHERE user_id = ? AND title_slug = ? AND episode_num = ?
+      ORDER BY watched_at DESC LIMIT 1
+    `)
+    .get(req.user.id, resolvedSlug, epNum);
+  const recentSame =
+    last &&
+    last.completed === isCompleted &&
+    Date.now() - Date.parse(last.watched_at) < 10 * 60 * 1000;
+  if (!recentSame) {
+    db.prepare(`
+      INSERT INTO history (user_id, title_slug, episode_num, position_sec, completed, watched_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(req.user.id, resolvedSlug, epNum, pos, isCompleted, now);
+    db.prepare(`
+      DELETE FROM history WHERE user_id = ? AND id NOT IN (
+        SELECT id FROM history WHERE user_id = ?
+        ORDER BY watched_at DESC, id DESC LIMIT ?
+      )
+    `).run(req.user.id, req.user.id, HISTORY_PER_USER_CAP);
+  }
 
   res.json({ ok: true });
 });
@@ -1570,6 +1778,15 @@ app.post("/api/comments/:slug/:ep", (req, res) => {
     );
   }
 
+  /* Validate the slug and episode range (audit C3): an unvalidated slug used
+     to throw a 500 (FK constraint) instead of a clean 404. */
+  const resolvedSlug = resolveSlug(slug);
+  const title = db.prepare("SELECT slug, episodes FROM titles WHERE slug = ?").get(resolvedSlug);
+  if (!title) throw notFound("Title not found.");
+  if (!Number.isInteger(epNum) || epNum < 1 || (title.episodes != null && epNum > title.episodes)) {
+    throw badRequest(`Episode ${epNum} not found.`);
+  }
+
   const content = cleanText(req.body.content);
   if (!content || content.length < 2 || content.length > COMMENT_TEXT_MAX) {
     throw badRequest(`Comment must be between 2 and ${COMMENT_TEXT_MAX} characters.`);
@@ -1598,7 +1815,7 @@ app.post("/api/comments/:slug/:ep", (req, res) => {
       INSERT INTO comments (user_id, guest_name, title_slug, episode_num, content, created_at)
       VALUES (?, ?, ?, ?, ?, ?)
     `)
-    .run(userId, guestName, slug, epNum, content, now);
+    .run(userId, guestName, resolvedSlug, epNum, content, now);
 
   res.status(201).json({
     ok: true,
@@ -1738,9 +1955,13 @@ app.get("/anime/:slug", (req, res, next) => {
   return res.type("html").send(renderDetailHtml(titleView(row)));
 });
 
-// Fallback for HTML routing if requested without extension
+// Fallback for HTML routing if requested without extension.
+// SECURITY (audit, hunter C): confine the resolved path to SITE_ROOT.
+// res.sendFile with no `root` option used to serve ANY *.html on disk
+// (GET /..%2f..%2f...%2fsecret returned 200 for a file outside the web root).
 app.get("/:page", (req, res, next) => {
-  const pageFile = path.join(SITE_ROOT, `${req.params.page}.html`);
+  const pageFile = path.resolve(SITE_ROOT, `${req.params.page}.html`);
+  if (!pageFile.startsWith(SITE_ROOT + path.sep)) return next();
   res.sendFile(pageFile, NO_CACHE_FILE_OPTS, (err) => {
     if (err) next();
   });
@@ -1788,6 +2009,21 @@ app.use((err, req, res, next) => {
     },
   });
 });
+
+/* Expired sessions and expired reset tokens were never swept (audit D3/D5):
+   the tables only grew. An hourly sweep removes them (token rows are deleted
+   only after their 1h/24h expiry, so a live link is never revoked early).
+   Runs once at startup and hourly; .unref() keeps it from holding the
+   process (and the test suite) open. */
+const SESSION_SWEEP_INTERVAL_MS = 60 * 60 * 1000;
+const sessionSweep = setInterval(() => {
+  const now = nowIso();
+  db.prepare("DELETE FROM sessions WHERE expires_at <= ?").run(now);
+  db.prepare("DELETE FROM password_reset_tokens WHERE expires_at <= ?").run(now);
+}, SESSION_SWEEP_INTERVAL_MS);
+sessionSweep.unref();
+db.prepare("DELETE FROM sessions WHERE expires_at <= ?").run(nowIso());
+db.prepare("DELETE FROM password_reset_tokens WHERE expires_at <= ?").run(nowIso());
 
 // Start Server
 if (process.argv[1] && process.argv[1].endsWith("index.js")) {
