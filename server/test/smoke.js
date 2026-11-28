@@ -12,6 +12,7 @@ import {
   providerConfig,
   OAUTH_PROVIDER_IDS,
 } from "../src/oauth-providers.js";
+import { buildDetailSeo, truncateDescription } from "../src/seo.js";
 
 console.log("=== Running ZokoAnime Unit / Smoke Tests ===");
 
@@ -325,6 +326,40 @@ test("all four OAuth providers are defined and disabled without credentials", ()
   assert.equal(providerConfig("mal").pkce, true, "MAL requires PKCE");
   assert.equal(providerConfig("google").pkce, true, "Google uses PKCE too");
   assert.equal(providerConfig("unknown"), null, "unknown provider ids resolve to null");
+});
+
+test("buildDetailSeo formats title, truncated description, canonical URL, and TVSeries/Movie JSON-LD", () => {
+  const longSyn = "<p>A long <b>synopsis</b> " + "word ".repeat(50) + "</p>";
+  const desc = truncateDescription(longSyn, 155);
+  assert.ok(desc.length <= 155, `truncated length ${desc.length} <= 155`);
+  assert.ok(!desc.includes("<"), "HTML tags stripped from description");
+  assert.ok(desc.endsWith("..."), "long description ends with ellipsis");
+
+  const series = buildDetailSeo({
+    slug: "kagerou-protocol",
+    name: "Jujutsu Kaisen",
+    kind: "Series",
+    episodes: 24,
+    genres: ["action", "supernatural"],
+    synopsis: "A boy swallows a cursed talisman and joins a secret school of jujutsu sorcerers.",
+    cover: "/img/covers/kagerou-protocol.jpg",
+  });
+  assert.equal(series.pageTitle, "Watch Jujutsu Kaisen English Sub/Dub Online — AniFlick");
+  assert.equal(series.canonicalUrl, "https://aniflick.duckdns.org/anime/kagerou-protocol");
+  assert.equal(series.jsonLd["@type"], "TVSeries");
+  assert.equal(series.jsonLd.numberOfEpisodes, 24);
+  assert.deepEqual(series.jsonLd.genre, ["Action", "Supernatural"]);
+
+  const movie = buildDetailSeo({
+    slug: "paper-cranes-at-dawn",
+    name: "A Silent Voice",
+    kind: "Film",
+    episodes: 1,
+    genres: ["life", "drama"],
+    synopsis: "A heartwarming story of redemption.",
+  });
+  assert.equal(movie.jsonLd["@type"], "Movie");
+  assert.equal(movie.jsonLd.numberOfEpisodes, undefined);
 });
 
 console.log(`\nAll ${passed} smoke / unit tests passed successfully!\n`);

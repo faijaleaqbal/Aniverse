@@ -83,6 +83,7 @@ import {
   titleView,
 } from "./utils.js";
 import { getTurnstileSiteKey, verifyTurnstile } from "./turnstile.js";
+import { renderDetailHtml } from "./seo.js";
 
 const app = express();
 
@@ -1602,6 +1603,21 @@ app.use((req, res, next) => {
   next();
 });
 
+app.get(["/detail", "/detail.html"], (req, res, next) => {
+  const rawSlug =
+    typeof req.query.slug === "string"
+      ? req.query.slug.trim()
+      : typeof req.query.id === "string"
+        ? req.query.id.trim()
+        : "";
+  if (!rawSlug) return next();
+  const slug = resolveSlug(rawSlug);
+  const row = db.prepare("SELECT * FROM titles WHERE slug = ?").get(slug);
+  if (!row) return next();
+  res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+  return res.type("html").send(renderDetailHtml(titleView(row)));
+});
+
 app.use(
   express.static(SITE_ROOT, {
     maxAge: STATIC_MAX_AGE_MS,
@@ -1658,6 +1674,15 @@ for (const [name, file] of Object.entries(NAMED_PAGES)) {
     res.sendFile(path.join(SITE_ROOT, file), NO_CACHE_FILE_OPTS);
   });
 }
+
+// Pretty detail page URL: /anime/<slug> (server-rendered meta + JSON-LD + canonical)
+app.get("/anime/:slug", (req, res, next) => {
+  const slug = resolveSlug(req.params.slug);
+  const row = db.prepare("SELECT * FROM titles WHERE slug = ?").get(slug);
+  if (!row) return next();
+  res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+  return res.type("html").send(renderDetailHtml(titleView(row)));
+});
 
 // Fallback for HTML routing if requested without extension
 app.get("/:page", (req, res, next) => {

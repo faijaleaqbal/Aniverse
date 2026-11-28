@@ -202,7 +202,7 @@
     return t && t.dubCount > 0 ? `<span class="badge-mini-dub">DUB ${t.dubCount}</span>` : "";
   }
   function detailHref(slug) {
-    return `detail.html?slug=${encodeURIComponent(slug)}`;
+    return `/anime/${encodeURIComponent(slug)}`;
   }
   function watchHref(slug, ep) {
     return `watch.html?slug=${encodeURIComponent(slug)}&ep=${encodeURIComponent(ep == null ? 1 : ep)}`;
@@ -586,9 +586,10 @@
       return;
     }
     try {
-      if (!force && sessionStorage.getItem("aizen_intro_seen")) {
+      if (!force && (localStorage.getItem("aizen_intro_seen") || sessionStorage.getItem("aizen_intro_seen"))) {
         return;
       }
+      localStorage.setItem("aizen_intro_seen", "true");
       sessionStorage.setItem("aizen_intro_seen", "true");
     } catch (e) {
       // ignore storage access errors
@@ -608,7 +609,7 @@
         </div>
         <div class="aizen-intro-meta">
           <span id="aizen-status-text">INITIALIZING RESOURCES... 0%</span>
-          <span class="drawer-engine-tag">ZORO UI × AIZEN CINEMATIC ENGINE</span>
+          <span class="drawer-engine-tag">ZORO UI × AIZEN CINEMATIC ENGINE • TAP TO SKIP</span>
         </div>
       </div>
     `;
@@ -617,47 +618,71 @@
 
     let progress = 0;
     let timer = null;
+    let maxCapTimer = null;
+    let readyTimer = null;
     let finished = false;
     const startedAt = Date.now();
     const bar = overlay.querySelector("#aizen-bar");
     const statusText = overlay.querySelector("#aizen-status-text");
 
+    function onContentReady() {
+      const elapsed = Date.now() - startedAt;
+      if (elapsed >= 350) {
+        finish();
+      } else {
+        readyTimer = setTimeout(finish, 350 - elapsed);
+      }
+    }
+
+    function onKeySkip(e) {
+      if (e.key === "Escape" || e.key === "Enter" || e.key === " ") {
+        finish();
+      }
+    }
+
     function finish() {
       if (finished) return;
       finished = true;
       if (timer) clearInterval(timer);
+      if (maxCapTimer) clearTimeout(maxCapTimer);
+      if (readyTimer) clearTimeout(readyTimer);
+      window.removeEventListener("zoro:contentReady", onContentReady);
+      document.removeEventListener("keydown", onKeySkip);
       overlay.classList.add("is-exiting");
-      sessionStorage.setItem("aizen_intro_seen", "true");
-      
-      setTimeout(() => overlay.remove(), 650);
+      try {
+        localStorage.setItem("aizen_intro_seen", "true");
+        sessionStorage.setItem("aizen_intro_seen", "true");
+      } catch (e) {
+        // ignore storage access errors
+      }
+
+      setTimeout(() => overlay.remove(), 400);
     }
 
-    window.addEventListener("zoro:contentReady", () => {
-      const elapsed = Date.now() - startedAt;
-      if (elapsed >= 450) {
-        finish();
-      } else {
-        setTimeout(finish, 450 - elapsed);
-      }
-    });
+    window.addEventListener("zoro:contentReady", onContentReady);
+    document.addEventListener("keydown", onKeySkip);
+
+    // Hard cap so the intro never delays interactivity past ~1.5s
+    maxCapTimer = setTimeout(finish, 1500);
 
     timer = setInterval(() => {
-      progress += Math.floor(Math.random() * 12) + 6;
-      
-      if (progress >= 100 || Date.now() - startedAt > 1000) {
+      progress += Math.floor(Math.random() * 14) + 12;
+
+      if (progress >= 100 || Date.now() - startedAt > 750) {
         progress = 100;
         clearInterval(timer);
         bar.style.width = "100%";
         statusText.textContent = "SYSTEM READY • 100%";
 
-        setTimeout(finish, 350);
+        readyTimer = setTimeout(finish, 180);
       } else {
         bar.style.width = `${progress}%`;
         statusText.textContent = `INITIALIZING RESOURCES... ${progress}%`;
       }
-    }, 60);
+    }, 45);
 
-    // Allow skip on click
+    // Allow immediate skip on first tap/click
+    overlay.addEventListener("pointerdown", finish, { passive: true });
     overlay.addEventListener("click", finish);
   }
 
@@ -5585,7 +5610,17 @@
         watchNow.removeAttribute("href");
       }
     }
-    document.title = `${t.name} - AniFlick`;
+    applyDetailSeo({
+      name: t.name,
+      synopsis: t.synopsis,
+      genres: t.genres,
+      format: t.format,
+      episodes: t.episodes != null ? t.episodes : airedCount,
+      cover: t.cover,
+      canonicalPath: t.catalogSlug
+        ? `/anime/${encodeURIComponent(t.catalogSlug)}`
+        : `/detail.html?live=${encodeURIComponent(liveId)}`,
+    });
 
     const listBtn = document.getElementById("detail-add-list");
     if (listBtn) listBtn.hidden = true;
@@ -5681,6 +5716,82 @@
     markContentReady();
   }
 
+  function truncateSeoDescription(raw, max = 155) {
+    const clean = String(raw || "")
+      .replace(/<[^>]*>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!clean) return "";
+    if (clean.length <= max) return clean;
+    const sliced = clean.slice(0, max - 3);
+    const lastSpace = sliced.lastIndexOf(" ");
+    const cut = lastSpace > Math.floor((max - 3) * 0.6) ? sliced.slice(0, lastSpace) : sliced;
+    return `${cut.replace(/[.,;:!?\s-]+$/, "")}...`;
+  }
+
+  function applyDetailSeo({ name, synopsis, tagline, genres, anilistGenres, kind, format, episodes, cover, canonicalPath }) {
+    const displayName = String(name || "Anime").trim() || "Anime";
+    document.title = `Watch ${displayName} English Sub/Dub Online — AniFlick`;
+
+    const desc =
+      truncateSeoDescription(synopsis || tagline || "") ||
+      `Watch ${displayName} online in HD with English sub and dub on AniFlick.`;
+    let metaDesc = document.querySelector('meta[name="description"]');
+    if (!metaDesc) {
+      metaDesc = document.createElement("meta");
+      metaDesc.setAttribute("name", "description");
+      document.head.appendChild(metaDesc);
+    }
+    metaDesc.setAttribute("content", desc);
+
+    let canonEl = document.querySelector('link[rel="canonical"]');
+    if (!canonEl) {
+      canonEl = document.createElement("link");
+      canonEl.setAttribute("rel", "canonical");
+      canonEl.setAttribute("href", `${window.location.origin}${canonicalPath || window.location.pathname}`);
+      document.head.appendChild(canonEl);
+    }
+
+    const isFilm =
+      String(kind || "").toLowerCase() === "film" ||
+      String(format || "").toUpperCase() === "MOVIE";
+    const schemaType = isFilm ? "Movie" : "TVSeries";
+    const rawGenres = Array.isArray(anilistGenres) && anilistGenres.length
+      ? anilistGenres
+      : (Array.isArray(genres) ? genres : []);
+    const formattedGenres = rawGenres
+      .map((g) => String(g || "").trim())
+      .filter(Boolean)
+      .map((g) => g.replace(/\b\w/g, (c) => c.toUpperCase()));
+
+    const jsonLd = {
+      "@context": "https://schema.org",
+      "@type": schemaType,
+      name: displayName,
+      url: canonEl.getAttribute("href"),
+      description: desc,
+    };
+    if (formattedGenres.length) jsonLd.genre = formattedGenres;
+    const epNum = Number(episodes);
+    if (schemaType === "TVSeries" && Number.isFinite(epNum) && epNum > 0) {
+      jsonLd.numberOfEpisodes = epNum;
+    }
+    if (cover) {
+      const coverStr = String(cover);
+      jsonLd.image = /^https?:\/\//i.test(coverStr)
+        ? coverStr
+        : `${window.location.origin}/${coverStr.replace(/^\/+/, "")}`;
+    }
+
+    let ldEl = document.querySelector('script[type="application/ld+json"]');
+    if (!ldEl) {
+      ldEl = document.createElement("script");
+      ldEl.setAttribute("type", "application/ld+json");
+      document.head.appendChild(ldEl);
+    }
+    ldEl.textContent = JSON.stringify(jsonLd);
+  }
+
   async function initDetailPage() {
     const stage = document.getElementById("detail-stage");
     if (!stage) return;
@@ -5708,7 +5819,16 @@
       return;
     }
 
-    const rawId = (params.get("slug") || params.get("id") || "").trim();
+    const animePathMatch = window.location.pathname.match(/^\/anime\/([^/?#]+)\/?$/);
+    let pathSlug = "";
+    if (animePathMatch) {
+      try {
+        pathSlug = decodeURIComponent(animePathMatch[1]);
+      } catch {
+        pathSlug = animePathMatch[1];
+      }
+    }
+    const rawId = (params.get("slug") || params.get("id") || pathSlug || "").trim();
     const loadingEl = document.getElementById("detail-loading");
     const errorEl = document.getElementById("detail-error");
     const contentEl = document.getElementById("detail-content");
@@ -5754,8 +5874,8 @@
     }
     
     // links, watchlist calls) — never the raw ?id= value.
-    const slug = targetSlug;
     const t = res.data.title;
+    const slug = t.slug || targetSlug;
     const episodes = Array.isArray(res.data.episodes) ? res.data.episodes : [];
     const userState = res.data.userState;
     const epCount = t.episodes || episodes.length || 0;
@@ -5812,7 +5932,17 @@
     if (syn) syn.textContent = t.synopsis || t.tagline || "";
     const watchNow = document.getElementById("detail-watch-now");
     if (watchNow) watchNow.href = watchHref(slug, 1);
-    document.title = `${t.name} - AniFlick`;
+    applyDetailSeo({
+      name: t.name,
+      synopsis: t.synopsis,
+      tagline: t.tagline,
+      genres: t.genres,
+      anilistGenres: t.anilistGenres,
+      kind: t.kind,
+      episodes: epCount,
+      cover: t.cover,
+      canonicalPath: `/anime/${encodeURIComponent(slug)}`,
+    });
 
     const listBtn = document.getElementById("detail-add-list");
     function setListBtn(inList) {

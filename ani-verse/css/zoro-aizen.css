@@ -378,7 +378,7 @@ img {
   height: 50%;
   background: #000000;
   z-index: 10;
-  transition: transform 0.6s var(--ease-aizen);
+  transition: transform 0.35s var(--ease-aizen);
 }
 
 .aizen-shutter-top {
@@ -389,6 +389,10 @@ img {
 .aizen-shutter-bottom {
   bottom: 0;
   transform-origin: bottom;
+}
+
+.aizen-intro-overlay.is-exiting {
+  pointer-events: none;
 }
 
 .aizen-intro-overlay.is-exiting .aizen-shutter-top {
@@ -406,7 +410,7 @@ img {
   flex-direction: column;
   align-items: center;
   text-align: center;
-  transition: opacity 0.3s ease;
+  transition: opacity 0.2s ease;
 }
 
 .aizen-intro-overlay.is-exiting .aizen-intro-content {

@@ -2710,9 +2710,13 @@ async function runTests() {
       const playerCss = readFileSync(fileURLToPath(new URL("../../ani-verse/css/zoko-player.css", import.meta.url)), "utf8");
 
       assert.ok(html.includes('class="watch-controls"'), "watch.html has the grouped controls card");
-      for (const id of ["zoko-server-switcher", "zoko-track-switcher", "zoko-setting-toggles", "btn-prev-ep", "btn-next-ep", "btn-theater-mode", "watch-add-list-btn"]) {
+      for (const id of ["zoko-server-switcher", "zoko-track-switcher", "zoko-setting-toggles", "btn-prev-ep", "btn-next-ep"]) {
         assert.ok(html.includes(`id="${id}"`), `watch.html keeps #${id}`);
       }
+      /* Theater mode + watch-page Add to List were removed by user request
+         (2026-11-28): they must NOT be present on the watch page. */
+      assert.ok(!html.includes('id="btn-theater-mode"'), "watch.html has no #btn-theater-mode (removed)");
+      assert.ok(!html.includes('id="watch-add-list-btn"'), "watch.html has no #watch-add-list-btn (removed)");
       /* Split-cour continuation pin (client-side; no DB change). */
       assert.ok(src.includes("TITLE_CONTINUATIONS"), "zoro-aizen.js defines TITLE_CONTINUATIONS");
       assert.ok(src.includes('"corner-store-hours": { live: 142838'), "Spy x Family continues into Cour 2 (AniList 142838)");
@@ -3634,6 +3638,79 @@ async function runTests() {
         else process.env.TURNSTILE_SECRET_KEY = prevSecret;
         db.prepare("DELETE FROM users WHERE email = ?").run(email);
       }
+    });
+
+    // 99. SEO: pretty URLs /anime/<slug>, per-anime meta + canonical + JSON-LD,
+    //     sitemap.xml pretty URLs, and fast/skippable homepage intro.
+    await test("SEO: /anime/<slug> and /detail?slug= serve per-anime meta, canonical, and JSON-LD", async () => {
+      const seriesRes = await fetch(`${baseUrl}/anime/kagerou-protocol`);
+      assert.equal(seriesRes.status, 200);
+      const seriesHtml = await seriesRes.text();
+      assert.ok(seriesHtml.includes('<base href="/">'), "/anime/:slug includes <base href=\"/\">");
+      assert.ok(
+        seriesHtml.includes("<title>Watch Jujutsu Kaisen English Sub/Dub Online — AniFlick</title>"),
+        "pretty URL serves per-anime <title>"
+      );
+      const descMatch = seriesHtml.match(/<meta name="description" content="([^"]*)">/);
+      assert.ok(descMatch && descMatch[1].length > 20 && descMatch[1].length <= 155, "meta description present and <= 155 chars");
+      assert.ok(
+        seriesHtml.includes('<link rel="canonical" href="https://aniflick.duckdns.org/anime/kagerou-protocol">'),
+        "canonical points to pretty URL"
+      );
+      const ldMatch = seriesHtml.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/);
+      assert.ok(ldMatch, "JSON-LD block present");
+      const ld = JSON.parse(ldMatch[1]);
+      assert.equal(ld["@type"], "TVSeries");
+      assert.equal(ld.name, "Jujutsu Kaisen");
+      assert.equal(ld.numberOfEpisodes, 24);
+      assert.ok(Array.isArray(ld.genre) && ld.genre.length > 0);
+
+      // Single-episode film uses @type Movie
+      const filmRes = await fetch(`${baseUrl}/anime/paper-cranes-at-dawn`);
+      assert.equal(filmRes.status, 200);
+      const filmHtml = await filmRes.text();
+      const filmLd = JSON.parse(filmHtml.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)[1]);
+      assert.equal(filmLd["@type"], "Movie");
+      assert.equal(filmLd.name, "A Silent Voice");
+
+      // Retired alias resolves to canonical slug
+      const aliasRes = await fetch(`${baseUrl}/anime/paper-cranes`);
+      assert.equal(aliasRes.status, 200);
+      const aliasHtml = await aliasRes.text();
+      assert.ok(aliasHtml.includes('<link rel="canonical" href="https://aniflick.duckdns.org/anime/paper-cranes-at-dawn">'));
+
+      // Legacy detail.html?slug=... keeps working and includes canonical + meta + JSON-LD
+      const legacyRes = await fetch(`${baseUrl}/detail.html?slug=kagerou-protocol`);
+      assert.equal(legacyRes.status, 200);
+      const legacyHtml = await legacyRes.text();
+      assert.ok(legacyHtml.includes("<title>Watch Jujutsu Kaisen English Sub/Dub Online — AniFlick</title>"));
+      assert.ok(legacyHtml.includes('<link rel="canonical" href="https://aniflick.duckdns.org/anime/kagerou-protocol">'));
+
+      // Unknown /anime/<slug> returns branded 404
+      const missingRes = await fetch(`${baseUrl}/anime/not-a-real-anime-slug`);
+      assert.equal(missingRes.status, 404);
+    });
+
+    await test("SEO: /sitemap.xml lists pretty /anime/<slug> URLs and static pages", async () => {
+      const res = await fetch(`${baseUrl}/sitemap.xml`);
+      assert.equal(res.status, 200);
+      const xml = await res.text();
+      assert.ok(xml.includes("<?xml version=\"1.0\" encoding=\"UTF-8\"?>"));
+      assert.ok(xml.includes("<loc>https://vyapora.me/</loc>"));
+      assert.ok(xml.includes("<loc>https://vyapora.me/anime/kagerou-protocol</loc>"));
+      assert.ok(xml.includes("<loc>https://vyapora.me/anime/paper-cranes-at-dawn</loc>"));
+      assert.ok(!xml.includes("detail.html?slug="), "sitemap must not use detail.html?slug=");
+      const locCount = (xml.match(/<loc>/g) || []).length;
+      assert.equal(locCount, 28, "sitemap has all 28 URLs (10 static + 18 catalog)");
+    });
+
+    await test("Speed: homepage intro is skippable, capped, and persisted in localStorage", async () => {
+      const js = readFileSync(ZORO_JS_PATH, "utf8");
+      const css = readFileSync(fileURLToPath(new URL("../../ani-verse/css/zoro-aizen.css", import.meta.url)), "utf8");
+      assert.ok(js.includes('localStorage.getItem("aizen_intro_seen")'), "intro checks localStorage for repeat visits");
+      assert.ok(js.includes('overlay.addEventListener("pointerdown", finish'), "intro skips immediately on tap/pointerdown");
+      assert.ok(js.includes("maxCapTimer = setTimeout(finish, 1500)"), "intro duration is hard-capped at 1.5s");
+      assert.ok(css.includes(".aizen-intro-overlay.is-exiting {\n  pointer-events: none;"), "exiting overlay stops blocking clicks immediately");
     });
 
     console.log(`\nAll ${passed} E2E integration tests passed successfully!\n`);
