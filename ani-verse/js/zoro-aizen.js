@@ -2,6 +2,65 @@
   "use strict";
 
   /* ==========================================================================
+     DEVTOOLS BLOCKING (user request, 2026-11-28: DevTools must not open)
+     Layer 1: block the keyboard shortcuts + the right-click menu.
+     Layer 2: detect a DevTools panel opened via the browser menu and blank
+     the page. Runs on every page — this script is included site-wide.
+     Normal keys (letters, Enter, Space, arrows, Escape) and normal clicks
+     are never touched, so playback, search, filters and login keep working.
+     ========================================================================== */
+
+  /* Layer 1a — block DevTools keyboard shortcuts. Capture phase so the
+     event is stopped before any other handler sees it. */
+  document.addEventListener(
+    "keydown",
+    (e) => {
+      const mod = e.ctrlKey || e.metaKey; // Ctrl on Windows/Linux, Cmd on Mac
+      const key = e.key || "";
+      const isDevToolsKey =
+        key === "F12" ||
+        e.keyCode === 123 || // F12 fallback
+        (mod &&
+          e.shiftKey &&
+          (key === "I" || key === "i" || key === "J" || key === "j" || key === "C" || key === "c")) ||
+        (mod && (key === "U" || key === "u")); // View source
+      if (isDevToolsKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      }
+    },
+    true
+  );
+
+  /* Layer 1b — block the right-click context menu site-wide, so "Inspect"
+     cannot be reached from it. */
+  document.addEventListener("contextmenu", (e) => e.preventDefault(), true);
+
+  /* Layer 2 — detect a DevTools panel opened via the browser menu (which
+     keyboard/contextmenu blocking cannot stop). A docked DevTools panel
+     makes window.outerWidth/outerHeight much larger than the inner size;
+     normal browser chrome stays well under the threshold. Two consecutive
+     detections are required so a transient resize cannot blank the page.
+     The interval is cleared before blanking, so there is no reload loop. */
+  let devtoolsHits = 0;
+  const devtoolsCheck = setInterval(() => {
+    const widthGap = window.outerWidth - window.innerWidth;
+    const heightGap = window.outerHeight - window.innerHeight;
+    if (widthGap > 160 || heightGap > 160) {
+      devtoolsHits += 1;
+      if (devtoolsHits >= 2) {
+        clearInterval(devtoolsCheck);
+        document.body.innerHTML =
+          '<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#0b0b0f;color:#e5e5e5;font-family:sans-serif;text-align:center;padding:24px;"><div><h1 style="font-size:22px;margin:0 0 8px;">DevTools is disabled on AniFlick</h1><p style="margin:0;opacity:.7;">Please close DevTools and reload the page to continue watching.</p></div></div>';
+      }
+    } else {
+      devtoolsHits = 0;
+    }
+  }, 1000);
+
+
+  /* ==========================================================================
      API HELPER & STATE
      ========================================================================== */
 
