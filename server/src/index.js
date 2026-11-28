@@ -84,6 +84,7 @@ import {
 } from "./utils.js";
 import { getTurnstileSiteKey, verifyTurnstile } from "./turnstile.js";
 import { renderDetailHtml } from "./seo.js";
+import { resolveTmdbInfo } from "./tmdb.js";
 
 const app = express();
 
@@ -97,7 +98,7 @@ const CSP_HEADER = [
   "style-src 'self'",
   "font-src 'self'",
   "img-src 'self' data: https://s4.anilist.co",
-  "frame-src 'self' https://zokoanime.video https://embed.animetvplus.site https://challenges.cloudflare.com",
+  "frame-src 'self' https://zokoanime.video https://embed.animetvplus.site https://challenges.cloudflare.com https://animedekho.tv https://blakiteapi.xyz",
   "frame-ancestors 'self'",
   "connect-src 'self' https://zokoanime.video",
   "object-src 'none'",
@@ -772,6 +773,17 @@ function withCatalogSlug(live, index) {
     if (live.episodes == null && row.episodes != null) {
       live.episodes = Number(row.episodes);
     }
+    if (live.tmdbId == null) {
+      Object.assign(
+        live,
+        resolveTmdbInfo({
+          anilistId: row.anilist_id != null ? Number(row.anilist_id) : null,
+          malId: row.mal_id != null ? Number(row.mal_id) : null,
+          kind: row.kind,
+          preferMal: true,
+        })
+      );
+    }
   }
   return live;
 }
@@ -1381,7 +1393,7 @@ app.get("/api/progress/continue", (req, res) => {
   const rows = db
     .prepare(`
       SELECT p.title_slug, p.episode_num, p.position_sec, p.duration_sec, p.updated_at,
-             t.name as title_name, t.kind, t.tone, e.title as episode_title,
+             t.name as title_name, t.kind, t.tone, t.mal_id, t.anilist_id, e.title as episode_title,
              t.cover_local, t.cover_remote, t.banner_local, t.banner_remote
       FROM watch_progress p
       JOIN titles t ON p.title_slug = t.slug
@@ -1407,6 +1419,12 @@ app.get("/api/progress/continue", (req, res) => {
       updatedAt: r.updated_at,
       cover: r.cover_local || r.cover_remote || null,
       banner: r.banner_local || r.banner_remote || null,
+      ...resolveTmdbInfo({
+        anilistId: r.anilist_id != null ? Number(r.anilist_id) : null,
+        malId: r.mal_id != null ? Number(r.mal_id) : null,
+        kind: r.kind,
+        preferMal: true,
+      }),
     })),
   });
 });

@@ -1,5 +1,6 @@
 import { createHash, randomBytes, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
+import { resolveTmdbInfo } from "./tmdb.js";
 
 const scrypt = promisify(scryptCallback);
 const SCRYPT = { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };
@@ -176,5 +177,11 @@ export function titleView(row) {
     banner: bannerLocal || bannerRemote,
     bannerLocal,
     bannerRemote,
+    ...resolveTmdbInfo({
+      anilistId: row.anilist_id != null ? Number(row.anilist_id) : null,
+      malId: row.mal_id != null ? Number(row.mal_id) : null,
+      kind: row.kind,
+      preferMal: true,
+    }),
   };
 }

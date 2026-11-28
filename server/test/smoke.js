@@ -13,6 +13,7 @@ import {
   OAUTH_PROVIDER_IDS,
 } from "../src/oauth-providers.js";
 import { buildDetailSeo, truncateDescription } from "../src/seo.js";
+import { extractTmdbFromExternalLinks, resolveTmdbInfo } from "../src/tmdb.js";
 
 console.log("=== Running ZokoAnime Unit / Smoke Tests ===");
 
@@ -360,6 +361,47 @@ test("buildDetailSeo formats title, truncated description, canonical URL, and TV
   });
   assert.equal(movie.jsonLd["@type"], "Movie");
   assert.equal(movie.jsonLd.numberOfEpisodes, undefined);
+});
+
+test("extractTmdbFromExternalLinks and resolveTmdbInfo resolve TV TMDB ids and reject movies/unmapped", () => {
+  assert.equal(
+    extractTmdbFromExternalLinks([
+      { site: "Crunchyroll", type: "STREAMING", url: "https://www.crunchyroll.com/naruto" },
+      { site: "TMDB", type: "TV", url: "https://www.themoviedb.org/tv/31910" },
+    ]),
+    31910
+  );
+  assert.equal(
+    extractTmdbFromExternalLinks([
+      { site: "The Movie Database", type: "INFO", url: "https://www.themoviedb.org/tv/280042-wild-last-boss" },
+    ]),
+    280042
+  );
+  assert.equal(
+    extractTmdbFromExternalLinks([
+      { site: "TMDB", type: "MOVIE", url: "https://www.themoviedb.org/movie/378064" },
+    ]),
+    null,
+    "movie links must not resolve as TMDB TV ids"
+  );
+  assert.equal(extractTmdbFromExternalLinks([]), null);
+
+  assert.deepEqual(
+    resolveTmdbInfo({ anilistId: 1735, format: "TV", externalLinks: [] }),
+    { tmdbId: 31910, tmdbSeason: 1, tmdbEpisodeOffset: 0 }
+  );
+  assert.deepEqual(
+    resolveTmdbInfo({ anilistId: 142838, format: "TV", externalLinks: [] }),
+    { tmdbId: 120089, tmdbSeason: 1, tmdbEpisodeOffset: 12 }
+  );
+  assert.deepEqual(
+    resolveTmdbInfo({ anilistId: 20954, format: "MOVIE", kind: "Film" }),
+    { tmdbId: null, tmdbSeason: null, tmdbEpisodeOffset: 0 }
+  );
+  assert.deepEqual(
+    resolveTmdbInfo({ anilistId: 99999999, format: "TV", externalLinks: [] }),
+    { tmdbId: null, tmdbSeason: null, tmdbEpisodeOffset: 0 }
+  );
 });
 
 console.log(`\nAll ${passed} smoke / unit tests passed successfully!\n`);

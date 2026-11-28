@@ -3780,6 +3780,112 @@ async function runTests() {
       );
     });
 
+    await test("Hindi players: server options, embed URLs, sandbox, CSP, and Multi Audio badge", async () => {
+      const html = readFileSync(fileURLToPath(new URL("../../ani-verse/watch.html", import.meta.url)), "utf8");
+      const js = readFileSync(ZORO_JS_PATH, "utf8");
+
+      // 1. Server pills in watch.html: Zoko primary, TVplus backup, then hidden Hindi pills; no Vidmoly
+      const zokoIdx = html.indexOf('data-server="zoko"');
+      const backupIdx = html.indexOf('data-server="backup"');
+      const vidstreamIdx = html.indexOf('data-server="vidstream"');
+      const vidstream3Idx = html.indexOf('data-server="vidstream3"');
+      assert.ok(zokoIdx >= 0 && backupIdx > zokoIdx, "Zoko and TVplus stay first in order");
+      assert.ok(vidstreamIdx > backupIdx && vidstream3Idx > vidstreamIdx, "Vidstream (Hindi) and Vidstream-3 (Hindi) follow TVplus");
+      assert.ok(html.includes("Vidstream (Hindi)"), "watch.html has Vidstream (Hindi) label");
+      assert.ok(html.includes("Vidstream-3 (Hindi)"), "watch.html has Vidstream-3 (Hindi) label");
+      assert.ok(!/vidmoly/i.test(html) && !/vidmoly/i.test(js), "Vidmoly must NOT be added anywhere");
+      assert.ok(!/ravok\.buzz/i.test(js), "ravok.buzz videoIds must never be hardcoded in client JS");
+
+      // 2. Sandbox attributes on Hindi iframes block popups and top navigation
+      const { PLAYER_IFRAME_SANDBOX, PLAYER_IFRAME_SANDBOX_BY_SERVER } = evalZoroBlock(
+        "PLAYER_IFRAME_SANDBOX",
+        ["PLAYER_IFRAME_SANDBOX", "PLAYER_IFRAME_SANDBOX_BY_SERVER"]
+      );
+      assert.equal(PLAYER_IFRAME_SANDBOX_BY_SERVER.zoko, null, "Zoko remains unsandboxed");
+      assert.equal(PLAYER_IFRAME_SANDBOX_BY_SERVER.vidstream, PLAYER_IFRAME_SANDBOX, "vidstream is sandboxed");
+      assert.equal(PLAYER_IFRAME_SANDBOX_BY_SERVER.vidstream3, PLAYER_IFRAME_SANDBOX, "vidstream3 is sandboxed");
+      assert.ok(PLAYER_IFRAME_SANDBOX_BY_SERVER.vidstream.includes("allow-scripts"));
+      assert.ok(PLAYER_IFRAME_SANDBOX_BY_SERVER.vidstream.includes("allow-same-origin"));
+      assert.ok(!PLAYER_IFRAME_SANDBOX_BY_SERVER.vidstream.includes("allow-popups"));
+      assert.ok(!PLAYER_IFRAME_SANDBOX_BY_SERVER.vidstream.includes("allow-top-navigation"));
+
+      // 3. Hindi player URL builder and Multi Audio badge visibility logic
+      const hindi = evalZoroBlock("HINDI_PLAYER_LOGIC", [
+        "hasHindiPlayers",
+        "multiAudioBadge",
+        "multiAudioDetailBadge",
+        "getVidstreamEmbedUrl",
+        "getVidstream3EmbedUrl",
+      ]);
+      assert.equal(hindi.hasHindiPlayers({ tmdbId: 31910 }), true);
+      assert.equal(hindi.hasHindiPlayers({ tmdbId: null }), false);
+      assert.equal(hindi.hasHindiPlayers(null), false);
+      assert.ok(hindi.multiAudioBadge({ tmdbId: 31910 }).includes("Multi Audio"));
+      assert.equal(hindi.multiAudioBadge({ tmdbId: null }), "");
+      assert.ok(hindi.multiAudioDetailBadge({ tmdbId: 31910 }).includes("Multi Audio"));
+      assert.equal(hindi.multiAudioDetailBadge({ tmdbId: null }), "");
+      assert.equal(hindi.getVidstreamEmbedUrl({ tmdbId: 280042 }, 1), "https://animedekho.tv/embed/280042/1-1");
+      assert.equal(hindi.getVidstream3EmbedUrl({ tmdbId: 85937 }, 1), "https://blakiteapi.xyz/embed/85937/1-1");
+      assert.equal(
+        hindi.getVidstreamEmbedUrl({ tmdbId: 120089, tmdbSeason: 1, tmdbEpisodeOffset: 12 }, 1),
+        "https://animedekho.tv/embed/120089/1-13"
+      );
+      assert.equal(hindi.getVidstreamEmbedUrl({ tmdbId: null }, 1), null);
+      assert.equal(hindi.getVidstream3EmbedUrl({ tmdbId: null }, 1), null);
+
+      // 4. CSP frame-src includes animedekho.tv and blakiteapi.xyz alongside existing origins
+      const watchRes = await fetch(`${baseUrl}/watch`);
+      assert.equal(watchRes.status, 200);
+      const csp = watchRes.headers.get("content-security-policy") || "";
+      for (const origin of [
+        "https://zokoanime.video",
+        "https://embed.animetvplus.site",
+        "https://challenges.cloudflare.com",
+        "https://animedekho.tv",
+        "https://blakiteapi.xyz",
+      ]) {
+        assert.ok(csp.includes(origin), `CSP frame-src keeps ${origin}`);
+      }
+
+      // 5. Catalog titles: Naruto (sea-of-stars) resolves TMDB TV id; A Silent Voice (Film) does not
+      const narutoRes = await fetch(`${baseUrl}/api/titles/sea-of-stars`);
+      assert.equal(narutoRes.status, 200);
+      const narutoJson = await narutoRes.json();
+      assert.equal(narutoJson.title.tmdbId, 46260);
+
+      const filmRes = await fetch(`${baseUrl}/api/titles/paper-cranes-at-dawn`);
+      assert.equal(filmRes.status, 200);
+      const filmJson = await filmRes.json();
+      assert.equal(filmJson.title.tmdbId, null);
+
+      // 6. Live AniList queries include externalLinks and extract TMDB TV links, falling back to null when absent
+      mockAniList({
+        mediaById: {
+          987111: fakeMedia({
+            id: 987111,
+            idMal: 987111,
+            externalLinks: [{ id: 1, site: "TMDB", type: "TV", url: "https://www.themoviedb.org/tv/280042" }],
+          }),
+          987222: fakeMedia({
+            id: 987222,
+            idMal: 987222,
+            externalLinks: [],
+          }),
+        },
+      });
+      const liveWithTmdb = await fetch(`${baseUrl}/api/live/987111`);
+      assert.equal(liveWithTmdb.status, 200);
+      assert.equal((await liveWithTmdb.json()).title.tmdbId, 280042);
+      assert.ok(
+        anilistRequests.some((r) => String(r.query || "").includes("externalLinks")),
+        "AniList Media query requests externalLinks"
+      );
+
+      const liveWithoutTmdb = await fetch(`${baseUrl}/api/live/987222`);
+      assert.equal(liveWithoutTmdb.status, 200);
+      assert.equal((await liveWithoutTmdb.json()).title.tmdbId, null);
+    });
+
     console.log(`\nAll ${passed} E2E integration tests passed successfully!\n`);
   } finally {
     if (server) {

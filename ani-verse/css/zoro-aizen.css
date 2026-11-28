@@ -3519,6 +3519,36 @@ body.drawer-open .zoro-header {
   border-radius: 3px;
 }
 
+.badge-mini-multi-audio {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 5;
+  pointer-events: none;
+  background: rgba(12, 13, 18, 0.86);
+  color: var(--zoro-lime);
+  border: 1px solid rgba(202, 233, 98, 0.55);
+  font-weight: 800;
+  font-size: 0.6rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  padding: 2px 5px;
+  border-radius: 3px;
+  line-height: 1.2;
+}
+
+.badge-multi-audio {
+  background: rgba(202, 233, 98, 0.16);
+  color: var(--zoro-lime);
+  border: 1px solid rgba(202, 233, 98, 0.45);
+}
+
+[data-theme="light"] .watch-badges-row .badge-multi-audio {
+  background: rgba(77, 124, 15, 0.12);
+  color: #3f6212;
+  border-color: rgba(77, 124, 15, 0.4);
+}
+
 /* "Service is busy — try again in a moment." / library fallback notice. */
 .zoro-live-notice {
   display: flex;

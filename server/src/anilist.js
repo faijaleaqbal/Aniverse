@@ -18,6 +18,7 @@
  */
 
 import { malIdOverride } from "./mal-overrides.js";
+import { resolveTmdbInfo } from "./tmdb.js";
 
 const ANILIST_URL = (process.env.ANILIST_URL || "https://graphql.anilist.co").replace(/\/+$/, "");
 const TIMEOUT_MS = 8000;
@@ -90,6 +91,7 @@ export const MEDIA_FIELDS = `
   startDate { year month day }
   genres averageScore seasonYear popularity
   nextAiringEpisode { episode airingAt }
+  externalLinks { id url site type }
 `;
 
 /* POST the GraphQL query with an 8s timeout. 429 / 5xx / timeout / network
@@ -245,6 +247,12 @@ export function mediaView(media) {
     popularity: media.popularity != null ? Number(media.popularity) : null,
     nextAiringEpisode: media.nextAiringEpisode || null,
     is18plus: genres.includes("Ecchi"),
+    ...resolveTmdbInfo({
+      anilistId: media.id,
+      malId: malId != null ? Number(malId) : null,
+      format: media.format,
+      externalLinks: media.externalLinks,
+    }),
   };
 }
 
@@ -376,6 +384,11 @@ export function liveDetailView(media) {
         score: rec.averageScore != null ? Number(rec.averageScore) : null,
         format: rec.format || null,
         rating: node.rating != null ? Number(node.rating) : null,
+        ...resolveTmdbInfo({
+          anilistId: rec.id != null ? Number(rec.id) : null,
+          malId: rec.idMal != null ? Number(rec.idMal) : null,
+          format: rec.format,
+        }),
       };
     })
     .filter(Boolean);

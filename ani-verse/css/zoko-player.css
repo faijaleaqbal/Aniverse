@@ -330,6 +330,10 @@
   justify-content: center;
 }
 
+.watch-controls .server-pill[hidden] {
+  display: none;
+}
+
 .watch-controls .zoko-setting-toggles {
   margin-left: 0;
   padding-left: 0;

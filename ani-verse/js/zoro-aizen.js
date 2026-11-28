@@ -124,6 +124,7 @@
   function autoNextAction({ server, currentEp, totalEps, autonext, continuation }) {
     if (server === "backup") return { action: "none" };
     if (server === "animegg") return { action: "none" };
+    if (server === "vidstream" || server === "vidstream3") return { action: "none" };
     if (!autonext) return { action: "none" };
     const total = Number(totalEps) || 0;
     const current = Number(currentEp) || 0;
@@ -366,6 +367,52 @@
     return t && t.is18plus ? `<span class="badge-mini-18">18+</span>` : "";
   }
 
+  /* __HINDI_PLAYER_LOGIC_START__ */
+  const VIDSTREAM_SERVER_ID = "vidstream";
+  const VIDSTREAM3_SERVER_ID = "vidstream3";
+  const VIDSTREAM_ORIGIN = "https://animedekho.tv";
+  const VIDSTREAM3_ORIGIN = "https://blakiteapi.xyz";
+
+  function isHindiServer(server) {
+    return server === VIDSTREAM_SERVER_ID || server === VIDSTREAM3_SERVER_ID;
+  }
+
+  function hasHindiPlayers(t) {
+    const id = Number(t && t.tmdbId);
+    return Number.isFinite(id) && id > 0;
+  }
+
+  function multiAudioBadge(t) {
+    return hasHindiPlayers(t) ? `<span class="badge-mini-multi-audio">Multi Audio</span>` : "";
+  }
+
+  function multiAudioDetailBadge(t) {
+    return hasHindiPlayers(t) ? `<span class="badge badge-multi-audio">Multi Audio</span>` : "";
+  }
+
+  function getHindiSeasonEpisode(t, epNum) {
+    const seasonRaw = Number(t && t.tmdbSeason);
+    const season = Number.isFinite(seasonRaw) && seasonRaw > 0 ? Math.floor(seasonRaw) : 1;
+    const offsetRaw = Number(t && t.tmdbEpisodeOffset);
+    const offset = Number.isFinite(offsetRaw) && offsetRaw > 0 ? Math.floor(offsetRaw) : 0;
+    const epBase = Number(epNum);
+    const ep = Math.max(1, (Number.isFinite(epBase) && epBase > 0 ? Math.floor(epBase) : 1) + offset);
+    return { season, ep };
+  }
+
+  function getVidstreamEmbedUrl(t, epNum) {
+    if (!hasHindiPlayers(t)) return null;
+    const { season, ep } = getHindiSeasonEpisode(t, epNum);
+    return `${VIDSTREAM_ORIGIN}/embed/${Math.floor(Number(t.tmdbId))}/${season}-${ep}`;
+  }
+
+  function getVidstream3EmbedUrl(t, epNum) {
+    if (!hasHindiPlayers(t)) return null;
+    const { season, ep } = getHindiSeasonEpisode(t, epNum);
+    return `${VIDSTREAM3_ORIGIN}/embed/${Math.floor(Number(t.tmdbId))}/${season}-${ep}`;
+  }
+  /* __HINDI_PLAYER_LOGIC_END__ */
+
   function liveFormatLabel(t) {
     if (!t || !t.format) return "TV";
     const map = { TV: "TV", MOVIE: "Movie", OVA: "OVA", ONA: "ONA", SPECIAL: "Special" };
@@ -473,6 +520,7 @@
         <a class="zoro-card-poster" href="${href}">
           <img src="${escapeHtml(cover)}" alt="${escapeHtml(o.name)}" loading="lazy" decoding="async" ${isCatalog ? "" : livePosterAttrs()}>
           <div class="zoro-play-overlay"><div class="zoro-play-circle">▶</div></div>
+          ${multiAudioBadge(o)}
           <div class="zoro-poster-badges">
             <div class="badges-left">${subBadge(o)}${dubBadge(o)}${isCatalog ? "" : eighteenBadge(o)}</div>
           </div>
@@ -524,6 +572,7 @@
           <div class="zoro-play-overlay">
             <div class="zoro-play-circle">▶</div>
           </div>
+          ${multiAudioBadge(t)}
           <div class="zoro-poster-badges">
             <div class="badges-left">
               ${subBadge(t)}
@@ -1499,6 +1548,7 @@
                 <div class="zoro-play-overlay">
                   <div class="zoro-play-circle">▶</div>
                 </div>
+                ${multiAudioBadge(item)}
                 <div class="zoro-poster-badges">
                   <div class="badges-left">
                     ${subCount(item) ? subBadge(item) : ""}
@@ -1937,6 +1987,7 @@
             <div class="zoro-play-overlay">
               <div class="zoro-play-circle">▶</div>
             </div>
+            ${multiAudioBadge(t)}
             <div class="zoro-poster-badges">
               <div class="badges-left">
                 ${subBadge(t)}
@@ -2393,6 +2444,7 @@
           <a class="zoro-card-poster" href="${detailHref(t.slug)}">
             <img src="${coverOf(t)}" alt="${escapeHtml(t.name)}" loading="${i < 6 ? "eager" : "lazy"}" decoding="async">
             <div class="zoro-play-overlay"><div class="zoro-play-circle">▶</div></div>
+            ${multiAudioBadge(t)}
             <div class="zoro-poster-badges">
               <div class="badges-left">${subBadge(t)}${dubBadge(t)}</div>
             </div>
@@ -2498,6 +2550,7 @@
                 <a class="zoro-card-poster" href="${detailHref(t.slug)}">
                   <img src="${coverOf(t)}" alt="${escapeHtml(t.name)}" loading="lazy" decoding="async">
                   <div class="zoro-play-overlay"><div class="zoro-play-circle">▶</div></div>
+                  ${multiAudioBadge(t)}
                   <div class="zoro-poster-badges">
                     <div class="badges-left">${subBadge(t)}${dubBadge(t)}</div>
                   </div>
@@ -2853,6 +2906,7 @@
           <a class="zoro-card-poster" href="${detailHref(t.slug)}">
             <img src="${coverOf(t)}" alt="${escapeHtml(t.name)}" loading="lazy" decoding="async">
             <div class="zoro-play-overlay"><div class="zoro-play-circle">▶</div></div>
+            ${multiAudioBadge(t)}
             <div class="zoro-poster-badges">
               <div class="badges-left">${subBadge(t)}${dubBadge(t)}</div>
             </div>
@@ -3177,6 +3231,8 @@
       backup: PLAYER_IFRAME_SANDBOX,
       megaplay: PLAYER_IFRAME_SANDBOX,
       animegg: PLAYER_IFRAME_SANDBOX,
+      vidstream: PLAYER_IFRAME_SANDBOX,
+      vidstream3: PLAYER_IFRAME_SANDBOX,
     };
     /* __PLAYER_IFRAME_SANDBOX_END__ */
     let iframe = document.getElementById("zoko-embed-frame");
@@ -3290,12 +3346,12 @@
     let activeServer = "zoko";
     try {
       const storedServer = sessionStorage.getItem(SS_SERVER_KEY);
-      if (storedServer === "backup" || storedServer === ANIMEGG_SERVER_ID) {
+      if (storedServer === "backup" || storedServer === ANIMEGG_SERVER_ID || isHindiServer(storedServer)) {
         activeServer = storedServer;
       }
     } catch {}
     const playerHook = params.get("player");
-    if (playerHook === "backup" || playerHook === ANIMEGG_SERVER_ID) {
+    if (playerHook === "backup" || playerHook === ANIMEGG_SERVER_ID || isHindiServer(playerHook)) {
       activeServer = playerHook;
       try { sessionStorage.setItem(SS_SERVER_KEY, playerHook); } catch {}
     }
@@ -3417,6 +3473,7 @@
     const ZOKO_NO_PLAYBACK_DEADLINE_MS = 45000;
     const ZOKO_PROBE_ABORT_MS = 20000;
     const BACKUP_NO_READY_TIMEOUT_MS = 45000;
+    const HINDI_NO_LOAD_TIMEOUT_MS = 30000;
     
     const MEGAPLAY_NO_PLAY_TIMEOUT_MS = 12000;
     let loadToken = 0;
@@ -3426,6 +3483,7 @@
     let playbackEvidenceForLoad = false; // play / first time event with cur > 0
     let backupFailTimer = null;
     let megaplayFailTimer = null;
+    let hindiFailTimer = null;
     let fallbackOfferVisible = false;
 
     const SWITCH_SETTLE_TIMEOUT_MS = 20000;
@@ -3443,6 +3501,7 @@
       if (backupFailTimer) { clearTimeout(backupFailTimer); backupFailTimer = null; }
       if (megaplayFailTimer) { clearTimeout(megaplayFailTimer); megaplayFailTimer = null; }
       if (animeggFailTimer) { clearTimeout(animeggFailTimer); animeggFailTimer = null; }
+      if (hindiFailTimer) { clearTimeout(hindiFailTimer); hindiFailTimer = null; }
       if (settleWatchdog) { clearTimeout(settleWatchdog); settleWatchdog = null; }
       if (probeController) {
         try { probeController.abort(); } catch {}
@@ -3499,6 +3558,7 @@
         if (server === "backup") showBackupNote("TVplus player isn't responding.");
         else if (server === "megaplay") showMegaPlayFailureOffer("MegaPlay isn't responding.");
         else if (server === ANIMEGG_SERVER_ID) showAnimeggFailureOffer("The animegg player isn't responding.");
+        else if (isHindiServer(server)) showHindiFailureOffer(`${server === VIDSTREAM3_SERVER_ID ? "Vidstream-3 (Hindi)" : "Vidstream (Hindi)"} isn't responding.`);
         else showFallbackOffer();
       }, SWITCH_SETTLE_TIMEOUT_MS);
     }
@@ -3589,6 +3649,28 @@
       if (dismissBtn) dismissBtn.addEventListener("click", hideFallbackNote);
     }
 
+    function showHindiFailureOffer(message) {
+      if (!fallbackNote || !isHindiServer(activeServer)) return;
+      fallbackOfferVisible = false;
+      const altServer = activeServer === VIDSTREAM_SERVER_ID ? VIDSTREAM3_SERVER_ID : VIDSTREAM_SERVER_ID;
+      const altLabel = altServer === VIDSTREAM3_SERVER_ID ? "Try Vidstream-3 (Hindi)" : "Try Vidstream (Hindi)";
+      const altBtnHtml = hasHindiPlayers(titleData)
+        ? `<button class="btn-zoro-primary" id="fallback-alt-hindi-btn" type="button">${altLabel}</button>`
+        : "";
+      fallbackNote.innerHTML = `
+        <span class="zoko-fallback-text">${escapeHtml(message)}</span>
+        ${altBtnHtml}
+        <button class="btn-zoro-primary" id="fallback-back-btn" type="button">Back to Zoko</button>
+        <button class="fallback-dismiss" id="fallback-dismiss-btn" type="button" aria-label="Dismiss notice">✕</button>`;
+      fallbackNote.hidden = false;
+      const altBtn = fallbackNote.querySelector("#fallback-alt-hindi-btn");
+      if (altBtn) altBtn.addEventListener("click", () => switchServer(altServer));
+      const backBtn = fallbackNote.querySelector("#fallback-back-btn");
+      if (backBtn) backBtn.addEventListener("click", () => switchServer("zoko"));
+      const dismissBtn = fallbackNote.querySelector("#fallback-dismiss-btn");
+      if (dismissBtn) dismissBtn.addEventListener("click", hideFallbackNote);
+    }
+
     function armZokoFailureDetection(streamUrl, token) {
       if (zokoFailTimer) clearTimeout(zokoFailTimer);
       zokoFailTimer = setTimeout(() => {
@@ -3670,8 +3752,22 @@
       }, ANIMEGG_NO_PLAY_TIMEOUT_MS);
     }
 
+    function armHindiFailureDetection(token) {
+      if (hindiFailTimer) clearTimeout(hindiFailTimer);
+      hindiFailTimer = setTimeout(() => {
+        hindiFailTimer = null;
+        if (token !== loadToken || !isHindiServer(activeServer) || playerReady) return;
+        markPlayerSettled();
+        if (spinner) spinner.hidden = true;
+        if (coverOverlay) coverOverlay.style.display = "none";
+        const label = activeServer === VIDSTREAM3_SERVER_ID ? "Vidstream-3 (Hindi)" : "Vidstream (Hindi)";
+        showHindiFailureOffer(`${label} isn't responding.`);
+      }, HINDI_NO_LOAD_TIMEOUT_MS);
+    }
+
     function switchServer(server) {
-      if (server !== "zoko" && server !== "backup" && server !== ANIMEGG_SERVER_ID) return;
+      if (server !== "zoko" && server !== "backup" && server !== ANIMEGG_SERVER_ID && !isHindiServer(server)) return;
+      if (isHindiServer(server) && !hasHindiPlayers(titleData)) return;
       if (server === activeServer) return;
       
       loadToken++;
@@ -3707,10 +3803,16 @@
       const onBackup = activeServer === "backup";
       const onMegaPlay = activeServer === "megaplay";
       const onAnimegg = activeServer === ANIMEGG_SERVER_ID;
+      const onVidstream = activeServer === VIDSTREAM_SERVER_ID;
+      const onVidstream3 = activeServer === VIDSTREAM3_SERVER_ID;
+      const onHindi = onVidstream || onVidstream3;
+      const hindiAvailable = hasHindiPlayers(titleData);
       if (serverSwitcher) {
         serverSwitcher.querySelectorAll(".server-pill").forEach((p) => {
           p.classList.toggle("active", p.dataset.server === activeServer);
-          
+          if (isHindiServer(p.dataset.server)) {
+            p.hidden = !hindiAvailable;
+          }
           if (p.dataset.server === ANIMEGG_SERVER_ID) {
             const off = animeggState === "unavailable";
             p.disabled = off;
@@ -3724,19 +3826,24 @@
         iframe.title = onMegaPlay ? "MegaPlay player"
           : onBackup ? "TVplus player"
           : onAnimegg ? "animegg player"
+          : onVidstream ? "Vidstream (Hindi) player"
+          : onVidstream3 ? "Vidstream-3 (Hindi) player"
           : "ZokoAnime player";
       }
       if (trackSwitcher) {
         trackSwitcher.querySelectorAll(".server-pill").forEach((p) => {
           const t = p.dataset.track || "sub";
-          if (onBackup) {
-            
+          if (onBackup || onHindi) {
             p.classList.toggle("active", t === "sub");
             p.disabled = t !== "sub";
             p.classList.toggle("is-disabled", t !== "sub");
-            p.title = t === "dub" ? "Track switching isn't available on TVplus — audio depends on the source file"
-                    : t === "hsub" ? "Track switching isn't available on TVplus — subs depend on the source file"
-                    : "";
+            if (onHindi) {
+              p.title = "Hindi audio is built into this player — Zoko track switching isn't used";
+            } else {
+              p.title = t === "dub" ? "Track switching isn't available on TVplus — audio depends on the source file"
+                      : t === "hsub" ? "Track switching isn't available on TVplus — subs depend on the source file"
+                      : "";
+            }
           } else if (onAnimegg) {
             
             p.classList.toggle("active", t === "sub");
@@ -3757,13 +3864,13 @@
           }
         });
         if (onMegaPlay) applyTrackPill(currentTrack === "dub" ? "dub" : "sub");
-        else if (!onBackup && !onAnimegg) applyTrackPill(currentTrack);
+        else if (!onBackup && !onAnimegg && !onHindi) applyTrackPill(currentTrack);
       }
       if (settingToggles) {
         settingToggles.querySelectorAll("input[data-setting]").forEach((cb) => {
           
           const key = cb.dataset.setting;
-          const disabled = onBackup || onAnimegg || (onMegaPlay && key !== "autonext");
+          const disabled = onBackup || onAnimegg || onHindi || (onMegaPlay && key !== "autonext");
           cb.disabled = disabled;
           const label = cb.closest(".zoko-toggle");
           if (label) {
@@ -3771,6 +3878,8 @@
             label.title = !disabled ? ""
               : onBackup ? "Not available on the TVplus player"
               : onAnimegg ? "Not available on the animegg player"
+              : onVidstream ? "Not available on the Vidstream (Hindi) player"
+              : onVidstream3 ? "Not available on the Vidstream-3 (Hindi) player"
               : key === "autoplay" ? "MegaPlay always auto-plays"
               : "Not available on the MegaPlay player";
           }
@@ -3784,6 +3893,10 @@
           ? '<span class="text-zoro-lime">⚡</span> Stream with TVplus (press Play)'
           : onAnimegg
           ? '<span class="text-zoro-lime">⚡</span> Stream with animegg (Sub, SD)'
+          : onVidstream
+          ? '<span class="text-zoro-lime">⚡</span> Stream with Vidstream (Hindi)'
+          : onVidstream3
+          ? '<span class="text-zoro-lime">⚡</span> Stream with Vidstream-3 (Hindi)'
           : '<span class="text-zoro-lime">⚡</span> Stream with ZokoAnime (Auto-Skip)';
       }
       updateTrackLabel();
@@ -3988,10 +4101,12 @@
 
       const badgesEl = document.getElementById("watch-anime-badges");
       if (badgesEl) {
-        badgesEl.innerHTML = t.is18plus
-          ? `<span class="badge badge-18plus">18+</span>`
-          : "";
-        badgesEl.hidden = !t.is18plus;
+        const badgeParts = [
+          multiAudioDetailBadge(t),
+          t.is18plus ? `<span class="badge badge-18plus">18+</span>` : "",
+        ].filter(Boolean);
+        badgesEl.innerHTML = badgeParts.join("");
+        badgesEl.hidden = badgeParts.length === 0;
       }
 
       const setText = (id, val) => {
@@ -4022,6 +4137,7 @@
 
       renderEpisodesGrid();
       updateEpisodeNavState();
+      applyServerUI();
       loadWatchRecommendations();
       markContentReady();
       return true;
@@ -4058,6 +4174,16 @@
       if (animeTitleH1) animeTitleH1.textContent = titleData.name;
       if (animeDesc) animeDesc.textContent = titleData.synopsis || titleData.tagline || "";
 
+      const badgesEl = document.getElementById("watch-anime-badges");
+      if (badgesEl) {
+        const badgeParts = [
+          multiAudioDetailBadge(titleData),
+          titleData.is18plus ? `<span class="badge badge-18plus">18+</span>` : "",
+        ].filter(Boolean);
+        badgesEl.innerHTML = badgeParts.join("");
+        badgesEl.hidden = badgeParts.length === 0;
+      }
+
       const setText = (id, val) => {
         const el = document.getElementById(id);
         if (el) el.textContent = val;
@@ -4075,6 +4201,7 @@
 
       renderEpisodesGrid();
       updateEpisodeNavState();
+      applyServerUI();
       
       loadWatchRecommendations();
       markContentReady();
@@ -4253,7 +4380,7 @@
       resumeNoteShownForLoad = true;
       resumeNoteArmOnPlay = true;
       
-      const restartBtnHtml = (activeServer === "megaplay" || activeServer === ANIMEGG_SERVER_ID) ? "" :
+      const restartBtnHtml = (activeServer === "megaplay" || activeServer === ANIMEGG_SERVER_ID || isHindiServer(activeServer)) ? "" :
         `<button class="btn-zoro-primary btn-resume-restart" id="resume-restart-btn" type="button">Restart</button>`;
       resumeNote.innerHTML = `
         Resumed from ${formatTime(seconds)}
@@ -4330,7 +4457,7 @@
       }
 
       const knownAvail = dubAvailability.get(Number(epNum));
-      if (activeServer === "backup") {
+      if (activeServer === "backup" || isHindiServer(activeServer)) {
         
         currentTrack = "sub";
         applyTrackPill("sub");
@@ -4457,7 +4584,7 @@
       
       if (activeServer === "megaplay") resumeTime = 0;
       
-      if (activeServer === ANIMEGG_SERVER_ID) resumeTime = 0;
+      if (activeServer === ANIMEGG_SERVER_ID || isHindiServer(activeServer)) resumeTime = 0;
       resumeTimeForLoad = resumeTime;
       
       if (resumeTime >= 5) showResumeNote(resumeTime);
@@ -4495,6 +4622,10 @@
       let streamUrl;
       if (activeServer === "backup") {
         streamUrl = getBackupEmbedUrl(currentEp, resumeTime, startFromBeginning === true);
+      } else if (activeServer === VIDSTREAM_SERVER_ID) {
+        streamUrl = getVidstreamEmbedUrl(titleData, currentEp);
+      } else if (activeServer === VIDSTREAM3_SERVER_ID) {
+        streamUrl = getVidstream3EmbedUrl(titleData, currentEp);
       } else if (activeServer === "megaplay") {
         streamUrl = getMegaPlayEmbedUrl(currentEp, currentTrack);
       } else if (activeServer === ANIMEGG_SERVER_ID) {
@@ -4549,6 +4680,8 @@
         iframe.title = activeServer === "megaplay" ? "MegaPlay player"
           : activeServer === "backup" ? "TVplus player"
           : activeServer === ANIMEGG_SERVER_ID ? "animegg player"
+          : activeServer === VIDSTREAM_SERVER_ID ? "Vidstream (Hindi) player"
+          : activeServer === VIDSTREAM3_SERVER_ID ? "Vidstream-3 (Hindi) player"
           : "ZokoAnime player";
         
       }
@@ -4561,6 +4694,8 @@
         armMegaPlayFailureDetection(token);
       } else if (activeServer === ANIMEGG_SERVER_ID) {
         armAnimeggFailureDetection(token);
+      } else if (isHindiServer(activeServer)) {
+        armHindiFailureDetection(token);
       } else {
         armBackupFailureDetection(token);
       }
@@ -4666,6 +4801,10 @@
         label.textContent = "SUB";
         return;
       }
+      if (isHindiServer(activeServer)) {
+        label.textContent = "HINDI";
+        return;
+      }
       if (activeServer === "backup" || activeServer === "megaplay") {
         label.textContent = "—";
         return;
@@ -4683,7 +4822,7 @@
       trackSwitcher.querySelectorAll(".server-pill").forEach((pill) => {
         pill.addEventListener("click", async () => {
           
-          if (activeServer === "backup" || activeServer === ANIMEGG_SERVER_ID) return;
+          if (activeServer === "backup" || activeServer === ANIMEGG_SERVER_ID || isHindiServer(activeServer)) return;
           const requestedTrack = pill.dataset.track || "sub";
           const epAtClick = currentEp;
 
@@ -5326,6 +5465,16 @@
           if (animeggFailTimer) { clearTimeout(animeggFailTimer); animeggFailTimer = null; }
           return;
         }
+        if (isHindiServer(activeServer)) {
+          if (!loadedSrc || loadedSrc === "about:blank") return;
+          markPlayerSettled();
+          playerReady = true;
+          playerEp = currentEp;
+          if (hindiFailTimer) { clearTimeout(hindiFailTimer); hindiFailTimer = null; }
+          if (spinner) spinner.hidden = true;
+          if (coverOverlay) coverOverlay.style.display = "none";
+          return;
+        }
         if (activeServer !== "megaplay") return;
         megaPlayFrameLoaded = true;
         playerEp = currentEp;
@@ -5380,8 +5529,15 @@
       if (isLive) {
         const loaded = await loadTitleData();
         if (!loaded) return;
+
+        if (isHindiServer(activeServer) && !hasHindiPlayers(titleData)) {
+          activeServer = "zoko";
+          applyIframeSandbox("zoko");
+          applyServerUI();
+          try { sessionStorage.removeItem(SS_SERVER_KEY); } catch {}
+        }
         
-        if (!(titleData && titleData.malId)) {
+        if (activeServer === "zoko" && !(titleData && titleData.malId)) {
           const tvp = getBackupEmbedUrl(currentEp, 0, true);
           if (tvp) {
             activeServer = "backup";
@@ -5399,6 +5555,12 @@
       if (!loaded) {
         episodeDataPromise.catch(() => {});
         return;
+      }
+      if (isHindiServer(activeServer) && !hasHindiPlayers(titleData)) {
+        activeServer = "zoko";
+        applyIframeSandbox("zoko");
+        applyServerUI();
+        try { sessionStorage.removeItem(SS_SERVER_KEY); } catch {}
       }
       await loadEpisode(currentEp, episodeDataPromise);
     }
@@ -5586,6 +5748,7 @@
     if (badges) {
       badges.innerHTML = `
         ${subCount(t) ? `<span class="badge badge-sub">SUB ${subCount(t)}</span>` : ""}
+        ${multiAudioDetailBadge(t)}
         ${t.is18plus ? `<span class="badge badge-18plus">18+</span>` : ""}
         <span class="badge badge-type">${escapeHtml(liveFormatLabel(t))}</span>
         <span class="badge badge-hd">HD</span>
@@ -5933,6 +6096,7 @@
       badges.innerHTML = `
         <span class="badge badge-sub">SUB ${epCount || 1}</span>
         ${t.dubCount > 0 ? `<span class="badge badge-dub">DUB ${t.dubCount}</span>` : ""}
+        ${multiAudioDetailBadge(t)}
         <span class="badge badge-type">${t.kind}</span>
         <span class="badge badge-hd">HD</span>
         ${scoreLabel(t) ? `<span class="badge badge-score">★ ${scoreLabel(t)}</span>` : ""}
