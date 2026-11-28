@@ -5645,6 +5645,13 @@
           if (!loadedSrc || loadedSrc === "about:blank") return;
           markPlayerSettled();
           playerEp = currentEp;
+          // B1 sandbox (no allow-same-origin) makes the iframe opaque-origin, so
+          // its postMessage "ready" arrives with origin "null" and is ignored.
+          // Treat iframe load as ready (same as the Hindi branch) so the 45s
+          // backupFailTimer doesn't show a false "isn't responding" warning
+          // for a player that loaded and plays fine.
+          playerReady = true;
+          if (backupFailTimer) { clearTimeout(backupFailTimer); backupFailTimer = null; }
           return;
         }
         if (activeServer === ANIMEGG_SERVER_ID) {
