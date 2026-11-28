@@ -590,6 +590,16 @@ body.login-page {
   display: none;
 }
 
+.turnstile-note {
+  margin: 0.25rem 0;
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.turnstile-note[hidden] {
+  display: none;
+}
+
 .btn-aniflick-submit {
   margin-top: 0.2rem;
   width: 100%;

@@ -6,11 +6,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Broadcast Schedule - AniFlick (Zoro UI × Aizen Motion)</title>
   <meta name="description" content="Weekly release schedule in Japan Standard Time (JST) for anime simulcasts on AniFlick.">
-  <link rel="preload" href="css/zoro-aizen.css?v=33" as="style">
-  <link rel="preload" href="js/zoro-aizen.js?v=42" as="script">
+  <link rel="preload" href="css/zoro-aizen.css?v=34" as="style">
+  <link rel="preload" href="js/zoro-aizen.js?v=43" as="script">
   <script src="/js/boot.js?v=1"></script>
   <link rel="icon" type="image/png" href="/images/favicon.png">
-  <link rel="stylesheet" href="css/zoro-aizen.css?v=33">
+  <link rel="stylesheet" href="css/zoro-aizen.css?v=34">
 </head>
 <body>
 
@@ -86,10 +86,13 @@
         </p>
       </div>
 
-      <!-- Live Tokyo Clock -->
+      <!-- Live Local + Tokyo Clock -->
       <div class="schedule-clock-badge">
         <span class="live-dot"></span>
-        <span class="schedule-clock-label">JST (TOKYO):</span>
+        <span class="schedule-clock-label">LOCAL:</span>
+        <span id="live-local-clock">--:--:--</span>
+        <span class="schedule-clock-sep" aria-hidden="true">•</span>
+        <span class="schedule-clock-label">JST:</span>
         <span id="live-jst-clock">--:--:-- JST</span>
       </div>
     </div>
@@ -184,6 +187,6 @@
     </div>
   </footer>
 
-  <script src="js/zoro-aizen.js?v=42"></script>
+  <script src="js/zoro-aizen.js?v=43"></script>
 </body>
 </html>

@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { buildEmbedUrl, ZOKO_SOURCES } from "../src/zoko.js";
 import { ZOKO_EMBED_ORIGIN, ANIVEXA_BASE_URL } from "../src/config.js";
 import { episodeSetFromAnivexa, pickAnimeggStreamUrl } from "../src/animegg.js";
-import { isMusicMedia, canonicalFormat } from "../src/anilist.js";
+import { isMusicMedia, canonicalFormat, canonicalGenre, normalizeBrowseArgs } from "../src/anilist.js";
 import {
   pkceChallenge,
   buildRedirectUri,
@@ -405,16 +407,80 @@ test("extractTmdbFromExternalLinks and resolveTmdbInfo resolve TV TMDB ids and r
   );
 });
 
-test("withHindiAvailability reports false when unmapped and null when uncached", () => {
+test("withHindiAvailability uses the swept map: true when Vidstream-3 or Nitro has it, false otherwise", () => {
   clearHindiCaches();
   assert.deepEqual(
     withHindiAvailability({ tmdbId: null, tmdbSeason: null, tmdbEpisodeOffset: 0 }),
     { tmdbId: null, tmdbSeason: null, tmdbEpisodeOffset: 0, hindiAvailable: false }
   );
+  /* Frieren (209867): no Vidstream-3, Nitro-only — still Hindi, badge allowed. */
   assert.deepEqual(
     withHindiAvailability({ tmdbId: 209867, tmdbSeason: 1, tmdbEpisodeOffset: 0 }),
-    { tmdbId: 209867, tmdbSeason: 1, tmdbEpisodeOffset: 0, hindiAvailable: null }
+    { tmdbId: 209867, tmdbSeason: 1, tmdbEpisodeOffset: 0, hindiAvailable: true }
   );
+  /* Naruto (46260): both players. */
+  assert.equal(
+    withHindiAvailability({ tmdbId: 46260, tmdbSeason: 1, tmdbEpisodeOffset: 0 }).hindiAvailable,
+    true
+  );
+  /* Cowboy Bebop (30991): swept, neither player — badge must stay hidden. */
+  assert.equal(
+    withHindiAvailability({ tmdbId: 30991, tmdbSeason: 1, tmdbEpisodeOffset: 0 }).hindiAvailable,
+    false
+  );
+  /* Unswept title: defaults to false, never null. */
+  assert.equal(
+    withHindiAvailability({ tmdbId: 999999, tmdbSeason: 1, tmdbEpisodeOffset: 0 }).hindiAvailable,
+    false
+  );
+});
+
+/* Genre/tag routing: Isekai is an AniList TAG, not a genre — it must never
+   reach genre_in, or every genre filter returns the same wrong list. */
+test("canonicalGenre returns null for known tags and normalizeBrowseArgs routes genre=isekai to tags", () => {
+  assert.equal(canonicalGenre("isekai"), null);
+  assert.equal(canonicalGenre("Isekai"), null);
+  assert.equal(canonicalGenre("fantasy"), "Fantasy");
+  const isekaiArgs = normalizeBrowseArgs({ genre: "isekai" });
+  assert.deepEqual(isekaiArgs.genres, []);
+  assert.deepEqual(isekaiArgs.tags, ["Isekai"]);
+  const fantasyArgs = normalizeBrowseArgs({ genre: "fantasy" });
+  assert.deepEqual(fantasyArgs.genres, ["Fantasy"]);
+  assert.deepEqual(fantasyArgs.tags, []);
+  const bothArgs = normalizeBrowseArgs({ genre: "fantasy", tags: "isekai" });
+  assert.deepEqual(bothArgs.genres, ["Fantasy"]);
+  assert.deepEqual(bothArgs.tags, ["Isekai"]);
+});
+
+/* Search ranking lives in the shipped client JS; evaluate the marked block
+   directly so the test covers the exact code the page runs. */
+test("search ranking ranks exact > prefix > substring and highlights the match", () => {
+  const client = readFileSync(
+    fileURLToPath(new URL("../../ani-verse/js/zoro-aizen.js", import.meta.url)),
+    "utf8"
+  );
+  const start = client.indexOf("/* __SEARCH_RANKING_LOGIC_START__ */");
+  const end = client.indexOf("/* __SEARCH_RANKING_LOGIC_END__ */");
+  assert.ok(start >= 0 && end > start, "zoro-aizen.js must contain the SEARCH_RANKING_LOGIC block");
+  const block = client.slice(start, end);
+  /* highlightSearchMatch uses escapeHtml, which lives outside the block. */
+  const escapeHtml = (s) =>
+    String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+  const { searchMatchTier, rankSearchResults, highlightSearchMatch } = eval(
+    `${block}\n({ searchMatchTier, rankSearchResults, highlightSearchMatch });`
+  );
+  assert.equal(searchMatchTier({ name: "Naruto" }, "naruto"), 3, "exact match is tier 3");
+  assert.equal(searchMatchTier({ name: "Naruto: Shippuden" }, "naruto"), 2, "prefix match is tier 2");
+  assert.equal(searchMatchTier({ name: "Boruto: Naruto Next Generations" }, "naruto"), 1, "substring match is tier 1");
+  assert.equal(searchMatchTier({ name: "One Piece" }, "naruto"), 0, "no match is tier 0");
+  assert.equal(searchMatchTier({ romajiTitle: "Naruto" }, "naruto"), 3, "romaji title counts");
+  const ranked = rankSearchResults(
+    [{ name: "Boruto: Naruto Next Generations" }, { name: "Naruto: Shippuden" }, { name: "Naruto" }],
+    "naruto"
+  ).map((t) => t.name);
+  assert.deepEqual(ranked, ["Naruto", "Naruto: Shippuden", "Boruto: Naruto Next Generations"]);
+  assert.equal(highlightSearchMatch("Naruto: Shippuden", "naruto"), "<mark>Naruto</mark>: Shippuden");
+  assert.equal(highlightSearchMatch("One Piece", "naruto"), "One Piece");
 });
 
 test("isBlakiteUnavailableHtml detects CFG errors and visible unavailable markers without false positives on JS templates", () => {

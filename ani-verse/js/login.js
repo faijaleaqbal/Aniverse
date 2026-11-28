@@ -37,6 +37,16 @@
   var btnForgotSubmit = document.getElementById("btn-forgot-submit");
 
   var turnstileEnabled = false;
+  var turnstileSiteKey = "";
+  var turnstileApiLoaded = false;
+  var turnstileLoadFailed = false;
+  var currentMode = "signin";
+  var turnstileWidgets = { signin: null, register: null };
+  var turnstileSlots = {
+    signin: document.getElementById("signin-turnstile"),
+    register: document.getElementById("register-turnstile"),
+  };
+  var turnstileNotes = { signin: null, register: null };
 
   function bindSubmitControls(container, submitBtn, handler) {
     if (!container || !submitBtn) return;
@@ -77,8 +87,56 @@
     el.hidden = true;
   }
 
+  function ensureTurnstileNote(mode) {
+    if (turnstileNotes[mode]) return turnstileNotes[mode];
+    var slot = turnstileSlots[mode];
+    if (!slot || !slot.parentNode) return null;
+    var note = document.createElement("p");
+    note.className = "turnstile-note";
+    note.hidden = true;
+    slot.insertAdjacentElement("afterend", note);
+    turnstileNotes[mode] = note;
+    return note;
+  }
+
+  function showTurnstileLoadFailure() {
+    turnstileLoadFailed = true;
+    ["signin", "register"].forEach(function (m) {
+      var slot = turnstileSlots[m];
+      if (slot) slot.hidden = true;
+      var note = ensureTurnstileNote(m);
+      if (note) {
+        note.textContent = "Bot check could not load — please refresh";
+        note.hidden = false;
+      }
+    });
+  }
+
+  function renderTurnstileForMode(mode) {
+    if (!turnstileEnabled || !turnstileApiLoaded || turnstileLoadFailed) return;
+    if (!window.turnstile || typeof window.turnstile.render !== "function") return;
+    var slot = turnstileSlots[mode];
+    if (!slot) return;
+    slot.hidden = false;
+    var note = turnstileNotes[mode];
+    if (note) note.hidden = true;
+    if (turnstileWidgets[mode] == null) {
+      try {
+        turnstileWidgets[mode] = window.turnstile.render(slot, {
+          sitekey: turnstileSiteKey,
+          theme: "dark",
+        });
+      } catch (e) {}
+    } else if (typeof window.turnstile.reset === "function") {
+      try {
+        window.turnstile.reset(turnstileWidgets[mode]);
+      } catch (e) {}
+    }
+  }
+
   function setMode(mode) {
     var isRegister = mode === "register";
+    currentMode = isRegister ? "register" : "signin";
     if (card) card.classList.toggle("is-register", isRegister);
 
     if (signinPanel) signinPanel.setAttribute("aria-hidden", isRegister ? "true" : "false");
@@ -106,6 +164,7 @@
     if (!isRegister) showForgot(false);
     clearAlert(signinError);
     clearAlert(registerError);
+    renderTurnstileForMode(currentMode);
   }
 
   function showForgot(show) {
@@ -162,7 +221,9 @@
   function resetTurnstile() {
     if (window.turnstile && typeof window.turnstile.reset === "function") {
       try {
-        window.turnstile.reset();
+        var wid = turnstileWidgets[currentMode];
+        if (wid != null) window.turnstile.reset(wid);
+        else window.turnstile.reset();
       } catch (e) {}
     }
   }
@@ -368,6 +429,62 @@
     }
   }
 
+  function loadTurnstileScript(attempt) {
+    var done = false;
+    var timer = null;
+    var script = document.createElement("script");
+    script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+    script.async = true;
+    script.defer = true;
+
+    function cleanup() {
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+    }
+
+    function onFailure() {
+      if (done) return;
+      done = true;
+      cleanup();
+      if (script.parentNode) script.parentNode.removeChild(script);
+      if (attempt < 1) {
+        setTimeout(function () {
+          loadTurnstileScript(attempt + 1);
+        }, 2000);
+      } else {
+        showTurnstileLoadFailure();
+      }
+    }
+
+    script.onload = function () {
+      if (done) return;
+      if (window.turnstile && typeof window.turnstile.render === "function") {
+        done = true;
+        cleanup();
+        turnstileApiLoaded = true;
+        renderTurnstileForMode(currentMode);
+      } else if (typeof window.turnstile !== "undefined" && window.turnstile.ready) {
+        done = true;
+        cleanup();
+        window.turnstile.ready(function () {
+          turnstileApiLoaded = true;
+          renderTurnstileForMode(currentMode);
+        });
+      } else {
+        onFailure();
+      }
+    };
+
+    script.onerror = onFailure;
+    timer = setTimeout(function () {
+      if (!done && !turnstileApiLoaded) onFailure();
+    }, 8000);
+
+    document.head.appendChild(script);
+  }
+
   async function loadTurnstile() {
     try {
       var res = await fetch("/api/auth/turnstile-key", { credentials: "same-origin" });
@@ -376,23 +493,17 @@
       if (!data || !data.enabled || !data.siteKey) return;
 
       turnstileEnabled = true;
-      var slots = [
-        document.getElementById("signin-turnstile"),
-        document.getElementById("register-turnstile"),
-      ];
-      slots.forEach(function (slot) {
+      turnstileSiteKey = data.siteKey;
+      ["signin", "register"].forEach(function (m) {
+        var slot = turnstileSlots[m];
         if (!slot) return;
-        slot.className = "turnstile-slot cf-turnstile";
-        slot.setAttribute("data-sitekey", data.siteKey);
-        slot.setAttribute("data-theme", "dark");
-        slot.hidden = false;
+        slot.className = "turnstile-slot";
+        slot.removeAttribute("data-sitekey");
+        slot.removeAttribute("data-theme");
+        slot.hidden = m !== currentMode;
       });
 
-      var script = document.createElement("script");
-      script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js";
-      script.async = true;
-      script.defer = true;
-      document.head.appendChild(script);
+      loadTurnstileScript(0);
     } catch (e) {
       /* Keep forms functional if Turnstile key lookup fails */
     }

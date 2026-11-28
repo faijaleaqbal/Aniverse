@@ -920,8 +920,12 @@ const GENRE_CANONICAL = {
 export function canonicalGenre(value) {
   const raw = String(value || "").trim();
   if (!raw) return null;
-  const hit = GENRE_CANONICAL[raw.toLowerCase()];
+  const lower = raw.toLowerCase();
+  const hit = GENRE_CANONICAL[lower];
   if (hit) return hit;
+  /* Known AniList tags (such as "isekai") are NOT genres — return null so
+     canonicalGenre callers don't send them to genre_in. */
+  if (TAG_CANONICAL[lower]) return null;
   /* Unknown genre: pass it through title-cased so a valid AniList genre the
      map does not know still works. */
   return raw.charAt(0).toUpperCase() + raw.slice(1);
@@ -1084,10 +1088,22 @@ export function normalizeBrowseArgs(query = {}) {
       .filter(Boolean);
   };
 
-  const genres = asList(query.genre).map(canonicalGenre).filter(Boolean);
+  const genres = [];
+  const tags = asList(query.tags).map(canonicalTag).filter(Boolean);
+  for (const rawGenre of asList(query.genre)) {
+    const lower = rawGenre.toLowerCase();
+    if (GENRE_CANONICAL[lower]) {
+      genres.push(GENRE_CANONICAL[lower]);
+    } else if (TAG_CANONICAL[lower]) {
+      const mappedTag = TAG_CANONICAL[lower];
+      if (!tags.includes(mappedTag)) tags.push(mappedTag);
+    } else {
+      const g = canonicalGenre(rawGenre);
+      if (g) genres.push(g);
+    }
+  }
   const formats = asList(query.format).map(canonicalFormat).filter(Boolean);
   const statuses = asList(query.status).map(canonicalStatus).filter(Boolean);
-  const tags = asList(query.tags).map(canonicalTag).filter(Boolean);
 
   const seasonRaw = String(query.season || "").trim().toUpperCase();
   const season = ["WINTER", "SPRING", "SUMMER", "FALL"].includes(seasonRaw) ? seasonRaw : null;

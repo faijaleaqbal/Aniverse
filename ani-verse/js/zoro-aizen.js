@@ -300,6 +300,7 @@
   const LIVE_LIBRARY_MESSAGE = "Showing your library — live catalog is busy.";
   const LIVE_PAGE_SIZE = 12;
 
+  /* Pre-fetch fallback only — live genres come from GET /api/genres. */
   const ANILIST_GENRES = [
     "Action", "Adventure", "Comedy", "Drama", "Ecchi", "Fantasy", "Horror",
     "Mahou Shoujo", "Mecha", "Music", "Mystery", "Romance", "Sci-Fi",
@@ -440,11 +441,7 @@
   }
 
   function isHindiBadgeAllowed(t) {
-    if (!hasHindiPlayers(t)) return false;
-    if (t.hindiAvailable === false) return false;
-    const { season, ep } = getHindiSeasonEpisode(t, 1);
-    if (getCachedHindiAvailability(t.tmdbId, season, ep) === false) return false;
-    return true;
+    return isHindiConfirmedAvailable(t);
   }
 
   function isHindiConfirmedAvailable(t) {
@@ -659,16 +656,86 @@
     `;
   }
 
-  function searchRowHtml(t, href) {
+  /* __SEARCH_RANKING_LOGIC_START__ */
+  function searchTitleCandidates(t) {
+    if (!t || typeof t !== "object") return [];
+    const fields = [
+      t.name,
+      t.englishTitle,
+      t.romajiTitle,
+      t.nativeTitle,
+      t.realTitle,
+      t.english,
+      t.romaji,
+      t.native,
+    ];
+    const out = [];
+    for (const f of fields) {
+      if (typeof f === "string") {
+        const s = f.trim();
+        if (s) out.push(s);
+      }
+    }
+    return out;
+  }
+
+  function searchMatchTier(t, query) {
+    const q = String(query || "").trim().toLowerCase();
+    if (!q) return 0;
+    let best = 0;
+    for (const candidate of searchTitleCandidates(t)) {
+      const lower = candidate.toLowerCase();
+      if (lower === q) return 3;
+      if (lower.startsWith(q)) best = Math.max(best, 2);
+      else if (lower.includes(q)) best = Math.max(best, 1);
+    }
+    return best;
+  }
+
+  function rankSearchResults(items, query) {
+    if (!Array.isArray(items) || items.length <= 1) return Array.isArray(items) ? items.slice() : [];
+    const q = String(query || "").trim();
+    if (!q) return items.slice();
+    return items
+      .map((item, idx) => ({ item, idx, tier: searchMatchTier(item, q) }))
+      .sort((a, b) => b.tier - a.tier || a.idx - b.idx)
+      .map((entry) => entry.item);
+  }
+
+  function highlightSearchMatch(text, query) {
+    const raw = String(text == null ? "" : text);
+    const q = String(query || "").trim();
+    if (!q || !raw) return escapeHtml(raw);
+    const lowerRaw = raw.toLowerCase();
+    const lowerQ = q.toLowerCase();
+    let pos = 0;
+    let hit = lowerRaw.indexOf(lowerQ, pos);
+    if (hit < 0) return escapeHtml(raw);
+    let out = "";
+    while (hit >= 0) {
+      if (hit > pos) out += escapeHtml(raw.slice(pos, hit));
+      out += `<mark>${escapeHtml(raw.slice(hit, hit + lowerQ.length))}</mark>`;
+      pos = hit + lowerQ.length;
+      hit = lowerRaw.indexOf(lowerQ, pos);
+    }
+    if (pos < raw.length) out += escapeHtml(raw.slice(pos));
+    return out;
+  }
+  /* __SEARCH_RANKING_LOGIC_END__ */
+
+  function searchRowHtml(t, href, query = "") {
     const isLive = !!(t && t.live);
-    const meta = isLive
-      ? `<span>${escapeHtml(liveFormatLabel(t))}</span> • <span>${escapeHtml(String(t.year || "—"))}</span> • <span class="text-zoro-sub">${t.episodes != null ? `EP ${t.episodes}` : "ONGOING"}</span>${multiAudioInlineBadge(t)}`
-      : `<span>${t.year || 2025}</span> • <span>${t.kind || "Series"}</span>${subCount(t) ? ` • <span class="text-zoro-sub">SUB ${subCount(t)}</span>` : ""}${multiAudioInlineBadge(t)}`;
+    const yearLabel = t && t.year ? String(t.year) : "—";
+    const formatLabel = isLive ? liveFormatLabel(t) : (t && t.kind) || "Series";
+    const epLabel = isLive
+      ? (t && t.episodes != null ? `EP ${t.episodes}` : "ONGOING")
+      : (subCount(t) ? `EP ${subCount(t)}` : "ONGOING");
+    const meta = `<span>${escapeHtml(yearLabel)}</span> • <span>${escapeHtml(formatLabel)}</span> • <span class="text-zoro-sub">${escapeHtml(epLabel)}</span>${multiAudioInlineBadge(t)}`;
     return `
-      <a class="search-result-item" href="${href}">
+      <a class="search-result-item" href="${href}" role="option" aria-selected="false">
         <img class="search-result-thumb" src="${escapeHtml(coverOf(t))}" alt="${escapeHtml(t.name)}" loading="lazy" ${livePosterAttrs()}>
         <div class="search-result-info">
-          <div class="search-result-title">${escapeHtml(t.name)}${t && t.is18plus ? ' <span class="badge-mini-18">18+</span>' : ""}</div>
+          <div class="search-result-title">${highlightSearchMatch(t.name, query)}${t && t.is18plus ? ' <span class="badge-mini-18">18+</span>' : ""}</div>
           <div class="search-result-meta">${meta}</div>
         </div>
       </a>`;
@@ -894,7 +961,7 @@
             <a class="mobile-drawer-link" href="browse.html?view=ona">ONAs</a>
             <a class="mobile-drawer-link" href="browse.html?view=special">Specials</a>
             <a class="mobile-drawer-link" href="browse.html?genre=action">Action Anime</a>
-            <a class="mobile-drawer-link" href="browse.html?genre=fantasy">Fantasy & Isekai</a>
+            <a class="mobile-drawer-link" href="browse.html?genre=fantasy&tags=isekai">Fantasy & Isekai</a>
             <a class="mobile-drawer-link" href="browse.html?view=top-airing&sort=newest">Top Airing</a>
             <a class="mobile-drawer-link" href="browse.html?view=top-upcoming&sort=popular">Top Upcoming</a>
             <a class="mobile-drawer-link" href="az-list.html">A-Z List</a>
@@ -917,7 +984,9 @@
 
       const drawerSearchBtn = backdrop.querySelector("#drawer-search-trigger");
       if (drawerSearchBtn) {
-        drawerSearchBtn.addEventListener("click", () => {
+        drawerSearchBtn.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
           setDrawer(false);
           const header = document.querySelector(".zoro-header");
           const input = document.getElementById("zoro-search-input");
@@ -1371,14 +1440,47 @@
 
     let debounceTimer = null;
     let searchToken = 0;
+    let activeIndex = -1;
+
+    dropdown.setAttribute("role", "listbox");
+
+    function getResultItems() {
+      return Array.from(dropdown.querySelectorAll(".search-result-item"));
+    }
+
+    function setActiveItem(nextIdx) {
+      const items = getResultItems();
+      items.forEach((el) => {
+        el.classList.remove("is-active");
+        el.setAttribute("aria-selected", "false");
+      });
+      if (!items.length || nextIdx < 0) {
+        activeIndex = -1;
+        return;
+      }
+      const wrapped = ((nextIdx % items.length) + items.length) % items.length;
+      activeIndex = wrapped;
+      const activeEl = items[activeIndex];
+      activeEl.classList.add("is-active");
+      activeEl.setAttribute("aria-selected", "true");
+      if (typeof activeEl.scrollIntoView === "function") {
+        activeEl.scrollIntoView({ block: "nearest" });
+      }
+    }
+
+    function closeDropdown() {
+      dropdown.classList.remove("is-open");
+      dropdown.innerHTML = "";
+      activeIndex = -1;
+    }
 
     input.addEventListener("input", () => {
       const q = input.value.trim();
       clearTimeout(debounceTimer);
+      activeIndex = -1;
 
       if (!q) {
-        dropdown.classList.remove("is-open");
-        dropdown.innerHTML = "";
+        closeDropdown();
         return;
       }
 
@@ -1394,39 +1496,45 @@
       const token = ++searchToken;
       debounceTimer = setTimeout(async () => {
         const res = await api(`/api/search?q=${encodeURIComponent(q)}&page=1`);
-        
+
         if (token !== searchToken) return;
 
-        const local = (res.ok && res.data && Array.isArray(res.data.local)) ? res.data.local : [];
-        const more = (res.ok && res.data && Array.isArray(res.data.results)) ? res.data.results : [];
+        const rawLocal = (res.ok && res.data && Array.isArray(res.data.local)) ? res.data.local : [];
+        const rawMore = (res.ok && res.data && Array.isArray(res.data.results)) ? res.data.results : [];
 
         if (!res.ok) {
-          
           const localRes = await api(`/api/titles?q=${encodeURIComponent(q)}&limit=6`);
           if (token !== searchToken) return;
-          const localTitles = (localRes.ok && localRes.data && Array.isArray(localRes.data.titles))
+          const rawFallback = (localRes.ok && localRes.data && Array.isArray(localRes.data.titles))
             ? localRes.data.titles : [];
+          const localTitles = rankSearchResults(rawFallback, q);
           dropdown.innerHTML = localTitles.length
             ? `<div class="search-dropdown-busy">${escapeHtml(LIVE_BUSY_MESSAGE)}</div>` +
-              localTitles.map((t) => searchRowHtml(t, detailHref(t.slug))).join("")
-            : `<div class="search-dropdown-msg">${escapeHtml(LIVE_BUSY_MESSAGE)}</div>`;
+              localTitles.map((t) => searchRowHtml(t, detailHref(t.slug), q)).join("")
+            : `<div class="search-dropdown-msg search-dropdown-busy">${escapeHtml(LIVE_BUSY_MESSAGE)}</div>`;
+          activeIndex = -1;
           dropdown.classList.add("is-open");
           return;
         }
 
+        const local = rankSearchResults(rawLocal, q);
+        const more = rankSearchResults(rawMore, q);
+
         if (!local.length && !more.length) {
-          dropdown.innerHTML = `<div class="search-dropdown-msg">No anime found for "${escapeHtml(q)}"</div>`;
+          dropdown.innerHTML = `<div class="search-dropdown-msg search-dropdown-empty">No anime found for "${escapeHtml(q)}"</div>`;
+          activeIndex = -1;
           dropdown.classList.add("is-open");
           return;
         }
 
         dropdown.innerHTML =
           (local.length
-            ? `<div class="search-group-label">On AniFlick</div>` + local.map((t) => searchRowHtml(t, detailHref(t.slug))).join("")
+            ? `<div class="search-group-label">On AniFlick</div>` + local.map((t) => searchRowHtml(t, detailHref(t.slug), q)).join("")
             : "") +
           (more.length
-            ? `<div class="search-group-label">More results</div>` + more.map((t) => searchRowHtml(t, liveDetailHref(t))).join("")
+            ? `<div class="search-group-label">More results</div>` + more.map((t) => searchRowHtml(t, liveDetailHref(t), q)).join("")
             : "");
+        activeIndex = -1;
         dropdown.classList.add("is-open");
       }, 300);
     });
@@ -1435,6 +1543,7 @@
     document.addEventListener("click", (e) => {
       if (!input.contains(e.target) && !dropdown.contains(e.target)) {
         dropdown.classList.remove("is-open");
+        activeIndex = -1;
         if (
           searchWrapper &&
           !searchWrapper.contains(e.target) &&
@@ -1449,6 +1558,7 @@
       const q = input.value.trim();
       if (!q) return;
       dropdown.classList.remove("is-open");
+      activeIndex = -1;
       const isBrowsePage = window.location.pathname.endsWith("browse.html") || window.location.pathname.endsWith("/browse");
       if (isBrowsePage) {
         const url = new URL(window.location);
@@ -1463,12 +1573,28 @@
     }
 
     input.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") {
+      const isOpen = dropdown.classList.contains("is-open");
+      const items = isOpen ? getResultItems() : [];
+      if (e.key === "ArrowDown") {
+        if (!items.length) return;
         e.preventDefault();
+        setActiveItem(activeIndex < 0 ? 0 : activeIndex + 1);
+      } else if (e.key === "ArrowUp") {
+        if (!items.length) return;
+        e.preventDefault();
+        setActiveItem(activeIndex < 0 ? items.length - 1 : activeIndex - 1);
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        if (isOpen && activeIndex >= 0 && items[activeIndex]) {
+          const href = items[activeIndex].getAttribute("href");
+          if (href) {
+            window.location.href = href;
+            return;
+          }
+        }
         submitSearch();
       } else if (e.key === "Escape") {
-        dropdown.classList.remove("is-open");
-        dropdown.innerHTML = "";
+        closeDropdown();
         input.value = "";
         input.blur();
         closeMobileSearch();
@@ -1545,9 +1671,17 @@
     });
     sliderContainer.addEventListener("mouseleave", startAutoRotate);
 
-    const res = await fetchTitles(18);
-    if (!res.ok || !res.data || !res.data.titles || res.data.titles.length === 0) {
-      
+    let titles = [];
+    const liveRes = await api("/api/browse?sort=trending&perPage=8&page=1");
+    if (liveRes.ok && liveRes.data && Array.isArray(liveRes.data.results) && liveRes.data.results.length > 0) {
+      titles = liveRes.data.results.slice(0, 8);
+    } else {
+      const fallbackRes = await fetchTitles(18);
+      if (fallbackRes.ok && fallbackRes.data && Array.isArray(fallbackRes.data.titles) && fallbackRes.data.titles.length > 0) {
+        titles = fallbackRes.data.titles;
+      }
+    }
+    if (!titles.length) {
       rendered = true;
       applyBackdrop(sliderContainer.querySelector(".spotlight-slide"));
       startAutoRotate();
@@ -1555,35 +1689,41 @@
       return;
     }
 
-    const titles = res.data.titles;
-
     sliderContainer.innerHTML = titles
-      .map((t, idx) => `
+      .map((t, idx) => {
+        const slug = t.slug || t.catalogSlug || null;
+        const dHref = slug ? detailHref(slug) : liveDetailHref(t);
+        const wHref = slug ? watchHref(slug, 1) : liveWatchHref(t, 1);
+        const typeLabel = slug && t.kind ? t.kind : liveFormatLabel(t);
+        const metaBits = [t.year, t.runtimeMin ? `${t.runtimeMin}m` : null].filter(Boolean).join(" • ");
+        return `
         <div class="spotlight-slide ${idx === 0 ? "is-active" : ""}" data-index="${idx}" data-poster="${bannerOf(t)}">
           <div class="spotlight-backdrop"></div>
           <div class="spotlight-overlay"></div>
           <div class="spotlight-content">
             <span class="spotlight-rank">🔥 #${idx + 1} Spotlight</span>
-            <h1 class="spotlight-title"><a class="spotlight-title-link" href="${detailHref(t.slug)}">${escapeHtml(t.name)}</a></h1>
+            <h1 class="spotlight-title"><a class="spotlight-title-link" href="${dHref}">${escapeHtml(t.name)}</a></h1>
             <div class="spotlight-badges">
               ${subCount(t) ? `<span class="badge badge-sub">SUB ${subCount(t)}</span>` : ""}
               ${t.dubCount > 0 ? `<span class="badge badge-dub">DUB ${t.dubCount}</span>` : ""}
               ${multiAudioDetailBadge(t)}
-              <span class="badge badge-type">${escapeHtml(t.kind)}</span>
+              ${eighteenBadge(t)}
+              <span class="badge badge-type">${escapeHtml(typeLabel)}</span>
               <span class="badge badge-hd">HD</span>
-              <span class="spotlight-runtime-meta">${t.year} • ${t.runtimeMin}m</span>
+              ${metaBits ? `<span class="spotlight-runtime-meta">${escapeHtml(metaBits)}</span>` : ""}
             </div>
-            <p class="spotlight-desc">${escapeHtml(truncateWords(t.synopsis || t.tagline, 200))}</p>
+            <p class="spotlight-desc">${escapeHtml(truncateWords(t.synopsis || t.tagline || "", 200))}</p>
             <div class="spotlight-actions">
-              <a class="btn-watch-now" href="${watchHref(t.slug, 1)}">
+              <a class="btn-watch-now" href="${wHref}">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>
                 Watch Now
               </a>
-              <a class="btn-detail" href="${detailHref(t.slug)}">+ Detail</a>
+              <a class="btn-detail" href="${dHref}">+ Detail</a>
             </div>
           </div>
         </div>
-      `)
+      `;
+      })
       .join("");
 
     currentSlide = 0;
@@ -2231,10 +2371,20 @@
     const viewFormat = VIEW_FORMAT[view] || "";
     const viewIsMovie = view === "movie" || kind === "film";
 
+    const rawGenreParam = canonicalGenreName(params.get("genre") || "");
+    const initialTags = parseTagList(params.get("tags"));
+    let initialGenre = rawGenreParam;
+    if (initialGenre.toLowerCase() === "isekai") {
+      if (!initialTags.some((t) => t.toLowerCase() === "isekai")) initialTags.push("Isekai");
+      initialGenre = "";
+    }
+    const explicitSortParam = params.get("sort");
+    let sortExplicitlyChosen = Boolean(explicitSortParam && SORT_LABELS[explicitSortParam]);
+
     const state = {
       q: (params.get("q") || "").trim(),
-      sort: params.get("sort") || (viewIsTopAiring || viewIsTopUpcoming ? "popular" : "trending"),
-      genre: canonicalGenreName(params.get("genre") || ""),
+      sort: explicitSortParam || ((viewIsTopAiring || viewIsTopUpcoming || viewIsSubbed || initialGenre) ? "popular" : "trending"),
+      genre: initialGenre,
       format: params.get("format") || viewFormat || (kind === "film" ? "MOVIE" : ""),
       status: params.get("status") || (viewIsTopAiring ? "RELEASING" : viewIsTopUpcoming ? "NOT_YET_RELEASED" : ""),
       year: params.get("year") || "",
@@ -2242,7 +2392,7 @@
       minScore: params.get("minScore") || "",
       maxScore: params.get("maxScore") || "",
       season: (params.get("season") || "").toUpperCase(),
-      tags: parseTagList(params.get("tags")),
+      tags: initialTags,
       startAfter: params.get("startAfter") || "",
       startBefore: params.get("startBefore") || "",
       page: (() => {
@@ -2252,6 +2402,10 @@
     };
     if (!SORT_LABELS[state.sort]) state.sort = "trending";
     if (!["WINTER", "SPRING", "SUMMER", "FALL"].includes(state.season)) state.season = "";
+
+    function defaultSortForState() {
+      return (state.genre || viewIsTopAiring || viewIsTopUpcoming || viewIsSubbed) ? "popular" : "trending";
+    }
 
     function isSearch() { return !!state.q; }
     if (searchInput && state.q) searchInput.value = state.q;
@@ -2281,7 +2435,7 @@
     renderChips();
     api("/api/genres").then((res) => {
       const list = res && res.ok && res.data && Array.isArray(res.data.allGenres) ? res.data.allGenres : null;
-      if (!list || !list.length || state.genre) return;
+      if (!list || !list.length) return;
       chipGenres = list;
       renderChips();
     }).catch(() => {});
@@ -2366,6 +2520,8 @@
 
     function renderYearSection() {
       if (!yearDecadesWrap) return;
+      const currentDecade = browseDecadeOf(new Date().getFullYear());
+      const activeDecade = state.year ? browseDecadeOf(Number(state.year)) : null;
       const decades = new Map();
       for (const y of browseYearRange()) {
         const decade = browseDecadeOf(y);
@@ -2375,6 +2531,7 @@
       yearDecadesWrap.innerHTML = Array.from(decades.keys())
         .sort((a, b) => b - a)
         .map((decade) => {
+          const isOpen = decade === currentDecade || (activeDecade != null && decade === activeDecade);
           const chips = decades
             .get(decade)
             .map(
@@ -2382,7 +2539,14 @@
                 `<button class="browse-year-chip${String(state.year) === String(y) ? " active" : ""}" type="button" data-year="${y}">${y}</button>`
             )
             .join("");
-          return `<div class="browse-year-decade"><span class="browse-year-decade-label">${decade}s</span>${chips}</div>`;
+          return `
+            <div class="browse-year-decade${isOpen ? " is-open" : ""}" data-decade="${decade}">
+              <button class="browse-year-decade-toggle" type="button" aria-expanded="${isOpen ? "true" : "false"}" aria-controls="browse-decade-chips-${decade}">
+                <span class="browse-year-decade-label">${decade}s</span>
+                <span class="browse-year-decade-chevron" aria-hidden="true">▾</span>
+              </button>
+              <div class="browse-year-decade-chips" id="browse-decade-chips-${decade}"${isOpen ? "" : " hidden"}>${chips}</div>
+            </div>`;
         })
         .join("");
       const startEl = document.querySelector(".js-year-range-start");
@@ -2391,19 +2555,33 @@
       if (endEl) endEl.textContent = String(browseYearRange()[0]);
     }
 
+    function setDecadeExpanded(decadeEl, open) {
+      if (!decadeEl) return;
+      decadeEl.classList.toggle("is-open", open);
+      const btn = decadeEl.querySelector(".browse-year-decade-toggle");
+      const chipsWrap = decadeEl.querySelector(".browse-year-decade-chips");
+      if (btn) btn.setAttribute("aria-expanded", open ? "true" : "false");
+      if (chipsWrap) chipsWrap.hidden = !open;
+    }
+
     function syncYearUI() {
       if (yearSelect) yearSelect.value = state.year || "";
       if (yearDecadesWrap) {
+        const activeDecade = state.year ? String(browseDecadeOf(Number(state.year))) : "";
         yearDecadesWrap.querySelectorAll(".browse-year-chip").forEach((chip) => {
           chip.classList.toggle("active", String(chip.dataset.year) === String(state.year || ""));
         });
+        if (activeDecade) {
+          const decEl = yearDecadesWrap.querySelector(`.browse-year-decade[data-decade="${activeDecade}"]`);
+          if (decEl) setDecadeExpanded(decEl, true);
+        }
       }
     }
 
     function updateUrl() {
       const p = new URLSearchParams();
       if (state.q) p.set("q", state.q);
-      if (state.sort !== "trending") p.set("sort", state.sort);
+      if (state.sort !== defaultSortForState() || sortExplicitlyChosen) p.set("sort", state.sort);
       if (state.genre) p.set("genre", state.genre);
       if (state.format) p.set("format", state.format);
       if (state.status) p.set("status", state.status);
@@ -2472,10 +2650,14 @@
       headingEl.innerHTML = `<span>${title}${countPart}</span>`;
 
       if (subheadingEl) {
-        const bits = [];
-        if (chips.length > 1) bits.push(chips.slice(1).join(" · "));
-        bits.push("The full AniList catalog — filters update live.");
-        subheadingEl.textContent = bits.join(" · ");
+        if (viewIsSubbed) {
+          subheadingEl.textContent = "Lists everything in the catalog with subtitles — all titles stream with subs.";
+        } else {
+          const bits = [];
+          if (chips.length > 1) bits.push(chips.slice(1).join(" · "));
+          bits.push("The full AniList catalog — filters update live.");
+          subheadingEl.textContent = bits.join(" · ");
+        }
       }
     }
 
@@ -2483,7 +2665,7 @@
       const note = document.getElementById("browse-view-note");
       if (!note) return;
       let text = "";
-      if (viewIsSubbed) text = "Every title streams with subtitles.";
+      if (viewIsSubbed) text = "Lists everything in the catalog with subtitles.";
       else if (viewIsDubbed) text = "Dub status is verified for catalog titles only.";
       if (!text) {
         note.hidden = true;
@@ -2691,6 +2873,7 @@
 
     /* ---- filters ---- */
     function setSort(value) {
+      sortExplicitlyChosen = true;
       state.sort = SORT_LABELS[value] ? value : "trending";
       state.page = 1;
       updateUrl();
@@ -2703,7 +2886,11 @@
         if (!chip) return;
         chipsWrap.querySelectorAll(".genre-chip-zoro").forEach((c) => c.classList.remove("active"));
         chip.classList.add("active");
-        state.genre = chip.dataset.genre || "";
+        state.genre = decodeURIComponent(chip.dataset.genre || "");
+        if (!sortExplicitlyChosen) {
+          state.sort = defaultSortForState();
+          if (sortSelect) sortSelect.value = state.sort;
+        }
         state.page = 1;
         updateUrl();
         load();
@@ -2744,6 +2931,12 @@
     
     if (yearDecadesWrap) {
       yearDecadesWrap.addEventListener("click", (e) => {
+        const toggle = e.target.closest(".browse-year-decade-toggle");
+        if (toggle) {
+          const decadeEl = toggle.closest(".browse-year-decade");
+          if (decadeEl) setDecadeExpanded(decadeEl, !decadeEl.classList.contains("is-open"));
+          return;
+        }
         const chip = e.target.closest(".browse-year-chip");
         if (!chip) return;
         state.year = chip.dataset.year || "";
@@ -3243,65 +3436,100 @@
     const grid = document.querySelector(".genres-shelf-grid");
     if (!grid) return;
 
-    const res = await api("/api/genres");
-    if (!res.ok || !res.data) return;
-    const counts = res.data.counts || {};
-    
-    const all = Array.isArray(res.data.allGenres) && res.data.allGenres.length
-      ? res.data.allGenres
-      : Object.keys(counts);
-    
-    const countKeyFor = (name) => {
-      const k = String(name).toLowerCase();
-      if (counts[k] != null) return k;
-      const alias = Object.keys(GENRE_ALIASES).find((a) => GENRE_ALIASES[a].toLowerCase() === k);
-      return alias && counts[alias] != null ? alias : null;
-    };
+    function renderSkeleton() {
+      grid.innerHTML = Array.from({ length: 6 }, () => `
+        <div class="genre-shelf-card genre-shelf-skeleton" aria-hidden="true">
+          <div class="skeleton-line skeleton-shimmer skeleton-w-60-tall"></div>
+          <div class="skeleton-line skeleton-shimmer skeleton-w-90"></div>
+          <div class="skeleton-line skeleton-shimmer skeleton-w-75"></div>
+        </div>`).join("");
+    }
 
-    const keys = all.slice().sort((a, b) => {
-      const ca = counts[countKeyFor(a)] || 0;
-      const cb = counts[countKeyFor(b)] || 0;
-      return cb - ca || a.localeCompare(b);
-    });
+    function renderError() {
+      grid.innerHTML = `
+        <div class="zoro-empty-state" style="grid-column: 1 / -1;">
+          <h3 class="zoro-empty-state-title">Genres temporarily unavailable</h3>
+          <p class="zoro-empty-state-msg">We couldn't load the live genre list right now. Please try again in a moment.</p>
+          <button type="button" class="btn-zoro-primary" id="genres-retry-btn">Try Again</button>
+        </div>`;
+      const retryBtn = document.getElementById("genres-retry-btn");
+      if (retryBtn) retryBtn.addEventListener("click", () => loadGenres());
+      markContentReady();
+    }
 
-    grid.innerHTML = keys
-      .map((key) => {
-        const meta = GENRE_META[key.toLowerCase()] || {
-          icon: "🎬",
-          kanji: "棚",
-          label: genreLabel(key),
-          desc: "Explore this curated shelf of titles.",
-        };
-        const countKey = countKeyFor(key);
-        const cnt = countKey ? counts[countKey] : null;
-        const countHtml = cnt != null
-          ? `<span class="genre-card-count">${cnt} ${cnt === 1 ? "Title" : "Titles"}</span>`
-          : `<span class="genre-card-count genre-card-count-none">—</span>`;
-        return `
-          <a class="genre-shelf-card" href="browse.html?genre=${encodeURIComponent(key)}" data-genre="${escapeHtml(key)}">
-            <div class="genre-card-watermark">${meta.kanji}</div>
-            <div class="genre-card-top">
-              <div class="genre-card-icon-pill">${meta.icon}</div>
-              ${countHtml}
-            </div>
-            <div>
-              <div class="genre-card-title">
-                ${meta.label} <span class="genre-card-kanji-sub">/ ${meta.kanji}</span>
+    async function loadGenres() {
+      if (!grid.querySelector(".genre-shelf-skeleton")) renderSkeleton();
+      const res = await api("/api/genres");
+      if (!res.ok || !res.data) {
+        renderError();
+        return;
+      }
+      const counts = res.data.counts || {};
+      const all = Array.isArray(res.data.allGenres) && res.data.allGenres.length
+        ? res.data.allGenres
+        : Object.keys(counts);
+
+      const countKeyFor = (name) => {
+        const k = String(name).toLowerCase();
+        if (counts[k] != null) return k;
+        const alias = Object.keys(GENRE_ALIASES).find((a) => GENRE_ALIASES[a].toLowerCase() === k);
+        return alias && counts[alias] != null ? alias : null;
+      };
+
+      const keys = all.slice().sort((a, b) => {
+        const ca = counts[countKeyFor(a)] || 0;
+        const cb = counts[countKeyFor(b)] || 0;
+        return cb - ca || a.localeCompare(b);
+      });
+
+      if (!keys.length) {
+        renderError();
+        return;
+      }
+
+      grid.innerHTML = keys
+        .map((rawKey) => {
+          const key = canonicalGenreName(rawKey);
+          const lower = key.toLowerCase();
+          const meta = GENRE_META[lower] || (lower === "slice of life" ? GENRE_META.life : null) || {
+            icon: "🎬",
+            kanji: "棚",
+            label: genreLabel(key),
+            desc: "Explore this curated shelf of titles.",
+          };
+          const countKey = countKeyFor(key);
+          const cnt = countKey ? counts[countKey] : null;
+          const countHtml = cnt != null
+            ? `<span class="genre-card-count">${cnt} ${cnt === 1 ? "Title" : "Titles"}</span>`
+            : `<span class="genre-card-count genre-card-count-none">—</span>`;
+          return `
+            <a class="genre-shelf-card" href="browse.html?genre=${encodeURIComponent(key)}" data-genre="${escapeHtml(key)}">
+              <div class="genre-card-watermark">${meta.kanji}</div>
+              <div class="genre-card-top">
+                <div class="genre-card-icon-pill">${meta.icon}</div>
+                ${countHtml}
               </div>
-              <p class="genre-card-desc">${meta.desc}</p>
-            </div>
-            <div class="genre-card-footer">
-              <span>Explore ${meta.label} Shelf</span>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-            </div>
-          </a>
-        `;
-      })
-      .join("");
+              <div>
+                <div class="genre-card-title">
+                  ${escapeHtml(meta.label)} <span class="genre-card-kanji-sub">/ ${meta.kanji}</span>
+                </div>
+                <p class="genre-card-desc">${escapeHtml(meta.desc)}</p>
+              </div>
+              <div class="genre-card-footer">
+                <span>Explore ${escapeHtml(meta.label)} Shelf</span>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+              </div>
+            </a>
+          `;
+        })
+        .join("");
 
-    const heroAccent = document.querySelector(".genres-hero-header h1 .accent");
-    if (heroAccent) heroAccent.textContent = `${keys.length} Genre Shelves`;
-    markContentReady();
+      const heroAccent = document.querySelector(".genres-hero-header h1 .accent");
+      if (heroAccent) heroAccent.textContent = `${keys.length} Genre Shelves`;
+      markContentReady();
+    }
+
+    await loadGenres();
   }
 
   let activeEpisode = 1;
@@ -6443,93 +6671,177 @@
     markContentReady();
   }
 
-  const SCHEDULE_DATA = {
-    monday: [
-      { time: "20:30", slug: "moonlit-ramen" },
-      { time: "22:00", slug: "cobalt-season" },
-      { time: "23:45", slug: "deep-frame" },
-    ],
-    tuesday: [
-      { time: "21:00", slug: "sakura-static" },
-      { time: "23:15", slug: "ghost-line-9" },
-    ],
-    wednesday: [
-      { time: "20:45", slug: "kagerou-protocol" },
-      { time: "22:00", slug: "the-last-train-to-aomori" },
-      { time: "23:30", slug: "iron-bloom" },
-    ],
-    thursday: [
-      { time: "21:00", slug: "sea-of-stars" },
-      { time: "22:30", slug: "zero-gravity-club" },
-    ],
-    friday: [
-      { time: "20:00", slug: "ronin-of-the-neon-ward" },
-      { time: "22:45", slug: "salt-and-cinder" },
-    ],
-    saturday: [
-      { time: "19:30", slug: "the-fox-who-counted-rain" },
-      { time: "21:15", slug: "second-wind" },
-      { time: "23:00", slug: "corner-store-hours" },
-    ],
-    sunday: [
-      { time: "18:30", slug: "paper-cranes-at-dawn" },
-      { time: "20:30", slug: "encore-one-more" },
-      { time: "22:15", slug: "the-quiet-ward" },
-    ],
-  };
+  function formatTimePartsForZone(dateObj, timeZone) {
+    try {
+      const timeStr = dateObj.toLocaleTimeString([], {
+        ...(timeZone ? { timeZone } : {}),
+        hour12: false,
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      let tzName = "";
+      try {
+        const parts = new Intl.DateTimeFormat(undefined, {
+          ...(timeZone ? { timeZone } : {}),
+          timeZoneName: "short",
+        }).formatToParts(dateObj);
+        const found = parts.find((p) => p.type === "timeZoneName");
+        tzName = found ? found.value : "";
+      } catch {}
+      return { timeStr, tzName };
+    } catch {
+      return { timeStr: "--:--", tzName: "" };
+    }
+  }
 
   async function initSchedulePage() {
     const timelineEl = document.getElementById("schedule-timeline-container");
     if (!timelineEl) return;
 
-    const titleMap = {};
-    try {
-      const tRes = await fetchTitles(18);
-      if (tRes.ok && tRes.data && Array.isArray(tRes.data.titles)) {
-        for (const t of tRes.data.titles) titleMap[t.slug] = t;
-      }
-    } catch {}
-
-    // Live Tokyo Clock
-    const clockEl = document.getElementById("live-jst-clock");
-    if (clockEl) {
-      function updateJstClock() {
-        const now = new Date();
-        const jstString = now.toLocaleTimeString("en-US", {
-          timeZone: "Asia/Tokyo",
-          hour12: false,
-          hour: "2-digit",
-          minute: "2-digit",
-          second: "2-digit",
-        });
-        clockEl.textContent = `${jstString} JST`;
-      }
-      updateJstClock();
-      setInterval(updateJstClock, 1000);
-    }
-
     const dayNames = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
     const nowLocal = new Date();
     const currentDayName = dayNames[nowLocal.getDay()];
+
+    // Live Local + Tokyo Clocks
+    const localClockEl = document.getElementById("live-local-clock");
+    const jstClockEl = document.getElementById("live-jst-clock");
+    if (localClockEl || jstClockEl) {
+      function updateClocks() {
+        const now = new Date();
+        if (localClockEl) {
+          const localStr = now.toLocaleTimeString([], {
+            hour12: false,
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+          });
+          let tzAbbr = "";
+          try {
+            const parts = new Intl.DateTimeFormat(undefined, { timeZoneName: "short" }).formatToParts(now);
+            const found = parts.find((p) => p.type === "timeZoneName");
+            tzAbbr = found ? ` ${found.value}` : "";
+          } catch {}
+          localClockEl.textContent = `${localStr}${tzAbbr}`;
+        }
+        if (jstClockEl) {
+          const jstString = now.toLocaleTimeString("en-US", {
+            timeZone: "Asia/Tokyo",
+            hour12: false,
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+          });
+          jstClockEl.textContent = `${jstString} JST`;
+        }
+      }
+      updateClocks();
+      setInterval(updateClocks, 1000);
+    }
+
+    // Loading state while fetching live airing schedule
+    timelineEl.innerHTML = Array.from({ length: 4 }, () => `
+      <div class="schedule-item-card schedule-item-skeleton" aria-hidden="true">
+        <div class="schedule-item-left">
+          <div class="skeleton-line skeleton-shimmer" style="width:82px;height:36px;border-radius:8px;"></div>
+          <div class="skeleton-line skeleton-shimmer" style="width:55px;height:75px;border-radius:8px;"></div>
+          <div style="flex:1;min-width:140px;">
+            <div class="skeleton-line skeleton-shimmer skeleton-w-60"></div>
+            <div class="skeleton-line skeleton-shimmer skeleton-w-40" style="margin-top:0.4rem;"></div>
+          </div>
+        </div>
+      </div>`).join("");
+
+    // Day tabs setup (dates in browser local timezone)
+    const dayTabs = document.querySelectorAll(".schedule-day-tab");
+    const weekMonday = new Date(nowLocal);
+    weekMonday.setDate(nowLocal.getDate() - ((nowLocal.getDay() + 6) % 7));
+    dayTabs.forEach((tab, i) => {
+      const d = new Date(weekMonday);
+      d.setDate(weekMonday.getDate() + i);
+      const dateEl = tab.querySelector(".tab-day-date");
+      if (dateEl) dateEl.textContent = String(d.getDate());
+    });
+
+    const todayTab = document.querySelector(`.schedule-day-tab[data-day="${currentDayName}"]`) || dayTabs[0];
+    if (todayTab) {
+      dayTabs.forEach((t) => t.classList.remove("active"));
+      todayTab.classList.add("active");
+    }
 
     function activeDayKey() {
       const active = document.querySelector(".schedule-day-tab.active");
       return (active && active.dataset.day) || currentDayName;
     }
+
+    // Fetch live airing schedule from /api/airing
+    const scheduleByDay = {
+      sunday: [], monday: [], tuesday: [], wednesday: [], thursday: [], friday: [], saturday: [],
+    };
+    const slotByKey = {};
+    let loadOk = false;
+    const seenSlots = new Set();
+
+    try {
+      const MAX_AIRING_PAGES = 10;
+      for (let page = 1; page <= MAX_AIRING_PAGES; page++) {
+        const res = await api(`/api/airing?page=${page}`);
+        if (!res.ok || !res.data || !Array.isArray(res.data.results)) {
+          if (page === 1) loadOk = false;
+          break;
+        }
+        loadOk = true;
+        for (const row of res.data.results) {
+          if (!row || !row.media || !row.airingAt) continue;
+          const id = row.media.anilistId || row.media.catalogSlug || row.media.name;
+          const dedupKey = `${id}:${row.episode || 0}:${row.airingAt}`;
+          if (seenSlots.has(dedupKey)) continue;
+          seenSlots.add(dedupKey);
+
+          const dt = new Date(Number(row.airingAt) * 1000);
+          if (Number.isNaN(dt.getTime())) continue;
+          const dayKey = dayNames[dt.getDay()];
+          const localParts = formatTimePartsForZone(dt, null);
+          const jstTime = dt.toLocaleTimeString("en-US", {
+            timeZone: "Asia/Tokyo",
+            hour12: false,
+            hour: "2-digit",
+            minute: "2-digit",
+          });
+          const slot = {
+            airingAt: Number(row.airingAt),
+            episode: row.episode || 1,
+            localTime: localParts.timeStr,
+            localTz: localParts.tzName,
+            jstTime,
+            real: row.media,
+            dayKey,
+          };
+          scheduleByDay[dayKey].push(slot);
+          const remKey = row.media.catalogSlug || (row.media.anilistId != null ? `live-${row.media.anilistId}` : "");
+          if (remKey) {
+            slotByKey[remKey] = slot;
+          }
+        }
+        const pageInfo = res.data.pageInfo;
+        if (!pageInfo || !pageInfo.hasNextPage || !res.data.results.length) break;
+      }
+      for (const key of Object.keys(scheduleByDay)) {
+        scheduleByDay[key].sort((a, b) => a.airingAt - b.airingAt);
+      }
+    } catch {
+      loadOk = false;
+    }
+
     function renderReminders() {
       const box = document.getElementById("schedule-reminders");
       if (!box) return;
       const list = readReminders();
       if (!list.length) { box.innerHTML = ""; box.hidden = true; return; }
-      
-      const slotBySlug = {};
-      for (const [day, slots] of Object.entries(SCHEDULE_DATA)) {
-        for (const s of slots) slotBySlug[s.slug] = { day, time: s.time };
-      }
+
       const rows = list.map((r) => {
-        const s = slotBySlug[r.slug];
+        const s = slotByKey[r.slug];
         const when = s
-          ? `${s.day.charAt(0).toUpperCase() + s.day.slice(1)} ${escapeHtml(s.time)} JST`
+          ? `${s.dayKey.charAt(0).toUpperCase() + s.dayKey.slice(1)} ${escapeHtml(s.localTime)}${s.localTz ? ` ${escapeHtml(s.localTz)}` : ""} (${escapeHtml(s.jstTime)} JST)`
           : "Not scheduled this week";
         return `<div class="reminder-row">
           <span class="reminder-name">${escapeHtml(r.name)}</span>
@@ -6544,7 +6856,7 @@
         btn.addEventListener("click", () => {
           writeReminders(readReminders().filter((r) => r.slug !== btn.dataset.slug));
           renderReminders();
-          renderScheduleForDay(activeDayKey()); // refresh the slot buttons
+          renderScheduleForDay(activeDayKey());
           showToast("Reminder removed");
         });
       });
@@ -6552,35 +6864,36 @@
     renderReminders();
 
     function renderScheduleForDay(dayKey) {
-      const slots = SCHEDULE_DATA[dayKey] || [];
-      if (!Object.keys(titleMap).length) {
-        timelineEl.innerHTML = `<p class="schedule-empty-msg">Schedule is temporarily unavailable — the catalog could not be loaded.</p>`;
+      if (!loadOk) {
+        timelineEl.innerHTML = `<p class="schedule-empty-msg">Schedule is temporarily unavailable — please try again in a moment.</p>`;
         return;
       }
-      
-      const items = slots
-        .map((slot) => ({ slot, real: titleMap[slot.slug] }))
-        .filter((x) => x.real && x.real.name);
+      const items = scheduleByDay[dayKey] || [];
       if (!items.length) {
         timelineEl.innerHTML = `<p class="schedule-empty-msg">No scheduled releases for this day.</p>`;
         return;
       }
 
-      timelineEl.innerHTML = items.map(({ slot, real }) => {
-        const isFilm = (real.kind || "").toLowerCase() === "film";
-        const epCount = real.episodes || 1;
-        
-        const watchEp = isFilm ? 1 : epCount;
-        const name = real.name;
+      timelineEl.innerHTML = items.map((slot) => {
+        const real = slot.real;
+        const isCatalog = !!real.catalogSlug;
+        const isFilm = (real.kind || "").toLowerCase() === "film" || real.format === "MOVIE";
+        const watchEp = isFilm ? 1 : (slot.episode || 1);
+        const name = real.name || "Unknown title";
         const cover = coverOf(real);
-        const studio = real.studio || real.studios || "—";
-        const dHref = detailHref(real.slug);
-        const wHref = watchHref(real.slug, watchEp);
+        const metaExtra = real.studio || real.studios || `${liveFormatLabel(real)} • Ep ${slot.episode}`;
+        const dHref = isCatalog ? detailHref(real.catalogSlug) : liveDetailHref(real);
+        const wHref = isCatalog ? watchHref(real.catalogSlug, watchEp) : liveWatchHref(real, watchEp);
+        const remKey = real.catalogSlug || (real.anilistId != null ? `live-${real.anilistId}` : "");
         const watchLabel = isFilm ? "▶ Watch Film" : `▶ Watch Ep ${watchEp}`;
+        const localDisplay = slot.localTz ? `${slot.localTime} ${slot.localTz}` : slot.localTime;
         return `
         <div class="schedule-item-card">
           <div class="schedule-item-left">
-            <div class="schedule-slot-time">${slot.time}</div>
+            <div class="schedule-slot-time">
+              <span class="schedule-slot-local">${escapeHtml(localDisplay)}</span>
+              <span class="schedule-slot-jst">${escapeHtml(slot.jstTime)} JST</span>
+            </div>
             <a class="schedule-thumb" href="${dHref}">
               <img src="${escapeHtml(cover)}" alt="${escapeHtml(name)}" loading="lazy" ${livePosterAttrs()}>
             </a>
@@ -6590,14 +6903,15 @@
                 ${subBadge(real)}
                 ${dubBadge(real)}
                 ${multiAudioInlineBadge(real)}
-                <span class="schedule-studio-meta">• ${escapeHtml(studio)}</span>
+                ${eighteenBadge(real)}
+                <span class="schedule-studio-meta">• ${escapeHtml(metaExtra)}</span>
               </div>
             </div>
           </div>
           <div class="schedule-item-right">
-            <button class="btn-remind-slot${isReminded(slot.slug) ? " is-set" : ""}" type="button" data-slug="${escapeHtml(slot.slug)}" data-title="${escapeHtml(name)}">
-              ${isReminded(slot.slug) ? "✓ Alert Set" : `${BELL_SVG} Remind Me`}
-            </button>
+            ${remKey ? `<button class="btn-remind-slot${isReminded(remKey) ? " is-set" : ""}" type="button" data-slug="${escapeHtml(remKey)}" data-title="${escapeHtml(name)}">
+              ${isReminded(remKey) ? "✓ Alert Set" : `${BELL_SVG} Remind Me`}
+            </button>` : ""}
             <a class="btn-zoro-primary btn-schedule-watch" href="${wHref}">
               ${watchLabel}
             </a>
@@ -6625,17 +6939,6 @@
       });
     }
 
-    // Day tabs
-    const dayTabs = document.querySelectorAll(".schedule-day-tab");
-    
-    const weekMonday = new Date(nowLocal);
-    weekMonday.setDate(nowLocal.getDate() - ((nowLocal.getDay() + 6) % 7));
-    dayTabs.forEach((tab, i) => {
-      const d = new Date(weekMonday);
-      d.setDate(weekMonday.getDate() + i);
-      const dateEl = tab.querySelector(".tab-day-date");
-      if (dateEl) dateEl.textContent = String(d.getDate());
-    });
     dayTabs.forEach((tab) => {
       const tabDay = tab.dataset.day;
       if (tabDay === currentDayName) {
@@ -6648,13 +6951,7 @@
       });
     });
 
-    const todayTab = document.querySelector(`.schedule-day-tab[data-day="${currentDayName}"]`) || dayTabs[0];
-    if (todayTab) {
-      dayTabs.forEach((t) => t.classList.remove("active"));
-      todayTab.classList.add("active");
-      renderScheduleForDay(todayTab.dataset.day);
-    }
-
+    renderScheduleForDay(activeDayKey());
     markContentReady();
   }
 

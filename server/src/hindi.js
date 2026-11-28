@@ -8,6 +8,20 @@
  *   card lists / detail pages suppress Multi Audio for titles known unavailable.
  */
 
+import fs from "node:fs";
+
+const AVAILABILITY_MAP_PATH = new URL("./hindi-availability.json", import.meta.url);
+const RAW_AVAILABILITY_MAP = JSON.parse(fs.readFileSync(AVAILABILITY_MAP_PATH, "utf8"));
+const HINDI_AVAILABILITY_BY_TMDB = new Map();
+for (const [k, v] of Object.entries(RAW_AVAILABILITY_MAP || {})) {
+  const id = Math.trunc(Number(k));
+  if (!Number.isFinite(id) || id <= 0 || !v || typeof v !== "object") continue;
+  HINDI_AVAILABILITY_BY_TMDB.set(id, {
+    vidstream3: v.vidstream3 === true,
+    nitro: v.nitro === true,
+  });
+}
+
 const DEFAULT_BLAKITE_ORIGIN = (process.env.BLAKITE_ORIGIN || "https://blakiteapi.xyz").replace(/\/+$/, "");
 
 let blakiteOrigin = DEFAULT_BLAKITE_ORIGIN;
@@ -105,8 +119,10 @@ export function getKnownVidstream3Availability({ tmdbId, season = 1, episode = 1
 }
 
 /**
- * Attach `hindiAvailable` (`true` | `false` | `null`) to a resolved TMDB info object
- * using the in-memory Vidstream-3 availability cache.
+ * Attach `hindiAvailable` (`true` | `false`) to a resolved TMDB info object.
+ * A live Vidstream-3 probe cache entry always wins; otherwise the startup sweep
+ * map (`hindi-availability.json`, Vidstream-3 OR Nitro) is the source of truth
+ * and unswept titles default to `false`.
  */
 export function withHindiAvailability(tmdbInfo = {}) {
   const tmdbId = tmdbInfo && tmdbInfo.tmdbId ? Number(tmdbInfo.tmdbId) : null;
@@ -115,9 +131,14 @@ export function withHindiAvailability(tmdbInfo = {}) {
   }
   const season = Number(tmdbInfo.tmdbSeason) > 0 ? Math.floor(Number(tmdbInfo.tmdbSeason)) : 1;
   const offset = Number(tmdbInfo.tmdbEpisodeOffset) > 0 ? Math.floor(Number(tmdbInfo.tmdbEpisodeOffset)) : 0;
+  const liveKnown = getKnownVidstream3Availability({ tmdbId, season, episode: 1 + offset });
+  if (liveKnown !== null) {
+    return { ...tmdbInfo, hindiAvailable: liveKnown };
+  }
+  const mapped = HINDI_AVAILABILITY_BY_TMDB.get(Math.trunc(tmdbId));
   return {
     ...tmdbInfo,
-    hindiAvailable: getKnownVidstream3Availability({ tmdbId, season, episode: 1 + offset }),
+    hindiAvailable: Boolean(mapped && (mapped.vidstream3 || mapped.nitro)),
   };
 }
 

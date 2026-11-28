@@ -11,6 +11,8 @@
 
   var p = new URLSearchParams(location.search);
   var s = p.get("sort");
+  var viewParam = (p.get("view") || "").toLowerCase();
+  var genreParam = (p.get("genre") || "").trim();
   var el = document.getElementById("catalog-sort-select");
   fillSelect(el, [
     ["trending", "Trending"],
@@ -22,7 +24,11 @@
     ["updated", "Recently Updated"],
     ["favourites", "Most Favourited"],
   ]);
-  if (el && ["trending", "popular", "top", "newest", "az", "name", "episodes", "updated", "favourites"].indexOf(s) >= 0) el.value = s;
+  if (el && ["trending", "popular", "top", "newest", "az", "name", "episodes", "updated", "favourites"].indexOf(s) >= 0) {
+    el.value = s;
+  } else if (el && !s && (genreParam || viewParam === "subbed" || viewParam === "top-airing" || viewParam === "top-upcoming")) {
+    el.value = "popular";
+  }
 
   var fmt = document.getElementById("browse-format-select");
   fillSelect(fmt, [
@@ -103,7 +109,7 @@
       if (sub) sub.textContent = "Television series in the live catalog.";
     } else if (mode === "subbed") {
       h.innerHTML = "Subbed";
-      if (sub) sub.textContent = "Every title streams with subtitles.";
+      if (sub) sub.textContent = "Lists everything in the catalog with subtitles — all titles stream with subs.";
     } else if (mode === "dubbed") {
       h.innerHTML = "Dubbed";
       if (sub) sub.textContent = "Catalog titles with a verified English dub.";
@@ -117,7 +123,7 @@
   }
   var note = document.getElementById("browse-view-note");
   if (note) {
-    if (mode === "subbed") { note.textContent = "Every title streams with subtitles."; note.hidden = false; }
+    if (mode === "subbed") { note.textContent = "Lists everything in the catalog with subtitles."; note.hidden = false; }
     else if (mode === "dubbed") { note.textContent = "Dub status is verified for catalog titles only."; note.hidden = false; }
     else { note.textContent = ""; note.hidden = true; }
   }

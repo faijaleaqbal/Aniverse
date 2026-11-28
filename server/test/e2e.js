@@ -1748,7 +1748,7 @@ async function runTests() {
         "the view's status preset must be NOT_YET_RELEASED"
       );
       assert.ok(
-        src.includes('viewIsTopAiring || viewIsTopUpcoming ? "popular"'),
+        src.includes('viewIsTopAiring || viewIsTopUpcoming || viewIsSubbed) ? "popular"'),
         "the view's default sort must be popular"
       );
       assert.ok(
@@ -3849,13 +3849,18 @@ async function runTests() {
       assert.equal(hindi.hasHindiPlayers({ tmdbId: 31910 }), true);
       assert.equal(hindi.hasHindiPlayers({ tmdbId: null }), false);
       assert.equal(hindi.hasHindiPlayers(null), false);
-      assert.ok(hindi.multiAudioBadge({ tmdbId: 31910 }).includes("Multi Audio"));
+      /* The badge shows ONLY when Hindi is confirmed (server hindiAvailable:
+         true or a live probe cache hit) — a bare tmdbId no longer suffices. */
+      assert.ok(hindi.multiAudioBadge({ tmdbId: 31910, hindiAvailable: true }).includes("Multi Audio"));
+      assert.equal(hindi.multiAudioBadge({ tmdbId: 31910 }), "", "unconfirmed availability hides the card badge");
       assert.equal(hindi.multiAudioBadge({ tmdbId: null }), "");
       assert.equal(hindi.multiAudioBadge({ tmdbId: 209867, hindiAvailable: false }), "", "known-unavailable suppresses card Multi Audio badge");
-      assert.ok(hindi.multiAudioInlineBadge({ tmdbId: 31910 }).includes("Multi Audio"));
+      assert.ok(hindi.multiAudioInlineBadge({ tmdbId: 31910, hindiAvailable: true }).includes("Multi Audio"));
+      assert.equal(hindi.multiAudioInlineBadge({ tmdbId: 31910 }), "", "unconfirmed availability hides the inline badge");
       assert.equal(hindi.multiAudioInlineBadge({ tmdbId: null }), "");
       assert.equal(hindi.multiAudioInlineBadge({ tmdbId: 209867, hindiAvailable: false }), "");
-      assert.ok(hindi.multiAudioDetailBadge({ tmdbId: 31910 }).includes("Multi Audio"));
+      assert.ok(hindi.multiAudioDetailBadge({ tmdbId: 31910, hindiAvailable: true }).includes("Multi Audio"));
+      assert.equal(hindi.multiAudioDetailBadge({ tmdbId: 31910 }), "", "unconfirmed availability hides the detail badge");
       assert.equal(hindi.multiAudioDetailBadge({ tmdbId: null }), "");
       assert.equal(hindi.multiAudioDetailBadge({ tmdbId: 209867, hindiAvailable: false }), "");
       assert.equal(hindi.isHindiConfirmedAvailable({ tmdbId: 280042, hindiAvailable: null }), false);
@@ -3922,6 +3927,36 @@ async function runTests() {
       const liveWithoutTmdb = await fetch(`${baseUrl}/api/live/987222`);
       assert.equal(liveWithoutTmdb.status, 200);
       assert.equal((await liveWithoutTmdb.json()).title.tmdbId, null);
+    });
+
+    await test("Search dropdown ranking: exact > prefix > substring, across romaji/english titles", () => {
+      const { searchMatchTier, rankSearchResults } = evalZoroBlock("SEARCH_RANKING_LOGIC", [
+        "searchMatchTier",
+        "rankSearchResults",
+      ]);
+      assert.equal(searchMatchTier({ name: "Naruto" }, "naruto"), 3, "exact match is tier 3");
+      assert.equal(searchMatchTier({ name: "Naruto: Shippuden" }, "naruto"), 2, "prefix match is tier 2");
+      assert.equal(searchMatchTier({ name: "Boruto: Naruto Next Generations" }, "naruto"), 1, "substring is tier 1");
+      assert.equal(searchMatchTier({ name: "One Piece" }, "naruto"), 0, "no match is tier 0");
+      assert.equal(searchMatchTier({ romajiTitle: "Naruto" }, "naruto"), 3, "romaji title counts");
+      const ranked = rankSearchResults(
+        [{ name: "Boruto: Naruto Next Generations" }, { name: "Naruto: Shippuden" }, { name: "Naruto" }],
+        "naruto"
+      ).map((t) => t.name);
+      assert.deepEqual(ranked, ["Naruto", "Naruto: Shippuden", "Boruto: Naruto Next Generations"]);
+    });
+
+    await test("Browse genre filter: genre=isekai reaches AniList as tag_in, never genre_in", async () => {
+      const { normalizeBrowseArgs } = await import("../src/anilist.js");
+      const args = normalizeBrowseArgs({ genre: "isekai" });
+      assert.deepEqual(args.genres, [], "isekai must not be sent as a genre");
+      assert.deepEqual(args.tags, ["Isekai"], "isekai must be sent as a tag");
+      mockAniList({ mediaList: [fakeMedia()] });
+      await fetch(`${baseUrl}/api/browse?genre=isekai`);
+      const request = anilistRequests[0];
+      assert.ok(request.query.includes("tag_in: $tag"), "isekai browse must query tag_in");
+      assert.deepEqual(request.variables.tag, ["Isekai"]);
+      resetAniListMock();
     });
 
     await test("Hindi endpoint: GET /api/hindi/vidstream is removed and returns 404", async () => {
