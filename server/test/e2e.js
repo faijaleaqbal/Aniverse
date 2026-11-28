@@ -3713,6 +3713,73 @@ async function runTests() {
       assert.ok(css.includes(".aizen-intro-overlay.is-exiting {\n  pointer-events: none;"), "exiting overlay stops blocking clicks immediately");
     });
 
+    await test("Player fullscreen: iframe carries fullscreen attrs and Zoko bridge is not linked", async () => {
+      const html = readFileSync(fileURLToPath(new URL("../../ani-verse/watch.html", import.meta.url)), "utf8");
+      const js = readFileSync(ZORO_JS_PATH, "utf8");
+      const frame = html.match(/<iframe\b[^>]*id="zoko-embed-frame"[^>]*>/s);
+      assert.ok(frame, "watch.html must contain #zoko-embed-frame");
+      const tag = frame[0];
+      assert.ok(tag.includes('allow="fullscreen; autoplay"'), "iframe must allow fullscreen and autoplay");
+      assert.ok(tag.includes("allowfullscreen"), "iframe must carry allowfullscreen");
+      assert.ok(tag.includes("webkitallowfullscreen"), "iframe must carry webkitallowfullscreen for WebKit");
+      assert.ok(tag.includes("mozallowfullscreen"), "iframe must carry mozallowfullscreen");
+
+      const rebuildSrc = js.match(/function rebuildIframe\(\)\s*\{[\s\S]*?\n    \}/);
+      assert.ok(rebuildSrc, "zoro-aizen.js must define rebuildIframe()");
+      assert.ok(rebuildSrc[0].includes('setAttribute("allowfullscreen", "")'), "rebuilt iframe keeps allowfullscreen");
+      assert.ok(rebuildSrc[0].includes('setAttribute("webkitallowfullscreen", "")'), "rebuilt iframe keeps webkitallowfullscreen");
+      assert.ok(rebuildSrc[0].includes('setAttribute("mozallowfullscreen", "")'), "rebuilt iframe keeps mozallowfullscreen");
+
+      /* Never announce parent fullscreen bridge to Zoko: linking st.linked=true
+         intercepts native requestFullscreen inside the iframe and fails on
+         cross-origin postMessage user-activation checks (desktop & mobile). */
+      assert.ok(
+        !/sendPlayerCommand\(\{\s*type:\s*"fullscreen"/.test(js),
+        "must not link Zoko's cross-origin fullscreen bridge via sendPlayerCommand"
+      );
+
+      /* containFocus must not steal focus out of an active fullscreen element. */
+      const containSrc = js.match(/const containFocus = \(\) => \{[\s\S]*?\n    \};/);
+      assert.ok(containSrc, "containFocus must exist");
+      assert.ok(
+        containSrc[0].includes("document.fullscreenElement || document.webkitFullscreenElement"),
+        "containFocus must yield when fullscreen is active"
+      );
+
+      /* WebKit/standard fullscreen support in toggleFullscreen (F key / fallback). */
+      const toggleSrc = js.match(/function toggleFullscreen\(\)\s*\{[\s\S]*?\n    \}/);
+      assert.ok(toggleSrc && toggleSrc[0].includes("webkitRequestFullscreen"), "toggleFullscreen supports webkitRequestFullscreen");
+
+      /* Both audited titles resolve cleanly on the API for the watch page. */
+      for (const slug of ["paper-cranes-at-dawn", "the-quiet-ward"]) {
+        const res = await fetch(`${baseUrl}/api/titles/${slug}`);
+        assert.equal(res.status, 200, `${slug} title endpoint returns 200`);
+      }
+    });
+
+    await test("TVplus first-switch: switchServer rebuilds iframe cleanly, caches episode data, and settles on load", async () => {
+      const js = readFileSync(ZORO_JS_PATH, "utf8");
+      const switchSrc = js.match(/function switchServer\(server\)\s*\{[\s\S]*?\n    \}/);
+      assert.ok(switchSrc, "zoro-aizen.js must define switchServer(server)");
+      assert.ok(switchSrc[0].includes("rebuildIframe()"), "switchServer must rebuild the iframe so sandbox changes take effect on a clean frame");
+      assert.ok(
+        switchSrc[0].indexOf("rebuildIframe()") < switchSrc[0].indexOf("loadEpisode("),
+        "switchServer must rebuild the iframe BEFORE loadEpisode"
+      );
+
+      const rebuildSrc = js.match(/function rebuildIframe\(\)\s*\{[\s\S]*?\n    \}/);
+      assert.ok(rebuildSrc && !rebuildSrc[0].includes('fresh.src = "about:blank"'), "rebuildIframe must not queue an about:blank navigation before loadEpisode");
+
+      assert.ok(js.includes("episodeDataCache"), "episodeDataCache avoids redundant episode API waits on server switch");
+
+      const bindSrc = js.match(/function bindIframeListeners\(\)\s*\{[\s\S]*?\n    \}/);
+      assert.ok(bindSrc, "bindIframeListeners must exist");
+      assert.ok(
+        bindSrc[0].includes('activeServer === "backup"') && bindSrc[0].includes("markPlayerSettled()"),
+        "bindIframeListeners must settle backup on non-blank iframe load so settleWatchdog does not abort TVplus while uqload loads"
+      );
+    });
+
     console.log(`\nAll ${passed} E2E integration tests passed successfully!\n`);
   } finally {
     if (server) {

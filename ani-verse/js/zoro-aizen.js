@@ -3464,12 +3464,13 @@
       fresh.title = iframe.title;
       fresh.setAttribute("allow", iframe.getAttribute("allow") || "fullscreen; autoplay");
       fresh.setAttribute("allowfullscreen", "");
+      fresh.setAttribute("webkitallowfullscreen", "");
+      fresh.setAttribute("mozallowfullscreen", "");
       
       const sandboxForFresh = Object.prototype.hasOwnProperty.call(PLAYER_IFRAME_SANDBOX_BY_SERVER, activeServer)
         ? PLAYER_IFRAME_SANDBOX_BY_SERVER[activeServer]
         : null;
       if (sandboxForFresh !== null) fresh.setAttribute("sandbox", sandboxForFresh);
-      fresh.src = "about:blank";
       iframe.parentNode.replaceChild(fresh, iframe);
       iframe = fresh;
       bindIframeListeners();
@@ -3681,6 +3682,9 @@
       activeServer = server;
       
       applyIframeSandbox(server);
+      // Replace the iframe element before navigating so changing sandbox state
+      // takes effect on a clean browsing context rather than a reused frame.
+      rebuildIframe();
       try { sessionStorage.setItem(SS_SERVER_KEY, server); } catch {}
       clearPlayerTimersAndProbes();
       hideResumeNote();
@@ -4208,13 +4212,14 @@
     }
 
     /* Load an episode */
-    
-    function fetchEpisodeData(epNum) {
+    const episodeDataCache = new Map();
+
+    async function fetchEpisodeData(epNum) {
       
       if (isLive) {
         const runtime = (titleData && titleData.runtimeMin) ? titleData.runtimeMin : 24;
         const saved = readLocalProgress(progressKey, epNum);
-        return Promise.resolve({
+        return {
           ok: true,
           status: 200,
           error: null,
@@ -4226,9 +4231,17 @@
               savedPositionSec: saved && typeof saved.t === "number" ? saved.t : 0,
             },
           },
-        });
+        };
       }
-      return api(`/api/titles/${encodeURIComponent(currentSlug)}/episodes/${epNum}`);
+      const cacheKey = `${progressKey}:${epNum}`;
+      if (episodeDataCache.has(cacheKey)) {
+        return episodeDataCache.get(cacheKey);
+      }
+      const res = await api(`/api/titles/${encodeURIComponent(currentSlug)}/episodes/${epNum}`);
+      if (res && res.ok && res.data && res.data.episode) {
+        episodeDataCache.set(cacheKey, res);
+      }
+      return res;
     }
 
     function showResumeNote(seconds) {
@@ -4820,14 +4833,26 @@
         reportFullscreenError("enter", new Error("player wrapper not found"));
         return;
       }
-      if (document.fullscreenElement) {
-        document.exitFullscreen().catch((err) => reportFullscreenError("exit", err));
+      const fsEl = document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement;
+      if (fsEl) {
+        const exit = document.exitFullscreen || document.webkitExitFullscreen || document.mozCancelFullScreen;
+        if (exit) {
+          Promise.resolve(exit.call(document)).catch((err) => reportFullscreenError("exit", err));
+        }
       } else {
-        if (document.fullscreenEnabled === false) {
+        const fsEnabled = document.fullscreenEnabled !== undefined
+          ? document.fullscreenEnabled
+          : document.webkitFullscreenEnabled;
+        if (fsEnabled === false) {
           reportFullscreenError("enter", new Error("fullscreen is disabled in this browser/context"));
           return;
         }
-        playerWrap.requestFullscreen().catch((err) => reportFullscreenError("enter", err));
+        const req = playerWrap.requestFullscreen || playerWrap.webkitRequestFullscreen || playerWrap.mozRequestFullScreen;
+        if (!req) {
+          reportFullscreenError("enter", new Error("fullscreen is not supported on this element"));
+          return;
+        }
+        Promise.resolve(req.call(playerWrap)).catch((err) => reportFullscreenError("enter", err));
       }
     }
 
@@ -5085,8 +5110,6 @@
         
         if (spinner) spinner.style.pointerEvents = "none";
         if (overlay) overlay.hidden = true;
-        // Report current fullscreen state to player
-        sendPlayerCommand({ type: "fullscreen", active: !!document.fullscreenElement });
       }
 
       // Event: play
@@ -5280,8 +5303,8 @@
     });
 
     const containFocus = () => {
-      
       if (activeServer !== "zoko" || !playerWrap) return;
+      if (document.fullscreenElement || document.webkitFullscreenElement) return;
       if (document.activeElement === iframe) {
         playerWrap.focus({ preventScroll: true });
       }
@@ -5290,7 +5313,13 @@
     function bindIframeListeners() {
       if (!iframe) return;
       iframe.addEventListener("load", () => {
-        
+        const loadedSrc = iframe.getAttribute("src") || "";
+        if (activeServer === "backup") {
+          if (!loadedSrc || loadedSrc === "about:blank") return;
+          markPlayerSettled();
+          playerEp = currentEp;
+          return;
+        }
         if (activeServer === ANIMEGG_SERVER_ID) {
           markPlayerSettled();
           playerEp = currentEp;
@@ -5334,10 +5363,8 @@
       
     });
 
-    // Fullscreenchange event: report state back to player
+    // Fullscreenchange event: report state back to TVplus embed if active
     document.addEventListener("fullscreenchange", () => {
-      sendPlayerCommand({ type: "fullscreen", active: !!document.fullscreenElement });
-      
       if (activeServer === "backup" && iframe && iframe.contentWindow) {
         try {
           iframe.contentWindow.postMessage(
@@ -5358,6 +5385,7 @@
           const tvp = getBackupEmbedUrl(currentEp, 0, true);
           if (tvp) {
             activeServer = "backup";
+            applyIframeSandbox("backup");
             applyServerUI();
             showBackupNote("This title has no MAL id, so it streams on the TVplus player (Zoko has no AniList route).");
           }
