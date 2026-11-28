@@ -282,6 +282,10 @@
   box-sizing: border-box;
   margin: 0;
   padding: 0;
+  /* Remove the blue tap-highlight flash on mobile (Brave/Chrome): tapping
+     any button, link or checkbox showed a blue glow. The site's own lime
+     :focus-visible ring (below) still marks keyboard focus. */
+  -webkit-tap-highlight-color: transparent;
 }
 
 html {
