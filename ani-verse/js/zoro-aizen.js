@@ -24,21 +24,32 @@
 
   document.addEventListener("contextmenu", (e) => e.preventDefault(), true);
 
-  let devtoolsHits = 0;
-  const devtoolsCheck = setInterval(() => {
-    const widthGap = window.outerWidth - window.innerWidth;
-    const heightGap = window.outerHeight - window.innerHeight;
-    if (widthGap > 160 || heightGap > 160) {
-      devtoolsHits += 1;
-      if (devtoolsHits >= 2) {
-        clearInterval(devtoolsCheck);
-        document.body.innerHTML =
-          '<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#0b0b0f;color:#e5e5e5;font-family:sans-serif;text-align:center;padding:24px;"><div><h1 style="font-size:22px;margin:0 0 8px;">DevTools is disabled on AniFlick</h1><p style="margin:0;opacity:.7;">Please close DevTools and reload the page to continue watching.</p></div></div>';
+  // Docked-DevTools detector (desktop only). On touch devices the
+  // browser's own UI (address bar, bottom toolbar) makes
+  // outerHeight - innerHeight routinely exceed 160px with no DevTools
+  // open — a false positive on mobile Brave — and a docked DevTools
+  // panel does not exist on mobile, so the check is skipped there.
+  const isTouchDevice =
+    "ontouchstart" in window ||
+    navigator.maxTouchPoints > 0 ||
+    window.matchMedia("(pointer: coarse)").matches;
+  if (!isTouchDevice) {
+    let devtoolsHits = 0;
+    const devtoolsCheck = setInterval(() => {
+      const widthGap = window.outerWidth - window.innerWidth;
+      const heightGap = window.outerHeight - window.innerHeight;
+      if (widthGap > 160 || heightGap > 160) {
+        devtoolsHits += 1;
+        if (devtoolsHits >= 2) {
+          clearInterval(devtoolsCheck);
+          document.body.innerHTML =
+            '<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#0b0b0f;color:#e5e5e5;font-family:sans-serif;text-align:center;padding:24px;"><div><h1 style="font-size:22px;margin:0 0 8px;">DevTools is disabled on AniFlick</h1><p style="margin:0;opacity:.7;">Please close DevTools and reload the page to continue watching.</p></div></div>';
+        }
+      } else {
+        devtoolsHits = 0;
       }
-    } else {
-      devtoolsHits = 0;
-    }
-  }, 1000);
+    }, 1000);
+  }
 
   let currentUser = null;
 
