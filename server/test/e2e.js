@@ -3523,6 +3523,14 @@ async function runTests() {
         const pageHtml = readFileSync(`${pagesDir}/${page}`, "utf8");
         assert.ok(pageHtml.includes('href="/login">Sign In</a>'), `${page} links /login in header nav`);
       }
+
+      // Non-JSON POST to auth endpoints must return 400, never 500
+      const formPost = await fetch(`${baseUrl}/api/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded", "X-Forwarded-For": "198.51.100.212" },
+        body: "email=a@b.com&password=password123",
+      });
+      assert.equal(formPost.status, 400);
     });
 
     // 98. GET /api/auth/turnstile-key reflects TURNSTILE_SITE_KEY dynamically.

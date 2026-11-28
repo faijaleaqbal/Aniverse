@@ -133,8 +133,14 @@ const forgotPasswordIpLimiter = createRateLimiter({ max: FORGOT_PASSWORD_MAX_ATT
 const forgotPasswordEmailLimiter = createRateLimiter({ max: FORGOT_PASSWORD_MAX_ATTEMPTS, windowMs: FORGOT_PASSWORD_WINDOW_MS });
 const resetPasswordLimiter = createRateLimiter({ max: RESET_PASSWORD_MAX_ATTEMPTS, windowMs: RESET_PASSWORD_WINDOW_MS });
 
-// Body parser
+// Body parser (default to {} for non-JSON requests so routes never 500 on req.body.*)
 app.use(express.json());
+app.use((req, res, next) => {
+  if (req.body == null || typeof req.body !== "object") {
+    req.body = {};
+  }
+  next();
+});
 
 // Cookie parsing middleware
 app.use((req, res, next) => {

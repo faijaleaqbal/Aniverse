@@ -21,6 +21,13 @@
   var registerForm = document.getElementById("register-form");
   var forgotForm = document.getElementById("forgot-form");
 
+  var signinEmail = document.getElementById("signin-email");
+  var signinPassword = document.getElementById("signin-password");
+  var registerName = document.getElementById("register-name");
+  var registerEmail = document.getElementById("register-email");
+  var registerPassword = document.getElementById("register-password");
+  var forgotEmail = document.getElementById("forgot-email");
+
   var signinError = document.getElementById("signin-error");
   var registerError = document.getElementById("register-error");
   var forgotMsg = document.getElementById("forgot-msg");
@@ -30,6 +37,17 @@
   var btnForgotSubmit = document.getElementById("btn-forgot-submit");
 
   var turnstileEnabled = false;
+
+  function bindSubmitControls(container, submitBtn, handler) {
+    if (!container || !submitBtn) return;
+    submitBtn.addEventListener("click", handler);
+    container.addEventListener("keydown", function (e) {
+      if (e.key === "Enter" && e.target && e.target.tagName === "INPUT") {
+        e.preventDefault();
+        handler();
+      }
+    });
+  }
 
   function getSafeNext() {
     var params = new URLSearchParams(window.location.search);
@@ -149,133 +167,128 @@
     }
   }
 
-  if (signinForm) {
-    signinForm.addEventListener("submit", async function (e) {
-      e.preventDefault();
-      clearAlert(signinError);
+  async function handleSignin() {
+    clearAlert(signinError);
 
-      var email = (signinForm.email.value || "").trim();
-      var password = signinForm.password.value || "";
-      if (!email || !password) {
-        showAlert(signinError, "Email and password are required.", false);
+    var email = (signinEmail ? signinEmail.value : "").trim();
+    var password = signinPassword ? signinPassword.value : "";
+    if (!email || !password) {
+      showAlert(signinError, "Email and password are required.", false);
+      return;
+    }
+
+    var payload = { email: email, password: password };
+    if (turnstileEnabled) {
+      var token = getTurnstileToken(signinForm);
+      if (!token) {
+        showAlert(signinError, "Bot verification failed. Please complete the check and try again.", false);
         return;
       }
+      payload["cf-turnstile-response"] = token;
+    }
 
-      var payload = { email: email, password: password };
-      if (turnstileEnabled) {
-        var token = getTurnstileToken(signinForm);
-        if (!token) {
-          showAlert(signinError, "Bot verification failed. Please complete the check and try again.", false);
-          return;
-        }
-        payload["cf-turnstile-response"] = token;
+    btnSigninSubmit.disabled = true;
+    btnSigninSubmit.textContent = "Signing In...";
+    try {
+      var res = await postJson("/api/auth/login", payload);
+      if (res.ok && res.data && res.data.user) {
+        window.location.assign(getSafeNext());
+        return;
       }
-
-      btnSigninSubmit.disabled = true;
-      btnSigninSubmit.textContent = "Signing In...";
-      try {
-        var res = await postJson("/api/auth/login", payload);
-        if (res.ok && res.data && res.data.user) {
-          window.location.assign(getSafeNext());
-          return;
-        }
-        showAlert(
-          signinError,
-          (res.data && res.data.error && res.data.error.message) || "Invalid email or password.",
-          false
-        );
-        resetTurnstile();
-      } catch (err) {
-        showAlert(signinError, "Network error. Please try again.", false);
-        resetTurnstile();
-      } finally {
-        btnSigninSubmit.disabled = false;
-        btnSigninSubmit.textContent = "Sign In";
-      }
-    });
+      showAlert(
+        signinError,
+        (res.data && res.data.error && res.data.error.message) || "Invalid email or password.",
+        false
+      );
+      resetTurnstile();
+    } catch (err) {
+      showAlert(signinError, "Network error. Please try again.", false);
+      resetTurnstile();
+    } finally {
+      btnSigninSubmit.disabled = false;
+      btnSigninSubmit.textContent = "Sign In";
+    }
   }
 
-  if (registerForm) {
-    registerForm.addEventListener("submit", async function (e) {
-      e.preventDefault();
-      clearAlert(registerError);
+  async function handleRegister() {
+    clearAlert(registerError);
 
-      var name = (registerForm.name.value || "").trim();
-      var email = (registerForm.email.value || "").trim();
-      var password = registerForm.password.value || "";
+    var name = (registerName ? registerName.value : "").trim();
+    var email = (registerEmail ? registerEmail.value : "").trim();
+    var password = registerPassword ? registerPassword.value : "";
 
-      if (!name) {
-        showAlert(registerError, "Display name is required.", false);
+    if (!name) {
+      showAlert(registerError, "Display name is required.", false);
+      return;
+    }
+    if (!email) {
+      showAlert(registerError, "A valid email address is required.", false);
+      return;
+    }
+    if (password.length < 8) {
+      showAlert(registerError, "Password must be between 8 and 200 characters.", false);
+      return;
+    }
+
+    var payload = { name: name, email: email, password: password };
+    if (turnstileEnabled) {
+      var token = getTurnstileToken(registerForm);
+      if (!token) {
+        showAlert(registerError, "Bot verification failed. Please complete the check and try again.", false);
         return;
       }
-      if (!email) {
-        showAlert(registerError, "A valid email address is required.", false);
+      payload["cf-turnstile-response"] = token;
+    }
+
+    btnRegisterSubmit.disabled = true;
+    btnRegisterSubmit.textContent = "Creating Account...";
+    try {
+      var res = await postJson("/api/auth/register", payload);
+      if (res.ok && res.data && res.data.user) {
+        window.location.assign(getSafeNext());
         return;
       }
-      if (password.length < 8) {
-        showAlert(registerError, "Password must be between 8 and 200 characters.", false);
-        return;
-      }
-
-      var payload = { name: name, email: email, password: password };
-      if (turnstileEnabled) {
-        var token = getTurnstileToken(registerForm);
-        if (!token) {
-          showAlert(registerError, "Bot verification failed. Please complete the check and try again.", false);
-          return;
-        }
-        payload["cf-turnstile-response"] = token;
-      }
-
-      btnRegisterSubmit.disabled = true;
-      btnRegisterSubmit.textContent = "Creating Account...";
-      try {
-        var res = await postJson("/api/auth/register", payload);
-        if (res.ok && res.data && res.data.user) {
-          window.location.assign(getSafeNext());
-          return;
-        }
-        showAlert(
-          registerError,
-          (res.data && res.data.error && res.data.error.message) || "Could not create account.",
-          false
-        );
-        resetTurnstile();
-      } catch (err) {
-        showAlert(registerError, "Network error. Please try again.", false);
-        resetTurnstile();
-      } finally {
-        btnRegisterSubmit.disabled = false;
-        btnRegisterSubmit.textContent = "Create Account";
-      }
-    });
+      showAlert(
+        registerError,
+        (res.data && res.data.error && res.data.error.message) || "Could not create account.",
+        false
+      );
+      resetTurnstile();
+    } catch (err) {
+      showAlert(registerError, "Network error. Please try again.", false);
+      resetTurnstile();
+    } finally {
+      btnRegisterSubmit.disabled = false;
+      btnRegisterSubmit.textContent = "Create Account";
+    }
   }
 
-  if (forgotForm) {
-    forgotForm.addEventListener("submit", async function (e) {
-      e.preventDefault();
-      clearAlert(forgotMsg);
-      var email = (forgotForm.email.value || "").trim();
-      if (!email) {
-        showAlert(forgotMsg, "Please enter your email address.", false);
-        return;
-      }
-      btnForgotSubmit.disabled = true;
-      btnForgotSubmit.textContent = "Sending...";
-      try {
-        var res = await postJson("/api/auth/forgot-password", { email: email });
-        var message =
-          (res.data && (res.data.message || (res.data.error && res.data.error.message))) ||
-          "If an account exists for that email, a reset link has been sent.";
-        showAlert(forgotMsg, message, res.ok);
-      } catch (err) {
-        showAlert(forgotMsg, "Network error. Please try again.", false);
-      } finally {
-        btnForgotSubmit.disabled = false;
-        btnForgotSubmit.textContent = "Send Reset Link";
-      }
-    });
+  async function handleForgot() {
+    clearAlert(forgotMsg);
+    var email = (forgotEmail ? forgotEmail.value : "").trim();
+    if (!email) {
+      showAlert(forgotMsg, "Please enter your email address.", false);
+      return;
+    }
+    btnForgotSubmit.disabled = true;
+    btnForgotSubmit.textContent = "Sending...";
+    try {
+      var res = await postJson("/api/auth/forgot-password", { email: email });
+      var message =
+        (res.data && (res.data.message || (res.data.error && res.data.error.message))) ||
+        "If an account exists for that email, a reset link has been sent.";
+      showAlert(forgotMsg, message, res.ok);
+    } catch (err) {
+      showAlert(forgotMsg, "Network error. Please try again.", false);
+    } finally {
+      btnForgotSubmit.disabled = false;
+      btnForgotSubmit.textContent = "Send Reset Link";
+    }
   }
+
+  bindSubmitControls(signinForm, btnSigninSubmit, handleSignin);
+  bindSubmitControls(registerForm, btnRegisterSubmit, handleRegister);
+  bindSubmitControls(forgotForm, btnForgotSubmit, handleForgot);
 
   async function loadProviders() {
     var blocks = [
