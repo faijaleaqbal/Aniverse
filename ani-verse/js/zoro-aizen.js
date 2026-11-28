@@ -257,6 +257,12 @@
     try {
       const res = await fetch(path, Object.assign({}, options, { signal: controller.signal }));
       const data = await res.json().catch(() => null);
+      const isGet = !options.body && (!options.method || String(options.method).toUpperCase() === "GET");
+      if (attempt === 0 && isGet && res.status >= 500 && res.status < 600) {
+        clearTimeout(timer);
+        await new Promise((r) => setTimeout(r, 250));
+        return api(path, options, 1);
+      }
       return { ok: res.ok, status: res.status, data, error: null };
     } catch (err) {
       const timedOut = !!err && err.name === "AbortError";
@@ -3474,6 +3480,42 @@
     let vidstream3State = "unknown";
     let hindiProbedKey = "";
     let hindiProbeToken = 0;
+    let hindiProbePromise = null;
+
+    function ensureVidstream3Probed(epNum) {
+      if (!hasHindiPlayers(titleData)) {
+        vidstream3State = "unavailable";
+        applyServerUI();
+        return Promise.resolve(false);
+      }
+      const { season, ep } = getHindiSeasonEpisode(titleData, epNum);
+      const nextHindiKey = `${titleData.tmdbId}:${season}-${ep}`;
+      if (nextHindiKey !== hindiProbedKey) {
+        hindiProbedKey = nextHindiKey;
+        hindiProbeToken++;
+        const cached = getCachedHindiAvailability(titleData.tmdbId, season, ep);
+        if (cached === true) {
+          vidstream3State = "available";
+        } else if (cached === false) {
+          vidstream3State = "unavailable";
+        } else {
+          const offset = Number(titleData && titleData.tmdbEpisodeOffset) > 0
+            ? Math.floor(Number(titleData.tmdbEpisodeOffset))
+            : 0;
+          vidstream3State = ep === 1 + offset && titleData && titleData.hindiAvailable === true
+            ? "available"
+            : "unknown";
+        }
+        applyServerUI();
+        hindiProbePromise = probeVidstream3(epNum)
+          .then((ok) => {
+            applyServerUI();
+            return ok;
+          })
+          .catch(() => true);
+      }
+      return hindiProbePromise || Promise.resolve(vidstream3State === "available");
+    }
 
     async function probeVidstream3(epNum) {
       const path = getVidstream3ApiPath(titleData, epNum);
@@ -3558,7 +3600,7 @@
       return null;
     }
 
-    const ZOKO_NO_READY_TIMEOUT_MS = 45000;
+    const ZOKO_NO_READY_TIMEOUT_MS = 20000;
     
     const ZOKO_NO_PLAY_AFTER_READY_MS = 30000;
     
@@ -3651,7 +3693,7 @@
         else if (server === "megaplay") showMegaPlayFailureOffer("MegaPlay isn't responding.");
         else if (server === ANIMEGG_SERVER_ID) showAnimeggFailureOffer("The animegg player isn't responding.");
         else if (isHindiServer(server)) showHindiFailureOffer("Vidstream-3 (Hindi) isn't responding.");
-        else showFallbackOffer();
+        else fallbackToBackup("Main player isn't responding — switched to TVplus player.");
       }, SWITCH_SETTLE_TIMEOUT_MS);
     }
 
@@ -3683,6 +3725,21 @@
       if (tryBtn) tryBtn.addEventListener("click", () => switchServer("backup"));
       const dismissBtn = fallbackNote.querySelector("#fallback-dismiss-btn");
       if (dismissBtn) dismissBtn.addEventListener("click", hideFallbackNote);
+    }
+
+    function fallbackToBackup(noticeMessage) {
+      if (activeServer !== "zoko") return false;
+      const tvp = getBackupEmbedUrl(currentEp, Math.floor(currentPosition || 0), false);
+      if (!tvp) {
+        if (spinner) spinner.hidden = true;
+        if (coverOverlay) coverOverlay.style.display = "none";
+        showFallbackOffer();
+        return false;
+      }
+      if (overlay) overlay.hidden = true;
+      switchServer("backup");
+      showBackupNote(noticeMessage || "Main player isn't responding — switched to TVplus player.");
+      return true;
     }
 
     function showBackupNote(message) {
@@ -3762,9 +3819,7 @@
         if (token !== loadToken || activeServer !== "zoko" || playerReady) return;
         
         markPlayerSettled();
-        if (spinner) spinner.hidden = true;
-        if (coverOverlay) coverOverlay.style.display = "none";
-        showFallbackOffer();
+        fallbackToBackup("Main player isn't responding — switched to TVplus player.");
       }, ZOKO_NO_READY_TIMEOUT_MS);
       
       if (zokoNoPlaybackTimer) clearTimeout(zokoNoPlaybackTimer);
@@ -3773,9 +3828,7 @@
         if (token !== loadToken || activeServer !== "zoko" || playbackEvidenceForLoad) return;
         markPlayerSettled();
         if (zokoNoPlayTimer) { clearTimeout(zokoNoPlayTimer); zokoNoPlayTimer = null; }
-        if (spinner) spinner.hidden = true;
-        if (coverOverlay) coverOverlay.style.display = "none";
-        showFallbackOffer();
+        fallbackToBackup("Main player isn't responding — switched to TVplus player.");
       }, ZOKO_NO_PLAYBACK_DEADLINE_MS);
       
       if (probeController) {
@@ -3794,7 +3847,7 @@
           if (probeController === ctl) probeController = null;
           if (err && err.name === "AbortError") return; // slow != failed
           if (token !== loadToken || activeServer !== "zoko" || playerReady) return;
-          showFallbackOffer();
+          fallbackToBackup("Main player isn't responding — switched to TVplus player.");
         });
     }
 
@@ -4215,13 +4268,12 @@
       if (detailLink) detailLink.href = liveDetailHref(titleData);
       if (coverOverlay) coverOverlay.style.backgroundImage = `url('${bannerOf(titleData)}')`;
 
-      if (wlBtn) wlBtn.hidden = true;
       const discussion = document.getElementById("watch-discussion");
       if (discussion) discussion.hidden = true;
 
       renderEpisodesGrid();
       updateEpisodeNavState();
-      applyServerUI();
+      ensureVidstream3Probed(currentEp);
       loadWatchRecommendations();
       markContentReady();
       return true;
@@ -4277,7 +4329,7 @@
 
       renderEpisodesGrid();
       updateEpisodeNavState();
-      applyServerUI();
+      ensureVidstream3Probed(currentEp);
       
       loadWatchRecommendations();
       markContentReady();
@@ -4566,19 +4618,7 @@
 
       const probePromise = activeServer === "zoko" && !isLive ? probeDubAvailability(epNum) : null;
 
-      if (hasHindiPlayers(titleData)) {
-        const { season, ep } = getHindiSeasonEpisode(titleData, epNum);
-        const nextHindiKey = `${titleData.tmdbId}:${season}-${ep}`;
-        if (nextHindiKey !== hindiProbedKey) {
-          hindiProbedKey = nextHindiKey;
-          hindiProbeToken++;
-          vidstream3State = "unknown";
-          applyServerUI();
-        }
-        if (activeServer !== VIDSTREAM3_SERVER_ID && vidstream3State === "unknown") {
-          probeVidstream3(epNum).then(() => applyServerUI()).catch(() => {});
-        }
-      }
+      ensureVidstream3Probed(epNum);
 
       if (activeServer !== ANIMEGG_SERVER_ID) {
         const bgToken = animeggLoadToken;
@@ -4720,7 +4760,7 @@
           ? true
           : vidstream3State === "unavailable"
           ? false
-          : await probeVidstream3(currentEp);
+          : await ensureVidstream3Probed(currentEp);
         if (token !== loadToken || currentEp !== epNum) return;
         applyServerUI();
         if (!avail) {
@@ -5345,9 +5385,7 @@
             if (readyToken !== loadToken || activeServer !== "zoko") return;
             markPlayerSettled();
             if (zokoNoPlaybackTimer) { clearTimeout(zokoNoPlaybackTimer); zokoNoPlaybackTimer = null; }
-            if (spinner) spinner.hidden = true;
-            if (coverOverlay) coverOverlay.style.display = "none";
-            showFallbackOffer();
+            fallbackToBackup("Main player isn't responding — switched to TVplus player.");
           }, ZOKO_NO_PLAY_AFTER_READY_MS);
         }
         
@@ -5496,6 +5534,10 @@
         if (zokoNoPlayTimer) { clearTimeout(zokoNoPlayTimer); zokoNoPlayTimer = null; }
         if (zokoNoPlaybackTimer) { clearTimeout(zokoNoPlaybackTimer); zokoNoPlaybackTimer = null; }
         
+        lastZokoErrorAt = Date.now();
+        if (data.reason !== "sandboxed" && fallbackToBackup("Main player couldn't load this episode — switched to TVplus player.")) {
+          return;
+        }
         if (spinner) spinner.hidden = true;
         if (overlay) {
           overlay.hidden = false;
@@ -5509,7 +5551,6 @@
           }
         }
         
-        lastZokoErrorAt = Date.now();
         showFallbackOffer();
       }
 
@@ -5681,6 +5722,9 @@
       } catch (err) {
         console.error("Watch page init failed:", err);
         showPlaceholder("Could not load episode data");
+        if (epGrid && !epGrid.querySelector(".ep-btn")) {
+          epGrid.innerHTML = `<p class="ep-grid-status">Could not load episodes.</p>`;
+        }
         showDataError("Something went wrong while loading this episode.", () => startWatch());
       }
     })();

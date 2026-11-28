@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import http from "node:http";
 import { fileURLToPath } from "node:url";
+import vm from "node:vm";
 /* Self-contained test database: a temporary seeded + enriched DB (see
    setup-db.js). `npm test` needs no manual seed/metadata steps and never
    touches the live database. */
@@ -4072,6 +4073,414 @@ async function runTests() {
         /@media\s*\(max-width:\s*480px\)[\s\S]*?\.trending-nav\s*\{[^}]*position:\s*static;/m.test(css),
         "mobile <=480px carousel nav must un-float (position: static) so arrows do not overlap cards"
       );
+    });
+
+    await test("Watch page live title (?live=180523&ep=1): first load succeeds, 12 episodes render, Vidstream-3 probes on load, Zoko URL & TVplus auto-fallback work", async () => {
+      const watchBootPath = fileURLToPath(new URL("../../ani-verse/js/watch-boot.js", import.meta.url));
+      const watchBootSrc = readFileSync(watchBootPath, "utf8");
+      const zoroJsSrc = readFileSync(ZORO_JS_PATH, "utf8");
+
+      // Sanity check: no stray undeclared wlBtn reference remains in zoro-aizen.js
+      assert.ok(!/\bwlBtn\b/.test(zoroJsSrc), "zoro-aizen.js must not reference removed wlBtn variable");
+
+      // Set up Vidstream-3 stub returning available=true for tmdbId 280042 (Wild Last Boss)
+      const hindiStub = http.createServer((req, res) => {
+        res.writeHead(200, { "Content-Type": "text/html" });
+        if (req.url === "/embed/280042/1-1") {
+          res.end(`<script>window.CFG={"err":"","dataId":"boss-ep-1"};</script>`);
+          return;
+        }
+        res.end(`<script>window.CFG={"err":"Content not available","dataId":""};</script>`);
+      });
+      await new Promise((resolve) => hindiStub.listen(0, "127.0.0.1", resolve));
+      const hindiPort = hindiStub.address().port;
+      _setHindiOriginsForTests({ blakite: `http://127.0.0.1:${hindiPort}` });
+      clearHindiCaches();
+
+      function createStorage() {
+        const store = new Map();
+        return {
+          getItem: (k) => (store.has(String(k)) ? store.get(String(k)) : null),
+          setItem: (k, v) => store.set(String(k), String(v)),
+          removeItem: (k) => store.delete(String(k)),
+        };
+      }
+
+      function createClassList(el) {
+        const set = new Set();
+        return {
+          add: (...names) => names.forEach((n) => set.add(n)),
+          remove: (...names) => names.forEach((n) => set.delete(n)),
+          toggle: (n, force) => {
+            if (force === undefined) {
+              if (set.has(n)) { set.delete(n); return false; }
+              set.add(n); return true;
+            }
+            if (force) set.add(n); else set.delete(n);
+            return !!force;
+          },
+          contains: (n) => set.has(n),
+          _set: set,
+        };
+      }
+
+      function runWatchHarness({ zokoHealthy = true, liveFailuresBeforeOk = 0 } = {}) {
+        const timers = [];
+        const intervals = [];
+        const byId = new Map();
+        const docListeners = new Map();
+        const winListeners = new Map();
+
+        function makeEl(tag, id = "", attrs = {}) {
+          const el = {
+            tagName: String(tag || "DIV").toUpperCase(),
+            id,
+            textContent: "",
+            _innerHTML: "",
+            hidden: false,
+            disabled: false,
+            checked: attrs.checked ?? false,
+            value: "",
+            style: {},
+            dataset: Object.assign({}, attrs.dataset || {}),
+            attributes: new Map(),
+            children: [],
+            parentNode: null,
+            className: attrs.className || "",
+            _listeners: new Map(),
+            addEventListener(type, fn) {
+              if (!this._listeners.has(type)) this._listeners.set(type, []);
+              this._listeners.get(type).push(fn);
+            },
+            setAttribute(k, v) {
+              this.attributes.set(String(k), String(v));
+              if (k === "id") { this.id = String(v); byId.set(this.id, this); }
+              if (k === "class") this.className = String(v);
+            },
+            getAttribute(k) {
+              if (k === "src") return this.src ?? null;
+              return this.attributes.has(String(k)) ? this.attributes.get(String(k)) : null;
+            },
+            removeAttribute(k) { this.attributes.delete(String(k)); },
+            appendChild(child) {
+              child.parentNode = this;
+              this.children.push(child);
+              return child;
+            },
+            replaceChild(next, prev) {
+              next.parentNode = this;
+              const idx = this.children.indexOf(prev);
+              if (idx >= 0) this.children[idx] = next;
+              if (prev.id && byId.get(prev.id) === prev) byId.set(prev.id, next);
+              return prev;
+            },
+            closest() { return null; },
+            focus() {},
+            scrollIntoView() {},
+            querySelector(sel) { return this.querySelectorAll(sel)[0] || null; },
+            querySelectorAll(sel) {
+              const out = [];
+              const visit = (node) => {
+                for (const c of node.children || []) {
+                  if (sel.startsWith(".") && c.className && c.className.split(/\s+/).includes(sel.slice(1))) {
+                    out.push(c);
+                  } else if (sel === "input[data-setting]" && c.tagName === "INPUT" && c.dataset.setting) {
+                    out.push(c);
+                  } else if (sel.startsWith("#") && c.id === sel.slice(1)) {
+                    out.push(c);
+                  }
+                  visit(c);
+                }
+              };
+              visit(this);
+              if (sel.startsWith("#") && out.length === 0) {
+                const target = byId.get(sel.slice(1));
+                if (target) out.push(target);
+              }
+              return out;
+            },
+          };
+          el.classList = createClassList(el);
+          if (attrs.className) attrs.className.split(/\s+/).filter(Boolean).forEach((c) => el.classList.add(c));
+          Object.defineProperty(el, "innerHTML", {
+            get() { return this._innerHTML; },
+            set(val) {
+              this._innerHTML = String(val || "");
+              this.children = [];
+              const btnRe = /<button\b([^>]*)>([\s\S]*?)<\/button>/g;
+              let m;
+              while ((m = btnRe.exec(this._innerHTML)) !== null) {
+                const attrStr = m[1] || "";
+                const cls = (attrStr.match(/class="([^"]*)"/) || [])[1] || "";
+                const btnId = (attrStr.match(/id="([^"]*)"/) || [])[1] || "";
+                const epMatch = attrStr.match(/data-ep="([^"]*)"/);
+                const btn = makeEl("button", btnId, {
+                  className: cls,
+                  dataset: epMatch ? { ep: epMatch[1] } : {},
+                });
+                btn.textContent = m[2].replace(/<[^>]+>/g, " ").trim();
+                this.appendChild(btn);
+              }
+            },
+          });
+          if (id) byId.set(id, el);
+          return el;
+        }
+
+        const body = makeEl("body");
+        const stage = makeEl("div", "zoro-video-stage");
+        const playerWrap = makeEl("div", "player-wrap");
+        const iframe = makeEl("iframe", "zoko-embed-frame");
+        iframe.src = "about:blank";
+        playerWrap.appendChild(iframe);
+        const coverOverlay = makeEl("div", "video-cover-overlay");
+        const bigPlay = makeEl("button", "", { className: "player-big-play" });
+        const coverBadge = makeEl("div", "player-cover-badge");
+        coverOverlay.appendChild(bigPlay);
+        coverOverlay.appendChild(coverBadge);
+        const spinner = makeEl("div", "zoko-player-spinner"); spinner.hidden = true;
+        const overlay = makeEl("div", "zoko-player-overlay"); overlay.hidden = true;
+        makeEl("h3", "zoko-overlay-title");
+        makeEl("p", "zoko-overlay-text");
+        makeEl("button", "zoko-overlay-action");
+        makeEl("div", "zoko-resume-note").hidden = true;
+
+        const dataError = makeEl("div", "watch-data-error"); dataError.hidden = true;
+        makeEl("span", "watch-data-error-text");
+        makeEl("button", "watch-data-error-retry");
+        makeEl("span", "watch-anime-title");
+        makeEl("h1", "watch-anime-title-h1");
+        makeEl("p", "watch-ep-subtitle");
+        makeEl("p", "watch-anime-desc");
+        makeEl("div", "watch-anime-badges").hidden = true;
+        makeEl("div", "zoro-episodes-grid");
+        const rangeTabs = makeEl("div", "", { className: "ep-range-tabs" });
+        makeEl("input", "ep-search-input");
+        makeEl("button", "btn-prev-ep");
+        makeEl("button", "btn-next-ep");
+        makeEl("span", "track-label");
+        makeEl("div", "zoko-fallback-note").hidden = true;
+        makeEl("div", "zoko-toasts");
+        makeEl("div", "watch-discussion");
+        makeEl("div", "detail-recommendations");
+        makeEl("section", "watch-recommendations-section").hidden = true;
+        makeEl("a", "watch-detail-link");
+        for (const id of [
+          "watch-detail-status", "watch-detail-studios", "watch-detail-aired",
+          "watch-detail-season", "watch-detail-season-row", "watch-detail-year",
+          "watch-detail-score", "watch-detail-episodes", "watch-detail-duration",
+          "watch-detail-next", "watch-detail-next-row",
+        ]) makeEl("span", id);
+
+        const serverSwitcher = makeEl("div", "zoko-server-switcher");
+        const zokoPill = makeEl("button", "", { className: "server-pill active", dataset: { server: "zoko" } });
+        const backupPill = makeEl("button", "", { className: "server-pill", dataset: { server: "backup" } });
+        const vidstream3Pill = makeEl("button", "", { className: "server-pill", dataset: { server: "vidstream3" } });
+        vidstream3Pill.hidden = true;
+        serverSwitcher.appendChild(zokoPill);
+        serverSwitcher.appendChild(backupPill);
+        serverSwitcher.appendChild(vidstream3Pill);
+
+        const trackSwitcher = makeEl("div", "zoko-track-switcher");
+        trackSwitcher.appendChild(makeEl("button", "", { className: "server-pill active", dataset: { track: "sub" } }));
+        trackSwitcher.appendChild(makeEl("button", "", { className: "server-pill", dataset: { track: "hsub" } }));
+        trackSwitcher.appendChild(makeEl("button", "", { className: "server-pill", dataset: { track: "dub" } }));
+
+        const settingToggles = makeEl("div", "zoko-setting-toggles");
+        for (const key of ["autoplay", "autoskip", "autonext"]) {
+          settingToggles.appendChild(makeEl("input", "", { checked: true, dataset: { setting: key } }));
+        }
+
+        const document = {
+          body,
+          documentElement: makeEl("html"),
+          visibilityState: "visible",
+          activeElement: null,
+          fullscreenElement: null,
+          fullscreenEnabled: true,
+          getElementById: (id) => byId.get(id) || null,
+          querySelector: (sel) => {
+            if (sel === ".ep-range-tabs") return rangeTabs;
+            if (sel === ".player-big-play") return bigPlay;
+            if (sel.startsWith("#")) return byId.get(sel.slice(1)) || null;
+            return null;
+          },
+          querySelectorAll: (sel) => {
+            if (sel === "#zoro-episodes-grid .ep-btn") return byId.get("zoro-episodes-grid").querySelectorAll(".ep-btn");
+            return [];
+          },
+          createElement: (tag) => makeEl(tag),
+          dispatchEvent: () => true,
+          addEventListener(type, fn) {
+            if (!docListeners.has(type)) docListeners.set(type, []);
+            docListeners.get(type).push(fn);
+          },
+        };
+
+        let liveCalls = 0;
+        let vidstream3ProbeCalls = 0;
+        const zokoProbeUrls = [];
+
+        const windowObj = {
+          location: { search: "?live=180523&ep=1", href: "https://aniflick.duckdns.org/watch.html?live=180523&ep=1", origin: "https://aniflick.duckdns.org" },
+          history: { replaceState: () => {} },
+          outerWidth: 1280, innerWidth: 1280, outerHeight: 800, innerHeight: 800,
+          scrollY: 0,
+          matchMedia: () => ({ matches: false }),
+          dispatchEvent: () => true,
+          addEventListener(type, fn) {
+            if (!winListeners.has(type)) winListeners.set(type, []);
+            winListeners.get(type).push(fn);
+          },
+        };
+        windowObj.document = document;
+        windowObj.localStorage = createStorage();
+        windowObj.sessionStorage = createStorage();
+        windowObj.localStorage.setItem("aizen_intro_seen", "1");
+
+        const sandboxFetch = async (input, init) => {
+          const url = typeof input === "string" ? input : input.url;
+          if (url.startsWith("https://zokoanime.video/")) {
+            zokoProbeUrls.push(url);
+            if (!zokoHealthy) {
+              throw new TypeError("Failed to fetch (ERR_INVALID_RESPONSE)");
+            }
+            return new Response("", { status: 200 });
+          }
+          if (url.startsWith("/")) {
+            if (url.startsWith("/api/live/")) {
+              liveCalls++;
+              if (liveCalls <= liveFailuresBeforeOk) {
+                return jsonResponse({ ok: false, error: "search_busy" }, 502);
+              }
+            }
+            if (url.startsWith("/api/hindi/vidstream3")) {
+              vidstream3ProbeCalls++;
+            }
+            return realFetch(`${baseUrl}${url}`, init);
+          }
+          return realFetch(input, init);
+        };
+
+        const context = {
+          window: windowObj,
+          self: windowObj,
+          document,
+          location: windowObj.location,
+          navigator: { maxTouchPoints: 0 },
+          localStorage: windowObj.localStorage,
+          sessionStorage: windowObj.sessionStorage,
+          URLSearchParams,
+          URL,
+          AbortController,
+          CustomEvent: typeof CustomEvent !== "undefined" ? CustomEvent : function CustomEvent(t, d) { return { type: t, detail: d && d.detail }; },
+          Event: typeof Event !== "undefined" ? Event : function Event(t) { return { type: t }; },
+          fetch: sandboxFetch,
+          console,
+          Math, Number, String, Boolean, Array, Object, Map, Set, Date, JSON, Promise, RegExp, Error,
+          encodeURIComponent, decodeURIComponent, parseInt, parseFloat, isNaN, isFinite,
+          setTimeout: (fn, ms) => { const t = setTimeout(fn, ms); timers.push(t); return t; },
+          clearTimeout: (t) => clearTimeout(t),
+          setInterval: (fn, ms) => { const iv = setInterval(fn, ms); intervals.push(iv); return iv; },
+          clearInterval: (iv) => clearInterval(iv),
+        };
+        windowObj.window = windowObj;
+
+        vm.runInNewContext(watchBootSrc, context, { filename: "watch-boot.js" });
+        vm.runInNewContext(zoroJsSrc, context, { filename: "zoro-aizen.js" });
+
+        return {
+          byId,
+          zokoPill,
+          backupPill,
+          vidstream3Pill,
+          rangeTabs,
+          zokoProbeUrls,
+          getLiveCalls: () => liveCalls,
+          getVidstream3ProbeCalls: () => vidstream3ProbeCalls,
+          triggerDomContentLoaded: async () => {
+            for (const fn of docListeners.get("DOMContentLoaded") || []) {
+              fn();
+            }
+            // Allow async initWatchPage + probeVidstream3 + fallback switches to settle
+            for (let i = 0; i < 15; i++) {
+              await new Promise((r) => setTimeout(r, 35));
+            }
+          },
+          cleanup: () => {
+            timers.forEach((t) => clearTimeout(t));
+            intervals.forEach((iv) => clearInterval(iv));
+          },
+        };
+      }
+
+      try {
+        mockAniList({
+          mediaById: {
+            180523: fakeMedia({
+              id: 180523,
+              idMal: 59644,
+              title: { english: "A Wild Last Boss Appeared!", romaji: "Yasei no Last Boss ga Arawareta!" },
+              episodes: 12,
+              duration: 23,
+              format: "ONA",
+              status: "FINISHED",
+              nextAiringEpisode: null,
+              externalLinks: [{ id: 1, site: "TMDB", type: "TV", url: "https://www.themoviedb.org/tv/280042" }],
+            }),
+          },
+        });
+
+        // Case A: First load with transient 502 -> retries automatically, no first-load error,
+        // 12 episodes render, Vidstream-3 button visible on load, Zoko URL uses MAL 59644.
+        const healthyRun = runWatchHarness({ zokoHealthy: true, liveFailuresBeforeOk: 1 });
+        try {
+          await healthyRun.triggerDomContentLoaded();
+          assert.equal(healthyRun.byId.get("watch-data-error").hidden, true, "first load must not show watch-data-error");
+          assert.equal(healthyRun.byId.get("watch-anime-title-h1").textContent, "A Wild Last Boss Appeared!");
+          assert.ok(healthyRun.getLiveCalls() >= 2, "transient 502 on /api/live/:id is retried automatically");
+
+          const epGrid = healthyRun.byId.get("zoro-episodes-grid");
+          const epBtns = epGrid.querySelectorAll(".ep-btn");
+          assert.equal(epBtns.length, 12, "live title episode list must render all 12 episodes");
+          assert.ok(healthyRun.rangeTabs.innerHTML.includes("001 - 012"), "range tab reflects 12 episodes");
+          assert.ok(epBtns[0].className.includes("active"), "episode 1 button is active");
+          assert.ok(!epGrid.innerHTML.includes("Loading episodes"), "episode grid must not stay stuck on Loading episodes");
+
+          assert.ok(healthyRun.getVidstream3ProbeCalls() >= 1, "Vidstream-3 availability is probed automatically on title load");
+          assert.equal(healthyRun.vidstream3Pill.hidden, false, "Vidstream-3 (Hindi) button is visible on load without clicking Play");
+          assert.ok(healthyRun.byId.get("watch-anime-badges").innerHTML.includes("Multi Audio"), "Multi Audio badge renders on load");
+
+          const frame = healthyRun.byId.get("zoko-embed-frame");
+          assert.ok(
+            frame.src.startsWith("https://zokoanime.video/stream/mal/59644/1/sub?"),
+            `Zoko URL for live title must use MAL id 59644, got: ${frame.src}`
+          );
+        } finally {
+          healthyRun.cleanup();
+        }
+
+        // Case B: Zoko outage (fetch rejects like ERR_INVALID_RESPONSE) -> automatically falls back to TVplus
+        const outageRun = runWatchHarness({ zokoHealthy: false, liveFailuresBeforeOk: 0 });
+        try {
+          await outageRun.triggerDomContentLoaded();
+          assert.equal(outageRun.byId.get("watch-data-error").hidden, true);
+          const frame = outageRun.byId.get("zoko-embed-frame");
+          assert.ok(
+            frame.src.startsWith("https://embed.animetvplus.site/home/embed/mal/59644/1?"),
+            `when Zoko fails, player must auto-switch to TVplus, got: ${frame.src}`
+          );
+          assert.equal(outageRun.backupPill.classList.contains("active"), true, "TVplus pill becomes active on fallback");
+          assert.equal(outageRun.byId.get("zoko-fallback-note").hidden, false, "fallback notice is shown with Back to Zoko option");
+          assert.equal(outageRun.vidstream3Pill.hidden, false, "Vidstream-3 stays visible after TVplus fallback");
+        } finally {
+          outageRun.cleanup();
+        }
+      } finally {
+        _setHindiOriginsForTests();
+        clearHindiCaches();
+        hindiStub.close();
+      }
     });
 
     console.log(`\nAll ${passed} E2E integration tests passed successfully!\n`);
