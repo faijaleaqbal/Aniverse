@@ -6,12 +6,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Browse Anime - AniFlick (Zoro UI × Aizen Motion)</title>
   <meta name="description" content="Browse full anime catalog with genre filters, ratings, and instant streaming on AniFlick.">
-  <noscript></noscript>
-  <link rel="preload" href="css/zoro-aizen.css?v=24" as="style">
-  <link rel="preload" href="js/zoro-aizen.js?v=26" as="script">
+  <link rel="preload" href="css/zoro-aizen.css?v=25" as="style">
+  <link rel="preload" href="js/zoro-aizen.js?v=27" as="script">
   <script src="/js/boot.js?v=1"></script>
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
-  <link rel="stylesheet" href="css/zoro-aizen.css?v=24">
+  <link rel="stylesheet" href="css/zoro-aizen.css?v=25">
 </head>
 <body>
 
@@ -42,6 +41,7 @@
         <a class="nav-link" href="browse.html?view=top-airing">Top Airing</a>
         <a class="nav-link" href="browse.html?view=top-upcoming">Top Upcoming</a>
         <a class="nav-link" href="az-list.html">A-Z List</a>
+        <a class="nav-link" href="/login">Sign In</a>
       </nav>
 
       <div class="search-wrapper">
@@ -92,35 +92,18 @@
       <div class="live-filter-row live-filter-row-flush" id="live-filter-row">
         <div class="live-filter-group">
           <label for="catalog-sort-select">Sort</label>
-          <select id="catalog-sort-select" class="sort-select-zoro" aria-label="Sort Anime Catalog">
-            <option value="trending">Trending</option>
-            <option value="popular">Most Popular</option>
-            <option value="top">Top Rated</option>
-            <option value="newest">Newest</option>
-            <option value="az">Name A-Z</option>
-            <option value="episodes">Most Episodes</option>
-            <option value="updated">Recently Updated</option>
-            <option value="favourites">Most Favourited</option>
-          </select>
+          <select id="catalog-sort-select" class="sort-select-zoro" aria-label="Sort Anime Catalog"></select>
         </div>
         <div class="live-filter-group">
           <label for="browse-format-select">Format</label>
           <select id="browse-format-select" class="sort-select-zoro" aria-label="Filter by format">
             <option value="">All formats</option>
-            <option value="TV">TV</option>
-            <option value="MOVIE">Movie</option>
-            <option value="OVA">OVA</option>
-            <option value="ONA">ONA</option>
-            <option value="SPECIAL">Special</option>
           </select>
         </div>
         <div class="live-filter-group">
           <label for="browse-status-select">Status</label>
           <select id="browse-status-select" class="sort-select-zoro" aria-label="Filter by status">
             <option value="">All statuses</option>
-            <option value="RELEASING">Airing</option>
-            <option value="FINISHED">Finished</option>
-            <option value="NOT_YET_RELEASED">Upcoming</option>
           </select>
         </div>
         <div class="live-filter-group">
@@ -144,21 +127,12 @@
             <label for="browse-score-select">Score</label>
             <select id="browse-score-select" class="sort-select-zoro" aria-label="Filter by score">
               <option value="">Any score</option>
-              <option value="90">90+</option>
-              <option value="80">80+</option>
-              <option value="70">70+</option>
-              <option value="60">60+</option>
-              <option value="50">50+</option>
             </select>
           </div>
           <div class="filters-field">
             <label for="browse-season-select">Season</label>
             <select id="browse-season-select" class="sort-select-zoro" aria-label="Filter by season">
               <option value="">All seasons</option>
-              <option value="WINTER">Winter</option>
-              <option value="SPRING">Spring</option>
-              <option value="SUMMER">Summer</option>
-              <option value="FALL">Fall</option>
             </select>
           </div>
           <div class="filters-field">
@@ -199,7 +173,7 @@
     <!-- Catalog notice -->
     <div id="browse-notice"></div>
 
-    <script src="js/browse-boot.js?v=1"></script>
+    <script src="js/browse-boot.js?v=2"></script>
 
     <!-- Zoro Card Grid with Hover Tooltip System -->
     <div id="browse-results"></div>
@@ -246,6 +220,6 @@
     </div>
   </footer>
 
-  <script src="js/zoro-aizen.js?v=26"></script>
+  <script src="js/zoro-aizen.js?v=27"></script>
 </body>
 </html>

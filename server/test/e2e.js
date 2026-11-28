@@ -3499,6 +3499,135 @@ async function runTests() {
       db.prepare("DELETE FROM users WHERE email = ?").run(email);
     });
 
+    // 97. Login page route, strict CSP with Turnstile script/frame origins,
+    //     and header Sign In link across pages.
+    await test("GET /login serves the login page with strict CSP and nav links", async () => {
+      const res = await fetch(`${baseUrl}/login`);
+      assert.equal(res.status, 200);
+      const html = await res.text();
+      assert.ok(html.includes("<title>Sign In - AniFlick</title>"), "login page has expected title");
+      assert.ok(!/<style[\s>]/i.test(html), "login page must have zero inline style tags");
+      assert.ok(!/<script(?![^>]*\bsrc=)/i.test(html), "login page must have zero inline script tags");
+      assert.ok(!/\sstyle="/i.test(html), "login page must have zero inline style attributes");
+
+      const csp = res.headers.get("content-security-policy") || "";
+      assert.ok(csp.includes("script-src 'self' https://challenges.cloudflare.com"), "script-src allows Turnstile");
+      assert.ok(csp.includes("frame-src 'self' https://zokoanime.video https://embed.animetvplus.site https://challenges.cloudflare.com"), "frame-src allows Turnstile");
+      assert.ok(csp.includes("style-src 'self'"), "style-src remains strict 'self'");
+      assert.ok(!csp.includes("'unsafe-inline'"), "CSP never reintroduces unsafe-inline");
+      assert.equal(res.headers.get("cache-control"), "no-cache, no-store, must-revalidate");
+
+      const pagesDir = fileURLToPath(new URL("../../ani-verse", import.meta.url));
+      const pages = ["index.html", "browse.html", "detail.html", "genres.html", "schedule.html", "watch.html", "az-list.html"];
+      for (const page of pages) {
+        const pageHtml = readFileSync(`${pagesDir}/${page}`, "utf8");
+        assert.ok(pageHtml.includes('href="/login">Sign In</a>'), `${page} links /login in header nav`);
+      }
+    });
+
+    // 98. GET /api/auth/turnstile-key reflects TURNSTILE_SITE_KEY dynamically.
+    await test("Turnstile: GET /api/auth/turnstile-key reports enabled state from env", async () => {
+      const prev = process.env.TURNSTILE_SITE_KEY;
+      try {
+        delete process.env.TURNSTILE_SITE_KEY;
+        const disabledRes = await fetch(`${baseUrl}/api/auth/turnstile-key`);
+        assert.equal(disabledRes.status, 200);
+        assert.deepEqual(await disabledRes.json(), { enabled: false });
+
+        process.env.TURNSTILE_SITE_KEY = "1x00000000000000000000AA";
+        const enabledRes = await fetch(`${baseUrl}/api/auth/turnstile-key`);
+        assert.equal(enabledRes.status, 200);
+        assert.deepEqual(await enabledRes.json(), {
+          enabled: true,
+          siteKey: "1x00000000000000000000AA",
+        });
+      } finally {
+        if (prev === undefined) delete process.env.TURNSTILE_SITE_KEY;
+        else process.env.TURNSTILE_SITE_KEY = prev;
+      }
+    });
+
+    // 99. Turnstile server verification enforces token when TURNSTILE_SECRET_KEY is set.
+    await test("Turnstile: login and register enforce siteverify when TURNSTILE_SECRET_KEY is set", async () => {
+      const prevSecret = process.env.TURNSTILE_SECRET_KEY;
+      const currentFetch = globalThis.fetch;
+      const verifyCalls = [];
+      let verifySuccess = false;
+
+      globalThis.fetch = async (input, init) => {
+        const url = typeof input === "string" ? input : input.url;
+        if (url === "https://challenges.cloudflare.com/turnstile/v0/siteverify") {
+          verifyCalls.push(JSON.parse(init.body));
+          return new Response(JSON.stringify({ success: verifySuccess }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        return currentFetch(input, init);
+      };
+
+      const stamp = Date.now();
+      const email = `turnstile-${stamp}@example.com`;
+      try {
+        process.env.TURNSTILE_SECRET_KEY = "test-secret-do-not-use";
+
+        // Missing token -> 403 before DB work
+        const missingReg = await postJson(
+          "/api/auth/register",
+          { email, password: "password123", name: "Bot Check" },
+          "198.51.100.210"
+        );
+        assert.equal(missingReg.status, 403);
+        const missingBody = await missingReg.json();
+        assert.equal(missingBody.error.message, "Bot verification failed. Please try again.");
+        assert.equal(verifyCalls.length, 0, "missing token rejects before calling siteverify");
+
+        // Invalid token -> siteverify returns false -> 403
+        verifySuccess = false;
+        const badReg = await postJson(
+          "/api/auth/register",
+          { email, password: "password123", name: "Bot Check", "cf-turnstile-response": "bad-tok" },
+          "198.51.100.210"
+        );
+        assert.equal(badReg.status, 403);
+        assert.equal(verifyCalls.length, 1);
+        assert.equal(verifyCalls[0].secret, "test-secret-do-not-use");
+        assert.equal(verifyCalls[0].response, "bad-tok");
+
+        // Valid token -> siteverify returns true -> register succeeds (201)
+        verifySuccess = true;
+        const goodReg = await postJson(
+          "/api/auth/register",
+          { email, password: "password123", name: "Human User", "cf-turnstile-response": "good-tok" },
+          "198.51.100.210"
+        );
+        assert.equal(goodReg.status, 201);
+
+        // Login with bad token -> 403
+        verifySuccess = false;
+        const badLogin = await postJson(
+          "/api/auth/login",
+          { email, password: "password123", "cf-turnstile-response": "bad-login-tok" },
+          "198.51.100.211"
+        );
+        assert.equal(badLogin.status, 403);
+
+        // Login with valid token -> 200
+        verifySuccess = true;
+        const goodLogin = await postJson(
+          "/api/auth/login",
+          { email, password: "password123", "cf-turnstile-response": "good-login-tok" },
+          "198.51.100.211"
+        );
+        assert.equal(goodLogin.status, 200);
+      } finally {
+        globalThis.fetch = currentFetch;
+        if (prevSecret === undefined) delete process.env.TURNSTILE_SECRET_KEY;
+        else process.env.TURNSTILE_SECRET_KEY = prevSecret;
+        db.prepare("DELETE FROM users WHERE email = ?").run(email);
+      }
+    });
+
     console.log(`\nAll ${passed} E2E integration tests passed successfully!\n`);
   } finally {
     if (server) {

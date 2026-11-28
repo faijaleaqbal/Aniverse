@@ -2615,6 +2615,10 @@ body.drawer-open .zoro-header {
   color: var(--zoro-lime);
 }
 
+.mobile-drawer-link[hidden] {
+  display: none;
+}
+
 /* ==========================================================================
    GENRES SHELF STYLES
    ========================================================================== */

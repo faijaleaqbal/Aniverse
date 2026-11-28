@@ -82,6 +82,7 @@ import {
   userView,
   titleView,
 } from "./utils.js";
+import { getTurnstileSiteKey, verifyTurnstile } from "./turnstile.js";
 
 const app = express();
 
@@ -91,11 +92,11 @@ app.set("trust proxy", TRUST_PROXY);
 
 const CSP_HEADER = [
   "default-src 'self'",
-  "script-src 'self'",
+  "script-src 'self' https://challenges.cloudflare.com",
   "style-src 'self'",
   "font-src 'self'",
   "img-src 'self' data: https://s4.anilist.co",
-  "frame-src 'self' https://zokoanime.video https://embed.animetvplus.site",
+  "frame-src 'self' https://zokoanime.video https://embed.animetvplus.site https://challenges.cloudflare.com",
   "frame-ancestors 'self'",
   "connect-src 'self' https://zokoanime.video",
   "object-src 'none'",
@@ -247,11 +248,24 @@ function requireAuth(req, res, next) {
    AUTH ROUTES
    ========================================================================== */
 
+app.get("/api/auth/turnstile-key", (req, res) => {
+  const siteKey = getTurnstileSiteKey();
+  if (!siteKey) {
+    return res.json({ enabled: false });
+  }
+  res.json({ enabled: true, siteKey });
+});
+
 app.post("/api/auth/register", async (req, res, next) => {
   try {
+    const ip = clientIp(req);
+    await verifyTurnstile({
+      token: req.body && req.body["cf-turnstile-response"],
+      remoteip: ip,
+    });
+
     /* 5 registration attempts per IP per hour — counted before any work so
        a flood cannot burn password hashing. */
-    const ip = clientIp(req);
     const rl = registerLimiter.check(`ip:${ip}`);
     if (!rl.allowed) {
       throw tooManyRequests(
@@ -307,11 +321,16 @@ app.post("/api/auth/register", async (req, res, next) => {
 
 app.post("/api/auth/login", async (req, res, next) => {
   try {
+    const ip = clientIp(req);
+    await verifyTurnstile({
+      token: req.body && req.body["cf-turnstile-response"],
+      remoteip: ip,
+    });
+
     /* 5 attempts per 15 minutes, per IP AND per account — whichever trips
        first. Counted before the credential check so a spray is throttled
        even when every guess is wrong. */
     const email = normalizeEmail(req.body.email);
-    const ip = clientIp(req);
     const ipCheck = loginIpLimiter.check(`ip:${ip}`);
     const accountCheck = loginAccountLimiter.check(`acct:${email}`);
     if (!ipCheck.allowed || !accountCheck.allowed) {
@@ -1623,6 +1642,7 @@ const NAMED_PAGES = {
   dmca: "dmca.html",
   about: "about.html",
   contact: "contact.html",
+  login: "login.html",
   /* Password-reset landing page (magic-link target). The token is NOT
      validated on GET — the page is static; the POST endpoint validates. */
   "reset-password": "reset-password.html",

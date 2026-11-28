@@ -739,6 +739,7 @@
             <a class="mobile-drawer-link" href="browse.html?view=top-airing&sort=newest">⭐ Top Airing</a>
             <a class="mobile-drawer-link" href="browse.html?view=top-upcoming&sort=popular">📅 Top Upcoming</a>
             <a class="mobile-drawer-link" href="az-list.html">🔤 A-Z List</a>
+            <a class="mobile-drawer-link" href="/login">🔐 Sign In</a>
           </nav>
         </div>
       `;
@@ -922,13 +923,16 @@
   }
 
   function openAuthModal(tab = "login") {
-    renderAuthModal();
-    const modal = document.querySelector(".aizen-modal-backdrop");
-    if (modal) {
-      modal.classList.add("is-active");
-      const tabBtn = modal.querySelector(`.modal-tab-btn[data-tab="${tab}"]`);
-      if (tabBtn) tabBtn.click();
+    const currentPath = window.location.pathname + window.location.search;
+    const params = new URLSearchParams();
+    if (currentPath && currentPath !== "/" && !currentPath.startsWith("/login")) {
+      params.set("next", currentPath);
     }
+    if (tab === "register") {
+      params.set("mode", "register");
+    }
+    const qs = params.toString();
+    window.location.assign(qs ? `/login?${qs}` : "/login");
   }
 
   let socialProvidersCache = null;
@@ -953,6 +957,9 @@
 
   function updateHeaderUser() {
     const slot = document.getElementById("header-user-slot");
+    document.querySelectorAll('.header-nav a[href="/login"], .mobile-drawer-nav a[href="/login"]').forEach((a) => {
+      a.hidden = Boolean(currentUser);
+    });
     if (!slot) return;
     slot.removeAttribute("aria-busy");
 
@@ -1066,15 +1073,17 @@
     } else {
       if (slot._outsideHandler) document.removeEventListener("click", slot._outsideHandler);
       if (slot._escapeHandler) document.removeEventListener("keydown", slot._escapeHandler);
+      const currentPath = window.location.pathname + window.location.search;
+      const loginHref = currentPath && currentPath !== "/" && !currentPath.startsWith("/login")
+        ? `/login?next=${encodeURIComponent(currentPath)}`
+        : "/login";
       slot.innerHTML = `
-        <button class="btn-zoro-primary" id="btn-open-signin" type="button">Sign In</button>
+        <a class="btn-zoro-primary btn-signin-link" id="btn-open-signin" href="${loginHref}">Sign In</a>
       `;
-      slot.querySelector("#btn-open-signin").addEventListener("click", () => openAuthModal("login"));
     }
   }
 
   async function checkAuthSession() {
-    renderAuthModal();
     const res = await api("/api/auth/me");
     if (res.ok && res.data && res.data.user) {
       currentUser = res.data.user;
