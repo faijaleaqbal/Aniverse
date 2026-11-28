@@ -726,9 +726,8 @@
       backdrop.innerHTML = `
         <div class="mobile-nav-drawer">
           <div class="mobile-drawer-header">
-            <a class="zoro-brand" href="index.html">
-              <img class="zoro-brand-icon" src="/img/aniflick-icon.png" alt="">
-              <span>Ani<span class="verse">Flick</span></span>
+            <a class="zoro-brand" href="/">
+              <img class="aniflick-logo-img" src="/images/aniflick-logo.png" alt="AniFlick">
             </a>
             <button class="mobile-drawer-close" type="button" aria-label="Close Menu">&times;</button>
           </div>

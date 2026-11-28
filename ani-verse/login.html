@@ -6,16 +6,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Sign In - AniFlick</title>
   <meta name="description" content="Sign in or create an AniFlick account to save your watchlist and track watch progress.">
-  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-  <link rel="stylesheet" href="/css/login.css?v=1">
+  <link rel="icon" type="image/png" href="/images/favicon.png">
+  <link rel="stylesheet" href="/css/login.css?v=2">
 </head>
 <body class="login-page">
-  <div class="porcelain-ambient" aria-hidden="true"></div>
+  <div class="aniflick-ambient" aria-hidden="true"></div>
 
   <header class="login-topbar">
     <a class="login-brand" href="/">
-      <img class="login-brand-icon" src="/img/aniflick-icon.png" alt="">
-      <span>Ani<span class="login-brand-accent">Flick</span></span>
+      <img class="login-brand-logo" src="/images/aniflick-logo.png" alt="AniFlick">
     </a>
     <a class="login-back-link" href="/">&larr; Back to AniFlick</a>
   </header>
@@ -30,24 +29,23 @@
     </div>
 
     <section class="auth-card" id="auth-card" aria-label="Account authentication">
-      <!-- Mobile-only emerald diagonal header -->
-      <div class="mobile-accent-head">
-        <p class="mobile-accent-kicker">AniFlick Account</p>
-        <h2 class="mobile-accent-title" id="mobile-accent-title">Welcome Back</h2>
-        <p class="mobile-accent-sub" id="mobile-accent-sub">Sign in to continue watching and sync your list.</p>
+      <!-- Mobile-only dark header with mode tabs -->
+      <div class="mobile-auth-head">
+        <p class="mobile-auth-kicker">AniFlick Account</p>
+        <h2 class="mobile-auth-title" id="mobile-accent-title">Welcome Back</h2>
+        <p class="mobile-auth-sub" id="mobile-accent-sub">Sign in to continue watching and sync your list.</p>
         <div class="mobile-mode-tabs" role="tablist" aria-label="Authentication mode">
           <button class="mobile-mode-tab is-active" id="mobile-tab-signin" type="button" role="tab" aria-selected="true">Sign In</button>
           <button class="mobile-mode-tab" id="mobile-tab-register" type="button" role="tab" aria-selected="false">Register</button>
         </div>
       </div>
 
-      <!-- Sliding green diagonal accent (desktop) -->
-      <div class="accent-stage" aria-hidden="true">
-        <div class="accent-blade-trim"></div>
-        <div class="accent-blade"></div>
+      <!-- Sliding dark spotlight panel (desktop) -->
+      <div class="split-stage" aria-hidden="true">
+        <div class="split-spotlight"></div>
       </div>
 
-      <!-- Overlay prompts sitting on top of the emerald diagonal accent -->
+      <!-- Overlay prompts sitting on top of the sliding dark spotlight panel -->
       <div class="overlay-panel overlay-panel--to-register" id="overlay-to-register">
         <span class="overlay-badge">AniFlick Member</span>
         <h2 class="overlay-title">New Here?</h2>
@@ -66,7 +64,7 @@
       <div class="form-panel form-panel--signin" id="signin-panel">
         <div class="form-panel-inner" id="signin-form-wrap">
           <p class="form-eyebrow">Welcome back</p>
-          <h1 class="gold-heading" id="signin-heading">Sign In</h1>
+          <h1 class="auth-heading" id="signin-heading">Sign In</h1>
           <p class="form-subtitle">Enter your email and password to access your account.</p>
 
           <div class="auth-alert" id="signin-error" role="alert" hidden></div>
@@ -90,7 +88,7 @@
 
             <div id="signin-turnstile" class="turnstile-slot" hidden></div>
 
-            <button class="btn-emerald-submit" id="btn-signin-submit" type="button">Sign In</button>
+            <button class="btn-aniflick-submit" id="btn-signin-submit" type="button">Sign In</button>
           </div>
 
           <div class="social-block" id="signin-social-block" hidden>
@@ -101,7 +99,7 @@
 
         <div class="form-panel-inner forgot-wrap" id="forgot-form-wrap" hidden>
           <p class="form-eyebrow">Account recovery</p>
-          <h2 class="gold-heading" id="forgot-heading">Reset Password</h2>
+          <h2 class="auth-heading" id="forgot-heading">Reset Password</h2>
           <p class="form-subtitle">Enter your email and we will send you a link to choose a new password.</p>
 
           <div class="auth-alert" id="forgot-msg" role="alert" hidden></div>
@@ -111,7 +109,7 @@
               <label class="field-label" for="forgot-email">Email Address</label>
               <input class="field-input" id="forgot-email" name="email" type="email" autocomplete="email" placeholder="you@example.com" required>
             </div>
-            <button class="btn-emerald-submit" id="btn-forgot-submit" type="button">Send Reset Link</button>
+            <button class="btn-aniflick-submit" id="btn-forgot-submit" type="button">Send Reset Link</button>
           </div>
 
           <button class="text-link-btn back-signin-btn" id="btn-forgot-back" type="button">&larr; Back to sign in</button>
@@ -122,7 +120,7 @@
       <div class="form-panel form-panel--register" id="register-panel" aria-hidden="true">
         <div class="form-panel-inner">
           <p class="form-eyebrow">Join AniFlick</p>
-          <h2 class="gold-heading" id="register-heading">Register</h2>
+          <h2 class="auth-heading" id="register-heading">Register</h2>
           <p class="form-subtitle">Create your account in seconds using your email.</p>
 
           <div class="auth-alert" id="register-error" role="alert" hidden></div>
@@ -148,7 +146,7 @@
 
             <div id="register-turnstile" class="turnstile-slot" hidden></div>
 
-            <button class="btn-emerald-submit" id="btn-register-submit" type="button">Create Account</button>
+            <button class="btn-aniflick-submit" id="btn-register-submit" type="button">Create Account</button>
           </div>
 
           <div class="social-block" id="register-social-block" hidden>
@@ -160,6 +158,6 @@
     </section>
   </main>
 
-  <script src="/js/login.js?v=2"></script>
+  <script src="/js/login.js?v=3"></script>
 </body>
 </html>

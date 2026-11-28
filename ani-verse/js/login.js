@@ -342,7 +342,7 @@
         if (!slot) return;
         slot.className = "turnstile-slot cf-turnstile";
         slot.setAttribute("data-sitekey", data.siteKey);
-        slot.setAttribute("data-theme", "light");
+        slot.setAttribute("data-theme", "dark");
         slot.hidden = false;
       });
 
