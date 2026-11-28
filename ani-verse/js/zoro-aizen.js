@@ -729,7 +729,7 @@
     const drawerBtn = document.getElementById("drawer-theme-toggle");
     if (drawerBtn) {
       drawerBtn.setAttribute("aria-pressed", theme === "light" ? "true" : "false");
-      drawerBtn.textContent = theme === "light" ? "🌙 Dark Mode" : "☀️ Light Mode";
+      drawerBtn.textContent = theme === "light" ? "Dark Mode" : "Light Mode";
     }
   }
 
@@ -768,26 +768,26 @@
             <button class="mobile-drawer-close" type="button" aria-label="Close Menu">&times;</button>
           </div>
           <nav class="mobile-drawer-links">
-            <a class="mobile-drawer-link" href="index.html">🏠 Home</a>
-            <a class="mobile-drawer-link" href="browse.html">🔍 Browse Catalog</a>
-            <a class="mobile-drawer-link" href="genres.html">📑 All Genres</a>
-            <a class="mobile-drawer-link" href="schedule.html">📅 Broadcast Schedule</a>
-            <a class="mobile-drawer-link" href="browse.html?view=subbed">📺 Subbed</a>
-            <a class="mobile-drawer-link" href="browse.html?view=dubbed">🔊 Dubbed</a>
-            <a class="mobile-drawer-link" href="browse.html?view=movie">🎬 Movies</a>
-            <a class="mobile-drawer-link" href="browse.html?view=ona">📡 ONAs</a>
-            <a class="mobile-drawer-link" href="browse.html?view=special">✨ Specials</a>
-            <a class="mobile-drawer-link" href="browse.html?genre=action">🔥 Action Anime</a>
-            <a class="mobile-drawer-link" href="browse.html?genre=fantasy">✨ Fantasy & Isekai</a>
-            <a class="mobile-drawer-link" href="browse.html?view=top-airing&sort=newest">⭐ Top Airing</a>
-            <a class="mobile-drawer-link" href="browse.html?view=top-upcoming&sort=popular">📅 Top Upcoming</a>
-            <a class="mobile-drawer-link" href="az-list.html">🔤 A-Z List</a>
-            <a class="mobile-drawer-link" href="/login">🔐 Sign In</a>
+            <a class="mobile-drawer-link" href="index.html">Home</a>
+            <a class="mobile-drawer-link" href="browse.html">Browse Catalog</a>
+            <a class="mobile-drawer-link" href="genres.html">All Genres</a>
+            <a class="mobile-drawer-link" href="schedule.html">Broadcast Schedule</a>
+            <a class="mobile-drawer-link" href="browse.html?view=subbed">Subbed</a>
+            <a class="mobile-drawer-link" href="browse.html?view=dubbed">Dubbed</a>
+            <a class="mobile-drawer-link" href="browse.html?view=movie">Movies</a>
+            <a class="mobile-drawer-link" href="browse.html?view=ona">ONAs</a>
+            <a class="mobile-drawer-link" href="browse.html?view=special">Specials</a>
+            <a class="mobile-drawer-link" href="browse.html?genre=action">Action Anime</a>
+            <a class="mobile-drawer-link" href="browse.html?genre=fantasy">Fantasy & Isekai</a>
+            <a class="mobile-drawer-link" href="browse.html?view=top-airing&sort=newest">Top Airing</a>
+            <a class="mobile-drawer-link" href="browse.html?view=top-upcoming&sort=popular">Top Upcoming</a>
+            <a class="mobile-drawer-link" href="az-list.html">A-Z List</a>
+            <a class="mobile-drawer-link" href="/login">Sign In</a>
           </nav>
           <div class="mobile-drawer-actions">
-            <button class="mobile-drawer-action" id="drawer-search-trigger" type="button">🔍 Search Anime</button>
-            <button class="mobile-drawer-action" id="drawer-random-anime" type="button">🎲 Random Anime</button>
-            <button class="mobile-drawer-action" id="drawer-theme-toggle" type="button" aria-pressed="false">☀️ Light Mode</button>
+            <button class="mobile-drawer-action" id="drawer-search-trigger" type="button">Search Anime</button>
+            <button class="mobile-drawer-action" id="drawer-random-anime" type="button">Random Anime</button>
+            <button class="mobile-drawer-action" id="drawer-theme-toggle" type="button" aria-pressed="false">Light Mode</button>
           </div>
         </div>
       `;
