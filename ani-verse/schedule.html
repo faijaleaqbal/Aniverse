@@ -7,11 +7,11 @@
   <title>Broadcast Schedule - AniFlick (Zoro UI × Aizen Motion)</title>
   <meta name="description" content="Weekly release schedule in Japan Standard Time (JST) for anime simulcasts on AniFlick.">
   <noscript></noscript>
-  <link rel="preload" href="css/zoro-aizen.css?v=23" as="style">
-  <link rel="preload" href="js/zoro-aizen.js?v=25" as="script">
+  <link rel="preload" href="css/zoro-aizen.css?v=24" as="style">
+  <link rel="preload" href="js/zoro-aizen.js?v=26" as="script">
   <script src="/js/boot.js?v=1"></script>
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
-  <link rel="stylesheet" href="css/zoro-aizen.css?v=23">
+  <link rel="stylesheet" href="css/zoro-aizen.css?v=24">
 </head>
 <body>
 
@@ -66,23 +66,23 @@
           <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
         </button>
         <div id="header-user-slot" aria-busy="true">
-          <button class="btn-zoro-primary" type="button" disabled style="opacity: 0.55;">···</button>
+          <button class="btn-zoro-primary btn-auth-loading" type="button" disabled>···</button>
         </div>
       </div>
     </div>
   </header>
 
-  <main class="container-main" style="padding: 3rem 2rem 3rem;">
+  <main class="container-main page-main-genres">
     <!-- Hero / Header -->
     <div class="schedule-hero">
       <div>
-        <div class="hero-tag" style="display: inline-block; font-family: var(--font-mono); font-size: 0.8rem; color: var(--zoro-lime); background: rgba(202, 233, 98, 0.1); border: 1px solid var(--border-active); padding: 0.35rem 0.9rem; border-radius: 20px; margin-bottom: 0.75rem;">
+        <div class="hero-tag schedule-eyebrow">
           // BROADCAST TIMELINE • 放送予定
         </div>
-        <h1 style="font-size: 2.75rem; font-weight: 900; letter-spacing: -0.5px;">
+        <h1 class="schedule-hero-title">
           Weekly <span class="accent">Broadcast Grid</span>
         </h1>
-        <p style="color: var(--text-sub); font-size: 1rem; margin-top: 0.5rem; max-width: 600px;">
+        <p class="schedule-hero-desc">
           Every simulcast release scheduled hour by hour. Japanese audio (SUB) on every title, with English dub (DUB) only where a real dub stream is confirmed.
         </p>
       </div>
@@ -90,7 +90,7 @@
       <!-- Live Tokyo Clock -->
       <div class="schedule-clock-badge">
         <span class="live-dot"></span>
-        <span style="color: var(--text-muted); font-size: 0.8rem; font-weight: 600;">JST (TOKYO):</span>
+        <span class="schedule-clock-label">JST (TOKYO):</span>
         <span id="live-jst-clock">--:--:-- JST</span>
       </div>
     </div>
@@ -136,38 +136,38 @@
     </div>
 
     <!-- Broadcast Note Banner -->
-    <div style="background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 16px; padding: 2.25rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1.5rem;">
-      <div style="max-width: 680px;">
+    <div class="schedule-sync-banner">
+      <div class="schedule-sync-copy">
         <h3 class="surface-title">
           Simulcast Sync Guarantee
         </h3>
-        <p style="color: var(--text-sub); font-size: 0.9rem; line-height: 1.5;">
+        <p class="schedule-sync-desc">
           Episodes are streamed via high-speed CDNs within minutes of Japanese terrestrial television airing. Hit "Remind Me" on any title to pin it to Your Reminders above, with its weekly airing time — saved on this device.
         </p>
       </div>
-      <a class="btn-zoro-secondary" href="browse.html" style="padding: 0.75rem 1.5rem;">
+      <a class="btn-zoro-secondary btn-schedule-explore" href="browse.html">
         Explore Full Catalog
       </a>
     </div>
   </main>
 
   <!-- Zoro Footer with Aizen Cyber Accents -->
-  <footer style="background: var(--bg-darker); border-top: 1px solid var(--border-subtle); padding: 3.5rem 0 2rem;">
+  <footer class="zoro-footer">
     <div class="container-main">
-      <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 2rem; padding-bottom: 2rem; border-bottom: 1px solid rgba(255,255,255,0.06);">
+      <div class="zoro-footer-top">
         <a class="zoro-brand" href="/home">
           <img class="zoro-brand-icon" src="/img/aniflick-icon.png" alt="">
           <span>Ani<span class="verse">Flick</span></span>
         </a>
         <div>
-          <div style="display: flex; gap: 1.5rem; font-size: 0.875rem; color: var(--text-sub); flex-wrap: wrap;">
+          <div class="zoro-footer-links">
             <a href="/home">Home</a>
             <a href="/browse">Catalog</a>
             <a href="/schedule">Schedule</a>
             <a href="/genres">Genres</a>
             <a href="/browse">Watch</a>
           </div>
-          <div style="display: flex; gap: 1.5rem; font-size: 0.875rem; color: var(--text-sub); flex-wrap: wrap; margin-top: 0.75rem;">
+          <div class="zoro-footer-links zoro-footer-links-secondary">
             <a href="/faq">FAQ</a>
             <a href="/about">About</a>
             <a href="/privacy">Privacy</a>
@@ -178,14 +178,14 @@
           </div>
         </div>
       </div>
-      <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; margin-top: 1.5rem; font-size: 0.75rem; color: var(--text-muted);">
+      <div class="zoro-footer-bottom">
         <p>AniFlick does not store any files on its server. Combining Zoro.to UI components with Aizen-Verse cinematic animation engine.</p>
         <p class="footer-engine">ZORO × AIZEN HYBRID ENGINE 2026</p>
       </div>
-      <p style="margin-top: 1.25rem; font-size: 0.75rem; color: var(--text-muted);">© <span class="js-footer-year">2026</span> AniFlick. All rights reserved.</p>
+      <p class="zoro-footer-copy">© <span class="js-footer-year">2026</span> AniFlick. All rights reserved.</p>
     </div>
   </footer>
 
-  <script src="js/zoro-aizen.js?v=25"></script>
+  <script src="js/zoro-aizen.js?v=26"></script>
 </body>
 </html>

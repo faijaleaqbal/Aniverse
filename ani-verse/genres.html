@@ -7,11 +7,11 @@
   <title>Anime Genres - AniFlick (Zoro UI × Aizen Motion)</title>
   <meta name="description" content="Explore 12 curated anime genre shelves on AniFlick. Action, Fantasy, Romance, Mecha, Supernatural, and more.">
   <noscript></noscript>
-  <link rel="preload" href="css/zoro-aizen.css?v=23" as="style">
-  <link rel="preload" href="js/zoro-aizen.js?v=25" as="script">
+  <link rel="preload" href="css/zoro-aizen.css?v=24" as="style">
+  <link rel="preload" href="js/zoro-aizen.js?v=26" as="script">
   <script src="/js/boot.js?v=1"></script>
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
-  <link rel="stylesheet" href="css/zoro-aizen.css?v=23">
+  <link rel="stylesheet" href="css/zoro-aizen.css?v=24">
 </head>
 <body>
 
@@ -66,13 +66,13 @@
           <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
         </button>
         <div id="header-user-slot" aria-busy="true">
-          <button class="btn-zoro-primary" type="button" disabled style="opacity: 0.55;">···</button>
+          <button class="btn-zoro-primary btn-auth-loading" type="button" disabled>···</button>
         </div>
       </div>
     </div>
   </header>
 
-  <main class="container-main" style="padding: 3rem 2rem 3rem;">
+  <main class="container-main page-main-genres">
     <!-- Hero Section -->
     <div class="genres-hero-header">
       <div class="hero-tag">// CURATED SHELVES • ジャンル</div>
@@ -82,25 +82,25 @@
 
     <!-- Genre shelves -->
     <div class="genres-shelf-grid">
-      <div class="genre-shelf-card genre-shelf-skeleton" aria-hidden="true"><div class="skeleton-line skeleton-shimmer" style="width: 60%; height: 22px;"></div><div class="skeleton-line skeleton-shimmer" style="width: 90%;"></div><div class="skeleton-line skeleton-shimmer" style="width: 75%;"></div></div>
-      <div class="genre-shelf-card genre-shelf-skeleton" aria-hidden="true"><div class="skeleton-line skeleton-shimmer" style="width: 60%; height: 22px;"></div><div class="skeleton-line skeleton-shimmer" style="width: 90%;"></div><div class="skeleton-line skeleton-shimmer" style="width: 75%;"></div></div>
-      <div class="genre-shelf-card genre-shelf-skeleton" aria-hidden="true"><div class="skeleton-line skeleton-shimmer" style="width: 60%; height: 22px;"></div><div class="skeleton-line skeleton-shimmer" style="width: 90%;"></div><div class="skeleton-line skeleton-shimmer" style="width: 75%;"></div></div>
-      <div class="genre-shelf-card genre-shelf-skeleton" aria-hidden="true"><div class="skeleton-line skeleton-shimmer" style="width: 60%; height: 22px;"></div><div class="skeleton-line skeleton-shimmer" style="width: 90%;"></div><div class="skeleton-line skeleton-shimmer" style="width: 75%;"></div></div>
-      <div class="genre-shelf-card genre-shelf-skeleton" aria-hidden="true"><div class="skeleton-line skeleton-shimmer" style="width: 60%; height: 22px;"></div><div class="skeleton-line skeleton-shimmer" style="width: 90%;"></div><div class="skeleton-line skeleton-shimmer" style="width: 75%;"></div></div>
-      <div class="genre-shelf-card genre-shelf-skeleton" aria-hidden="true"><div class="skeleton-line skeleton-shimmer" style="width: 60%; height: 22px;"></div><div class="skeleton-line skeleton-shimmer" style="width: 90%;"></div><div class="skeleton-line skeleton-shimmer" style="width: 75%;"></div></div>
+      <div class="genre-shelf-card genre-shelf-skeleton" aria-hidden="true"><div class="skeleton-line skeleton-shimmer skeleton-w-60-tall"></div><div class="skeleton-line skeleton-shimmer skeleton-w-90"></div><div class="skeleton-line skeleton-shimmer skeleton-w-75"></div></div>
+      <div class="genre-shelf-card genre-shelf-skeleton" aria-hidden="true"><div class="skeleton-line skeleton-shimmer skeleton-w-60-tall"></div><div class="skeleton-line skeleton-shimmer skeleton-w-90"></div><div class="skeleton-line skeleton-shimmer skeleton-w-75"></div></div>
+      <div class="genre-shelf-card genre-shelf-skeleton" aria-hidden="true"><div class="skeleton-line skeleton-shimmer skeleton-w-60-tall"></div><div class="skeleton-line skeleton-shimmer skeleton-w-90"></div><div class="skeleton-line skeleton-shimmer skeleton-w-75"></div></div>
+      <div class="genre-shelf-card genre-shelf-skeleton" aria-hidden="true"><div class="skeleton-line skeleton-shimmer skeleton-w-60-tall"></div><div class="skeleton-line skeleton-shimmer skeleton-w-90"></div><div class="skeleton-line skeleton-shimmer skeleton-w-75"></div></div>
+      <div class="genre-shelf-card genre-shelf-skeleton" aria-hidden="true"><div class="skeleton-line skeleton-shimmer skeleton-w-60-tall"></div><div class="skeleton-line skeleton-shimmer skeleton-w-90"></div><div class="skeleton-line skeleton-shimmer skeleton-w-75"></div></div>
+      <div class="genre-shelf-card genre-shelf-skeleton" aria-hidden="true"><div class="skeleton-line skeleton-shimmer skeleton-w-60-tall"></div><div class="skeleton-line skeleton-shimmer skeleton-w-90"></div><div class="skeleton-line skeleton-shimmer skeleton-w-75"></div></div>
     </div>
 
     <!-- Quick Statement Block -->
-    <div style="background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 16px; padding: 2.5rem; text-align: center;">
-      <h2 style="font-size: 1.6rem; font-weight: 800; margin-bottom: 0.5rem;">Can't decide what to watch?</h2>
-      <p style="color: var(--text-sub); max-width: 550px; margin: 0 auto 1.5rem; font-size: 0.95rem;">
+    <div class="genres-cta-card">
+      <h2 class="genres-cta-title">Can't decide what to watch?</h2>
+      <p class="genres-cta-desc">
         Let our Aizen kinetic randomizer pick an anime from the catalog for you.
       </p>
-      <div style="display: flex; justify-content: center; gap: 1rem; flex-wrap: wrap;">
-        <button class="btn-zoro-primary" id="btn-genres-random" type="button" style="padding: 0.75rem 1.75rem;">
+      <div class="genres-cta-actions">
+        <button class="btn-zoro-primary btn-genres-cta" id="btn-genres-random" type="button">
           🎲 Shuffle Random Title
         </button>
-        <a class="btn-zoro-secondary" href="browse.html" style="padding: 0.75rem 1.75rem;">
+        <a class="btn-zoro-secondary btn-genres-cta" href="browse.html">
           Browse All Titles
         </a>
       </div>
@@ -108,22 +108,22 @@
   </main>
 
   <!-- Zoro Footer with Aizen Cyber Accents -->
-  <footer style="background: var(--bg-darker); border-top: 1px solid var(--border-subtle); padding: 3.5rem 0 2rem;">
+  <footer class="zoro-footer">
     <div class="container-main">
-      <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 2rem; padding-bottom: 2rem; border-bottom: 1px solid rgba(255,255,255,0.06);">
+      <div class="zoro-footer-top">
         <a class="zoro-brand" href="/home">
           <img class="zoro-brand-icon" src="/img/aniflick-icon.png" alt="">
           <span>Ani<span class="verse">Flick</span></span>
         </a>
         <div>
-          <div style="display: flex; gap: 1.5rem; font-size: 0.875rem; color: var(--text-sub); flex-wrap: wrap;">
+          <div class="zoro-footer-links">
             <a href="/home">Home</a>
             <a href="/browse">Catalog</a>
             <a href="/schedule">Schedule</a>
             <a href="/genres">Genres</a>
             <a href="/browse">Watch</a>
           </div>
-          <div style="display: flex; gap: 1.5rem; font-size: 0.875rem; color: var(--text-sub); flex-wrap: wrap; margin-top: 0.75rem;">
+          <div class="zoro-footer-links zoro-footer-links-secondary">
             <a href="/faq">FAQ</a>
             <a href="/about">About</a>
             <a href="/privacy">Privacy</a>
@@ -134,15 +134,15 @@
           </div>
         </div>
       </div>
-      <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; margin-top: 1.5rem; font-size: 0.75rem; color: var(--text-muted);">
+      <div class="zoro-footer-bottom">
         <p>AniFlick does not store any files on its server. Combining Zoro.to UI components with Aizen-Verse cinematic animation engine.</p>
         <p class="footer-engine">ZORO × AIZEN HYBRID ENGINE 2026</p>
       </div>
-      <p style="margin-top: 1.25rem; font-size: 0.75rem; color: var(--text-muted);">© <span class="js-footer-year">2026</span> AniFlick. All rights reserved.</p>
+      <p class="zoro-footer-copy">© <span class="js-footer-year">2026</span> AniFlick. All rights reserved.</p>
     </div>
   </footer>
 
-  <script src="js/zoro-aizen.js?v=25"></script>
+  <script src="js/zoro-aizen.js?v=26"></script>
   <script src="js/genres-boot.js?v=1"></script>
 </body>
 </html>

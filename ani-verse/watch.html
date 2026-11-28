@@ -7,11 +7,11 @@
   <title>Watch Anime - AniFlick (Zoro UI × Aizen Engine)</title>
   <meta name="description" content="Watch high quality anime online on AniFlick. Free streaming with multi-server selection, subtitles and dubs.">
   <noscript></noscript>
-  <link rel="preload" href="css/zoro-aizen.css?v=23" as="style">
-  <link rel="preload" href="js/zoro-aizen.js?v=25" as="script">
+  <link rel="preload" href="css/zoro-aizen.css?v=24" as="style">
+  <link rel="preload" href="js/zoro-aizen.js?v=26" as="script">
   <script src="/js/boot.js?v=1"></script>
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
-  <link rel="stylesheet" href="css/zoro-aizen.css?v=23">
+  <link rel="stylesheet" href="css/zoro-aizen.css?v=24">
   <!-- Player-specific styles (spinner overlay, resume note, toasts). Without
        this sheet the spinner rendered as plain text BELOW the player. -->
   <link rel="stylesheet" href="css/zoko-player.css?v=14">
@@ -69,7 +69,7 @@
           <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
         </button>
         <div id="header-user-slot" aria-busy="true">
-          <button class="btn-zoro-primary" type="button" disabled style="opacity: 0.55;">···</button>
+          <button class="btn-zoro-primary btn-auth-loading" type="button" disabled>···</button>
         </div>
       </div>
     </div>
@@ -77,10 +77,10 @@
 
   <main class="container-main" id="zoro-video-stage">
     <!-- Breadcrumb -->
-    <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 1.5rem; display: flex; gap: 0.5rem; align-items: center;">
-      <a href="index.html" style="color: var(--text-sub);">Home</a>
+    <div class="watch-breadcrumb">
+      <a href="index.html" class="watch-breadcrumb-link">Home</a>
       <span>/</span>
-      <a href="browse.html" style="color: var(--text-sub);">Series</a>
+      <a href="browse.html" class="watch-breadcrumb-link">Series</a>
       <span>/</span>
       <span id="watch-anime-title">Loading…</span>
     </div>
@@ -92,10 +92,10 @@
     </div>
 
     <!-- Title header -->
-    <div style="margin-top: 1rem;">
-      <div class="detail-badges" id="watch-anime-badges" hidden style="margin-bottom: 0.5rem;"></div>
+    <div class="watch-heading-wrap">
+      <div class="detail-badges watch-badges-row" id="watch-anime-badges" hidden></div>
       <h1 id="watch-anime-title-h1" class="watch-page-title">Loading…</h1>
-      <p id="watch-ep-subtitle" style="font-size: 0.95rem; color: var(--text-sub); margin-top: 4px;">Loading episode…</p>
+      <p id="watch-ep-subtitle" class="watch-ep-subtitle">Loading episode…</p>
     </div>    </div>
 
     <div class="watch-layout">
@@ -114,8 +114,8 @@
           ></iframe>
           <div class="player-cover-overlay" id="video-cover-overlay">
             <button class="player-big-play" type="button" aria-label="Play Episode">▶</button>
-            <div id="player-cover-badge" style="position: absolute; bottom: 20px; font-family: var(--font-mono); font-size: 0.8rem; color: #fff; background: rgba(0,0,0,0.7); padding: 5px 14px; border-radius: 999px; border: 1px solid rgba(202, 233, 98, 0.4); display: flex; align-items: center; gap: 6px;">
-              <span style="color: var(--zoro-lime);">⚡</span> Stream with ZokoAnime (Auto-Skip)
+            <div id="player-cover-badge" class="player-cover-badge">
+              <span class="text-zoro-lime">⚡</span> Stream with ZokoAnime (Auto-Skip)
             </div>
           </div>
           <script src="js/watch-boot.js?v=1"></script>
@@ -195,18 +195,18 @@
 
 
         <!-- Anime Synopsis & Details Card -->
-        <div style="background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 12px; padding: 1.5rem;">
+        <div class="watch-about-card">
           <h3 class="watch-section-title">Synopsis</h3>
-          <p id="watch-anime-desc" style="font-size: 0.925rem; color: var(--text-sub); line-height: 1.6;">
+          <p id="watch-anime-desc" class="watch-anime-desc">
             Loading synopsis…
           </p>
         </div>
 
         <!-- Comments -->
         <div class="discussion-box" id="watch-discussion">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem;">
+          <div class="watch-comments-header">
             <h3 class="watch-panel-title">Community Discussion</h3>
-            <span id="comments-count-text" style="font-size: 0.8rem; color: var(--text-muted); font-family: var(--font-mono);">Loading comments...</span>
+            <span id="comments-count-text" class="watch-comments-count">Loading comments...</span>
           </div>
 
           <form id="zoro-comment-form" class="comment-input-area">
@@ -214,8 +214,8 @@
             <div class="comment-form-wrap">
               <input id="zoro-comment-name" class="comment-name-input" type="text" maxlength="40" placeholder="Your name (shown with your comment)" autocomplete="off">
               <textarea id="zoro-comment-input" placeholder="Join the discussion... Share your thoughts about this episode!" required></textarea>
-              <div style="display: flex; justify-content: flex-end;">
-                <button class="btn-zoro-primary" type="submit" style="padding: 0.45rem 1.25rem;">Post Comment</button>
+              <div class="watch-comment-actions">
+                <button class="btn-zoro-primary btn-post-comment" type="submit">Post Comment</button>
               </div>
             </div>
           </form>
@@ -237,12 +237,12 @@
       <!-- Watch Sidebar: Episodes & Related -->
       <div class="watch-sidebar">
         <div class="episodes-card-zoro">
-          <div class="ep-range-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+          <div class="ep-range-header watch-ep-header">
             <h3 class="watch-panel-title watch-panel-title-sm">List of Episodes</h3>
-            <span style="font-size: 0.75rem; color: var(--zoro-lime); font-family: var(--font-mono);" id="track-label">SUB</span>
+            <span class="watch-track-label" id="track-label">SUB</span>
           </div>
 
-          <div class="ep-search-wrap" style="margin-bottom: 0.75rem;">
+          <div class="ep-search-wrap watch-ep-search-wrap">
             <input type="text" id="ep-search-input" class="ep-search-input" placeholder="Search episode..." autocomplete="off">
           </div>
 
@@ -255,9 +255,9 @@
         </div>
 
         <!-- Quick Info Card (real metadata) -->
-        <div style="background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 12px; padding: 1.25rem;">
+        <div class="watch-sidebar-card">
           <h3 class="watch-section-title watch-section-title-sm">Anime Details</h3>
-          <div style="display: grid; gap: 0.6rem; font-size: 0.825rem; color: var(--text-sub);">
+          <div class="watch-sidebar-meta">
             <div><strong class="watch-detail-label">Status:</strong> <span id="watch-detail-status">—</span></div>
             <div><strong class="watch-detail-label">Studios:</strong> <span id="watch-detail-studios">—</span></div>
             <div><strong class="watch-detail-label">Aired:</strong> <span id="watch-detail-aired">—</span></div>
@@ -268,29 +268,29 @@
             <div><strong class="watch-detail-label">Duration:</strong> <span id="watch-detail-duration">—</span></div>
             <div id="watch-detail-next-row" hidden><strong class="watch-detail-label">Next episode:</strong> <span id="watch-detail-next">—</span></div>
           </div>
-          <a id="watch-detail-link" href="browse.html" style="display:inline-block;margin-top:0.9rem;font-size:0.8rem;color:var(--zoro-lime);font-weight:600;">View Full Details →</a>
+          <a id="watch-detail-link" href="browse.html" class="watch-detail-link">View Full Details →</a>
         </div>
       </div>
     </div>
   </main>
 
   <!-- Zoro Footer with Aizen Cyber Accents -->
-  <footer style="background: var(--bg-darker); border-top: 1px solid var(--border-subtle); padding: 3.5rem 0 2rem;">
+  <footer class="zoro-footer">
     <div class="container-main">
-      <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 2rem; padding-bottom: 2rem; border-bottom: 1px solid rgba(255,255,255,0.06);">
+      <div class="zoro-footer-top">
         <a class="zoro-brand" href="/home">
           <img class="zoro-brand-icon" src="/img/aniflick-icon.png" alt="">
           <span>Ani<span class="verse">Flick</span></span>
         </a>
         <div>
-          <div style="display: flex; gap: 1.5rem; font-size: 0.875rem; color: var(--text-sub); flex-wrap: wrap;">
+          <div class="zoro-footer-links">
             <a href="/home">Home</a>
             <a href="/browse">Catalog</a>
             <a href="/schedule">Schedule</a>
             <a href="/genres">Genres</a>
             <a href="/browse">Watch</a>
           </div>
-          <div style="display: flex; gap: 1.5rem; font-size: 0.875rem; color: var(--text-sub); flex-wrap: wrap; margin-top: 0.75rem;">
+          <div class="zoro-footer-links zoro-footer-links-secondary">
             <a href="/faq">FAQ</a>
             <a href="/about">About</a>
             <a href="/privacy">Privacy</a>
@@ -301,14 +301,14 @@
           </div>
         </div>
       </div>
-      <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; margin-top: 1.5rem; font-size: 0.75rem; color: var(--text-muted);">
+      <div class="zoro-footer-bottom">
         <p>AniFlick does not store any files on its server. Combining Zoro.to UI components with Aizen-Verse cinematic animation engine.</p>
         <p class="footer-engine">ZORO × AIZEN HYBRID ENGINE 2026</p>
       </div>
-      <p style="margin-top: 1.25rem; font-size: 0.75rem; color: var(--text-muted);">© <span class="js-footer-year">2026</span> AniFlick. All rights reserved.</p>
+      <p class="zoro-footer-copy">© <span class="js-footer-year">2026</span> AniFlick. All rights reserved.</p>
     </div>
   </footer>
 
-  <script src="js/zoro-aizen.js?v=25"></script>
+  <script src="js/zoro-aizen.js?v=26"></script>
 </body>
 </html>

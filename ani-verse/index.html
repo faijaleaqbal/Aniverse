@@ -11,11 +11,11 @@
   <meta property="og:description" content="AniFlick anime streaming platform featuring Zoro.to layout and Aizen cinematic motion design.">
   <meta property="og:image" content="/img/aniflick-logo.png">
   <noscript></noscript>
-  <link rel="preload" href="css/zoro-aizen.css?v=23" as="style">
-  <link rel="preload" href="js/zoro-aizen.js?v=25" as="script">
+  <link rel="preload" href="css/zoro-aizen.css?v=24" as="style">
+  <link rel="preload" href="js/zoro-aizen.js?v=26" as="script">
   <script src="/js/boot.js?v=1"></script>
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
-  <link rel="stylesheet" href="css/zoro-aizen.css?v=23">
+  <link rel="stylesheet" href="css/zoro-aizen.css?v=24">
 </head>
 <body>
 
@@ -70,7 +70,7 @@
           <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
         </button>
         <div id="header-user-slot" aria-busy="true">
-          <button class="btn-zoro-primary" type="button" disabled style="opacity: 0.55;">···</button>
+          <button class="btn-zoro-primary btn-auth-loading" type="button" disabled>···</button>
         </div>
       </div>
     </div>
@@ -82,7 +82,7 @@
       <div id="spotlight-slider-container">
         <!-- Dynamic content -->
         <div class="spotlight-slide is-active" id="spotlight-static-slide">
-          <div class="spotlight-backdrop" style="background-image: url('img/banners/kagerou-protocol.jpg');"></div>
+          <div class="spotlight-backdrop spotlight-backdrop-default"></div>
           <div class="spotlight-overlay"></div>
           <div class="spotlight-content">
             <span class="spotlight-rank">🔥 #1 Spotlight</span>
@@ -91,7 +91,7 @@
               <span class="badge badge-sub">SUB 12</span>
               <span class="badge badge-type">Series</span>
               <span class="badge badge-hd">HD</span>
-              <span id="spotlight-static-runtime" style="font-size: 0.8rem; color: var(--text-sub); margin-left: 6px;">2020 • 24m</span>
+              <span id="spotlight-static-runtime" class="spotlight-runtime-meta">2020 • 24m</span>
             </div>
             <p class="spotlight-desc">A boy swallows a cursed talisman and becomes host to a powerful curse, enrolling in a secret school of jujutsu sorcerers.</p>
             <div class="spotlight-actions">
@@ -119,7 +119,7 @@
     <section class="container-main zoko-continue-section" id="continue-watching-section" hidden>
       <div class="section-header-zoro">
         <h2 class="section-title">Continue <span class="accent">Watching</span></h2>
-        <span style="font-size: 0.85rem; color: var(--text-muted); font-family: var(--font-mono);">RESUME WHERE YOU LEFT OFF</span>
+        <span class="section-subtitle-mono">RESUME WHERE YOU LEFT OFF</span>
       </div>
       <div class="cards-grid-zoro" id="continue-watching-row"></div>
     </section>
@@ -164,7 +164,7 @@
     </section>
 
     <!-- Catalog grid -->
-    <section class="container-main" style="margin-bottom: 3rem;">
+    <section class="container-main home-section-mb">
       <div class="section-header-zoro">
         <h2 class="section-title">From <span class="accent">Your Library</span></h2>
         <a href="browse.html" class="section-view-all">View All →</a>
@@ -187,7 +187,7 @@
       <div class="section-header-zoro">
         <div>
           <h2 class="section-title">Top <span class="accent">Airing</span></h2>
-          <span style="font-size: 0.85rem; color: var(--text-muted); font-family: var(--font-mono);">CURRENTLY AIRING</span>
+          <span class="section-subtitle-mono">CURRENTLY AIRING</span>
         </div>
         <a href="browse.html?view=top-airing" class="section-view-all">View All →</a>
       </div>
@@ -198,7 +198,7 @@
       <div class="section-header-zoro">
         <div>
           <h2 class="section-title">Top <span class="accent">Upcoming</span></h2>
-          <span style="font-size: 0.85rem; color: var(--text-muted); font-family: var(--font-mono);">NOT YET RELEASED</span>
+          <span class="section-subtitle-mono">NOT YET RELEASED</span>
         </div>
         <a href="browse.html?view=top-upcoming" class="section-view-all">View All →</a>
       </div>
@@ -209,7 +209,7 @@
       <div class="section-header-zoro">
         <div>
           <h2 class="section-title">Trending <span class="accent">Now</span></h2>
-          <span style="font-size: 0.85rem; color: var(--text-muted); font-family: var(--font-mono);">LIVE FROM ANILIST</span>
+          <span class="section-subtitle-mono">LIVE FROM ANILIST</span>
         </div>
         <a href="browse.html?sort=trending" class="section-view-all">View All →</a>
       </div>
@@ -220,7 +220,7 @@
       <div class="section-header-zoro">
         <div>
           <h2 class="section-title">Top <span class="accent">Rated</span></h2>
-          <span style="font-size: 0.85rem; color: var(--text-muted); font-family: var(--font-mono);">HIGHEST SCORED</span>
+          <span class="section-subtitle-mono">HIGHEST SCORED</span>
         </div>
         <a href="browse.html?sort=top" class="section-view-all">View All →</a>
       </div>
@@ -231,18 +231,18 @@
       <div class="section-header-zoro">
         <div>
           <h2 class="section-title">New On <span class="accent">AniFlick</span></h2>
-          <span style="font-size: 0.85rem; color: var(--text-muted); font-family: var(--font-mono);">MOST RECENTLY STARTED</span>
+          <span class="section-subtitle-mono">MOST RECENTLY STARTED</span>
         </div>
         <a href="browse.html?sort=newest" class="section-view-all">View All →</a>
       </div>
       <div class="cards-grid-zoro" id="live-new-on-grid"></div>
     </section>
 
-    <section class="container-main live-rail-section" id="live-latest-episodes-section" style="margin-bottom: 4rem;">
+    <section class="container-main live-rail-section live-rail-mb" id="live-latest-episodes-section">
       <div class="section-header-zoro">
         <div>
           <h2 class="section-title">Latest <span class="accent">Episodes</span></h2>
-          <span style="font-size: 0.85rem; color: var(--text-muted); font-family: var(--font-mono);">AIRED IN THE LAST 7 DAYS</span>
+          <span class="section-subtitle-mono">AIRED IN THE LAST 7 DAYS</span>
         </div>
       </div>
       <div class="cards-grid-zoro" id="live-latest-episodes-grid"></div>
@@ -250,22 +250,22 @@
   </main>
 
   <!-- Zoro Footer with Aizen Cyber Accents -->
-  <footer style="background: var(--bg-darker); border-top: 1px solid var(--border-subtle); padding: 3.5rem 0 2rem;">
+  <footer class="zoro-footer">
     <div class="container-main">
-      <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 2rem; padding-bottom: 2rem; border-bottom: 1px solid rgba(255,255,255,0.06);">
+      <div class="zoro-footer-top">
         <a class="zoro-brand" href="/home">
           <img class="zoro-brand-icon" src="/img/aniflick-icon.png" alt="">
           <span>Ani<span class="verse">Flick</span></span>
         </a>
         <div>
-          <div style="display: flex; gap: 1.5rem; font-size: 0.875rem; color: var(--text-sub); flex-wrap: wrap;">
+          <div class="zoro-footer-links">
             <a href="/home">Home</a>
             <a href="/browse">Catalog</a>
             <a href="/schedule">Schedule</a>
             <a href="/genres">Genres</a>
             <a href="/browse">Watch</a>
           </div>
-          <div style="display: flex; gap: 1.5rem; font-size: 0.875rem; color: var(--text-sub); flex-wrap: wrap; margin-top: 0.75rem;">
+          <div class="zoro-footer-links zoro-footer-links-secondary">
             <a href="/faq">FAQ</a>
             <a href="/about">About</a>
             <a href="/privacy">Privacy</a>
@@ -276,14 +276,14 @@
           </div>
         </div>
       </div>
-      <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; margin-top: 1.5rem; font-size: 0.75rem; color: var(--text-muted);">
+      <div class="zoro-footer-bottom">
         <p>AniFlick does not store any files on its server. Combining Zoro.to UI components with Aizen-Verse cinematic animation engine.</p>
         <p class="footer-engine">ZORO × AIZEN HYBRID ENGINE 2026</p>
       </div>
-      <p style="margin-top: 1.25rem; font-size: 0.75rem; color: var(--text-muted);">© <span class="js-footer-year">2026</span> AniFlick. All rights reserved.</p>
+      <p class="zoro-footer-copy">© <span class="js-footer-year">2026</span> AniFlick. All rights reserved.</p>
     </div>
   </footer>
 
-  <script src="js/zoro-aizen.js?v=25"></script>
+  <script src="js/zoro-aizen.js?v=26"></script>
 </body>
 </html>

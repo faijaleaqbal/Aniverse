@@ -92,7 +92,7 @@ app.set("trust proxy", TRUST_PROXY);
 const CSP_HEADER = [
   "default-src 'self'",
   "script-src 'self'",
-  "style-src 'self' 'unsafe-inline'",
+  "style-src 'self'",
   "font-src 'self'",
   "img-src 'self' data: https://s4.anilist.co",
   "frame-src 'self' https://zokoanime.video https://embed.animetvplus.site",

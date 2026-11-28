@@ -524,7 +524,7 @@
         <div class="zoro-card-info">
           <a class="zoro-card-title" href="${href}" title="${escapeHtml(t.name)}">${escapeHtml(t.name)}</a>
           <div class="zoro-card-submeta">
-            <span>${escapeHtml(typeLabel)}</span> • <span>${escapeHtml(String(year))}</span>${score ? ` • <span style="color: var(--zoro-lime);">★ ${score}</span>` : ""}
+            <span>${escapeHtml(typeLabel)}</span> • <span>${escapeHtml(String(year))}</span>${score ? ` • <span class="text-zoro-lime">★ ${score}</span>` : ""}
           </div>
           ${opts.submeta ? `<div class="zoro-card-submeta live-ep-time">${opts.submeta}</div>` : ""}
         </div>
@@ -535,8 +535,8 @@
   function searchRowHtml(t, href) {
     const isLive = !!(t && t.live);
     const meta = isLive
-      ? `<span>${escapeHtml(liveFormatLabel(t))}</span> • <span>${escapeHtml(String(t.year || "—"))}</span> • <span style="color: var(--zoro-sub);">${t.episodes != null ? `EP ${t.episodes}` : "ONGOING"}</span>`
-      : `<span>${t.year || 2025}</span> • <span>${t.kind || "Series"}</span>${subCount(t) ? ` • <span style="color: var(--zoro-sub);">SUB ${subCount(t)}</span>` : ""}`;
+      ? `<span>${escapeHtml(liveFormatLabel(t))}</span> • <span>${escapeHtml(String(t.year || "—"))}</span> • <span class="text-zoro-sub">${t.episodes != null ? `EP ${t.episodes}` : "ONGOING"}</span>`
+      : `<span>${t.year || 2025}</span> • <span>${t.kind || "Series"}</span>${subCount(t) ? ` • <span class="text-zoro-sub">SUB ${subCount(t)}</span>` : ""}`;
     return `
       <a class="search-result-item" href="${href}">
         <img class="search-result-thumb" src="${escapeHtml(coverOf(t))}" alt="${escapeHtml(t.name)}" loading="lazy" ${livePosterAttrs()}>
@@ -594,7 +594,7 @@
         </div>
         <div class="aizen-intro-meta">
           <span id="aizen-status-text">INITIALIZING RESOURCES... 0%</span>
-          <span style="color: rgba(255,255,255,0.4); font-size: 0.65rem;">ZORO UI × AIZEN CINEMATIC ENGINE</span>
+          <span class="drawer-engine-tag">ZORO UI × AIZEN CINEMATIC ENGINE</span>
         </div>
       </div>
     `;
@@ -777,9 +777,9 @@
           <button class="modal-tab-btn active" type="button" data-tab="login">Sign In</button>
           <button class="modal-tab-btn" type="button" data-tab="register">Create Account</button>
         </div>
-        <div id="modal-error-msg" style="display: none; padding: 8px 12px; margin-bottom: 12px; background: rgba(255,80,80,0.15); border: 1px solid #ff5050; border-radius: 6px; font-size: 0.8rem; color: #ff8080;"></div>
+        <div id="modal-error-msg" class="modal-error-msg"></div>
         <form id="zoro-auth-form">
-          <div class="input-field-group" id="group-auth-name" style="display: none;">
+          <div class="input-field-group is-hidden" id="group-auth-name">
             <label for="reg-name">Display Name</label>
             <input id="reg-name" name="name" type="text" placeholder="e.g. ZoroFan99">
           </div>
@@ -792,22 +792,22 @@
             <input id="reg-password" name="password" type="password" placeholder="At least 8 characters" required>
           </div>
           <button class="forgot-password-link" id="btn-forgot-password" type="button">Forgot password?</button>
-          <button class="btn-zoro-primary" id="btn-auth-submit" type="submit" style="width: 100%; justify-content: center; margin-top: 1rem; padding: 0.75rem;">Sign In</button>
+          <button class="btn-zoro-primary btn-modal-submit" id="btn-auth-submit" type="submit">Sign In</button>
         </form>
-        <div id="zoro-forgot-view" style="display: none;">
-          <h3 style="margin: 0 0 0.5rem; font-size: 1.1rem;">Reset your password</h3>
-          <p style="margin: 0 0 1.25rem; color: var(--text-sub); font-size: 0.9rem; line-height: 1.5;">Enter the email address for your account and we'll send you a link to set a new password.</p>
-          <div id="forgot-msg" style="display: none; padding: 8px 12px; margin-bottom: 12px; background: rgba(202,233,98,0.12); border: 1px solid #cae962; border-radius: 6px; font-size: 0.8rem; color: #d9f99d;"></div>
+        <div id="zoro-forgot-view" class="is-hidden">
+          <h3 class="forgot-view-title">Reset your password</h3>
+          <p class="forgot-view-desc">Enter the email address for your account and we'll send you a link to set a new password.</p>
+          <div id="forgot-msg" class="forgot-msg"></div>
           <form id="zoro-forgot-form">
             <div class="input-field-group">
               <label for="forgot-email">Email Address</label>
               <input id="forgot-email" name="email" type="email" placeholder="Your email address" required>
             </div>
-            <button class="btn-zoro-primary" id="btn-forgot-submit" type="submit" style="width: 100%; justify-content: center; margin-top: 1rem; padding: 0.75rem;">Send reset link</button>
+            <button class="btn-zoro-primary btn-modal-submit" id="btn-forgot-submit" type="submit">Send reset link</button>
           </form>
-          <button class="forgot-password-link" id="btn-forgot-back" type="button" style="margin-top: 1rem;">&larr; Back to sign in</button>
+          <button class="forgot-password-link btn-forgot-back" id="btn-forgot-back" type="button">&larr; Back to sign in</button>
         </div>
-        <div id="zoro-social-block" style="display: none;">
+        <div id="zoro-social-block" class="is-hidden">
           <div class="social-login-divider"><span>or continue with</span></div>
           <div id="zoro-social-logins" class="social-login-list"></div>
         </div>
@@ -965,7 +965,7 @@
         <button class="user-badge-btn" id="btn-user-profile" type="button" aria-haspopup="true" aria-expanded="false" aria-label="User Profile Menu">
           <span class="user-avatar-circle">${initial}</span>
           <span>${safeName}</span>
-          <span class="user-caret" style="color: var(--text-muted); font-size: 0.7rem; margin-left: 4px;">▼</span>
+          <span class="user-caret">▼</span>
         </button>
         <div class="user-dropdown-menu" id="user-dropdown-menu" role="menu">
           <div class="user-dropdown-header">
@@ -1103,12 +1103,12 @@
       }
 
       if (q.length < 2) {
-        dropdown.innerHTML = `<div style="padding: 12px; font-size: 0.8rem; color: var(--text-muted); text-align: center;">Type at least 2 characters</div>`;
+        dropdown.innerHTML = `<div class="search-dropdown-msg">Type at least 2 characters</div>`;
         dropdown.classList.add("is-open");
         return;
       }
 
-      dropdown.innerHTML = `<div style="padding: 12px; font-size: 0.8rem; color: var(--text-muted); text-align: center;">Searching…</div>`;
+      dropdown.innerHTML = `<div class="search-dropdown-msg">Searching…</div>`;
       dropdown.classList.add("is-open");
 
       const token = ++searchToken;
@@ -1127,15 +1127,15 @@
           const localTitles = (localRes.ok && localRes.data && Array.isArray(localRes.data.titles))
             ? localRes.data.titles : [];
           dropdown.innerHTML = localTitles.length
-            ? `<div style="padding: 6px 12px; font-size: 0.7rem; color: var(--zoro-dub);">${escapeHtml(LIVE_BUSY_MESSAGE)}</div>` +
+            ? `<div class="search-dropdown-busy">${escapeHtml(LIVE_BUSY_MESSAGE)}</div>` +
               localTitles.map((t) => searchRowHtml(t, detailHref(t.slug))).join("")
-            : `<div style="padding: 12px; font-size: 0.8rem; color: var(--text-muted); text-align: center;">${escapeHtml(LIVE_BUSY_MESSAGE)}</div>`;
+            : `<div class="search-dropdown-msg">${escapeHtml(LIVE_BUSY_MESSAGE)}</div>`;
           dropdown.classList.add("is-open");
           return;
         }
 
         if (!local.length && !more.length) {
-          dropdown.innerHTML = `<div style="padding: 12px; font-size: 0.8rem; color: var(--text-muted); text-align: center;">No anime found for "${escapeHtml(q)}"</div>`;
+          dropdown.innerHTML = `<div class="search-dropdown-msg">No anime found for "${escapeHtml(q)}"</div>`;
           dropdown.classList.add("is-open");
           return;
         }
@@ -1276,13 +1276,13 @@
           <div class="spotlight-overlay"></div>
           <div class="spotlight-content">
             <span class="spotlight-rank">🔥 #${idx + 1} Spotlight</span>
-            <h1 class="spotlight-title"><a href="${detailHref(t.slug)}" style="color:inherit;text-decoration:none;">${escapeHtml(t.name)}</a></h1>
+            <h1 class="spotlight-title"><a class="spotlight-title-link" href="${detailHref(t.slug)}">${escapeHtml(t.name)}</a></h1>
             <div class="spotlight-badges">
               ${subCount(t) ? `<span class="badge badge-sub">SUB ${subCount(t)}</span>` : ""}
               ${t.dubCount > 0 ? `<span class="badge badge-dub">DUB ${t.dubCount}</span>` : ""}
               <span class="badge badge-type">${t.kind}</span>
               <span class="badge badge-hd">HD</span>
-              <span style="font-size: 0.8rem; color: var(--text-sub); margin-left: 6px;">${t.year} • ${t.runtimeMin}m</span>
+              <span class="spotlight-runtime-meta">${t.year} • ${t.runtimeMin}m</span>
             </div>
             <p class="spotlight-desc">${escapeHtml(truncateWords(t.synopsis || t.tagline, 200))}</p>
             <div class="spotlight-actions">
@@ -1372,13 +1372,13 @@
               </a>
               <div class="zoro-card-info">
                 <a class="zoro-card-title" href="${detailLink}" title="${safeName}">${safeName}</a>
-                <div class="zoro-card-submeta" style="margin-bottom: 6px;">
+                <div class="zoro-card-submeta continue-card-submeta">
                   <span>Episode ${epNum}</span> • <span>${pct}%</span>
                 </div>
-                <div class="progress-track-zoro" style="height: 4px; margin-bottom: 8px;" title="${timeLabel} (${pct}%)">
-                  <div class="progress-fill-zoro" style="width: ${pct}%;"></div>
+                <div class="progress-track-zoro continue-progress-track" title="${timeLabel} (${pct}%)">
+                  <div class="progress-fill-zoro" data-progress="${pct}"></div>
                 </div>
-                <a class="btn-zoro-primary" href="${resumeHref}" style="width: 100%; justify-content: center; padding: 0.45rem 0.8rem; font-size: 0.8rem; margin-top: auto; text-decoration: none;">
+                <a class="btn-zoro-primary btn-continue-resume" href="${resumeHref}">
                   ▶ Resume
                 </a>
               </div>
@@ -1386,6 +1386,10 @@
           `;
         })
         .join("");
+
+      track.querySelectorAll(".progress-fill-zoro[data-progress]").forEach((el) => {
+        el.style.width = `${el.dataset.progress}%`;
+      });
 
       section.hidden = false;
       section.style.display = "";
@@ -1412,8 +1416,8 @@
           <div class="col-item col-item-skeleton" aria-hidden="true">
             <div class="col-thumb skeleton-shimmer"></div>
             <div class="col-item-details">
-              <div class="skeleton-line skeleton-shimmer" style="width: 90%;"></div>
-              <div class="skeleton-line skeleton-shimmer" style="width: 55%;"></div>
+              <div class="skeleton-line skeleton-shimmer skeleton-w-90"></div>
+              <div class="skeleton-line skeleton-shimmer skeleton-w-55"></div>
             </div>
           </div>
         `).join("");
@@ -1535,8 +1539,8 @@
             <div class="trending-rank-num">${(i + 1 < 10 ? "0" : "") + (i + 1)}</div>
             <div class="trending-info-overlay">
               <div class="trending-anime-title">${escapeHtml(t.name)}</div>
-              <div style="font-size: 0.7rem; color: var(--text-muted); margin-top: 2px;">
-                ${subCount(t) ? `<span style="color: var(--zoro-sub);">SUB ${subCount(t)}</span>` : ""}<span>${t.year}</span>
+              <div class="col-item-submeta">
+                ${subCount(t) ? `<span class="text-zoro-sub">SUB ${subCount(t)}</span>` : ""}<span>${t.year}</span>
               </div>
             </div>
           </div>
@@ -1591,8 +1595,8 @@
         <div class="zoro-card zoro-card-skeleton" aria-hidden="true">
           <div class="zoro-card-poster skeleton-shimmer"></div>
           <div class="zoro-card-info">
-            <div class="skeleton-line skeleton-shimmer" style="width: 85%;"></div>
-            <div class="skeleton-line skeleton-shimmer" style="width: 55%;"></div>
+            <div class="skeleton-line skeleton-shimmer skeleton-w-85"></div>
+            <div class="skeleton-line skeleton-shimmer skeleton-w-55"></div>
           </div>
         </div>
       `).join("");
@@ -1964,8 +1968,8 @@
         <div class="zoro-card zoro-card-skeleton" aria-hidden="true">
           <div class="zoro-card-poster skeleton-shimmer"></div>
           <div class="zoro-card-info">
-            <div class="skeleton-line skeleton-shimmer" style="width: 85%;"></div>
-            <div class="skeleton-line skeleton-shimmer" style="width: 55%;"></div>
+            <div class="skeleton-line skeleton-shimmer skeleton-w-85"></div>
+            <div class="skeleton-line skeleton-shimmer skeleton-w-55"></div>
           </div>
         </div>`).join("");
     }
@@ -2224,7 +2228,7 @@
       let html = `<button class="page-btn" type="button" data-page="${current - 1}"${current === 1 ? " disabled" : ""} aria-label="Previous page">‹ Prev</button>`;
       for (const p of pages) {
         if (p === "…") {
-          html += `<span class="page-btn" style="border:none; background:none; cursor:default;">…</span>`;
+          html += `<span class="page-btn page-btn-static">…</span>`;
         } else {
           html += `<button class="page-btn${p === current ? " active" : ""}" type="button" data-page="${p}"${p === current ? ' aria-current="page"' : ""}>${p}</button>`;
         }
@@ -2233,9 +2237,9 @@
       
       if (bounded) {
         const lastFloor = (pageInfo && Number(pageInfo.lastPage)) || last;
-        html += `<span class="page-btn" style="border:none; background:none; cursor:default;" aria-live="polite">Page ${current} of ${lastFloor}+</span>`;
+        html += `<span class="page-btn page-btn-static" aria-live="polite">Page ${current} of ${lastFloor}+</span>`;
       } else if (last > 1) {
-        html += `<span class="page-btn" style="border:none; background:none; cursor:default;" aria-live="polite">Page ${current} of ${last}</span>`;
+        html += `<span class="page-btn page-btn-static" aria-live="polite">Page ${current} of ${last}</span>`;
       }
       paginationWrap.innerHTML = html;
       paginationWrap.hidden = false;
@@ -2622,8 +2626,8 @@
         <div class="zoro-card zoro-card-skeleton" aria-hidden="true">
           <div class="zoro-card-poster skeleton-shimmer"></div>
           <div class="zoro-card-info">
-            <div class="skeleton-line skeleton-shimmer" style="width: 85%;"></div>
-            <div class="skeleton-line skeleton-shimmer" style="width: 55%;"></div>
+            <div class="skeleton-line skeleton-shimmer skeleton-w-85"></div>
+            <div class="skeleton-line skeleton-shimmer skeleton-w-55"></div>
           </div>
         </div>`).join("");
     }
@@ -2669,14 +2673,14 @@
       let html = `<button class="page-btn" type="button" data-page="${current - 1}"${current === 1 ? " disabled" : ""} aria-label="Previous page">‹ Prev</button>`;
       for (const p of pages) {
         if (p === "…") {
-          html += `<span class="page-btn" style="border:none; background:none; cursor:default;">…</span>`;
+          html += `<span class="page-btn page-btn-static">…</span>`;
         } else {
           html += `<button class="page-btn${p === current ? " active" : ""}" type="button" data-page="${p}"${p === current ? ' aria-current="page"' : ""}>${p}</button>`;
         }
       }
       html += `<button class="page-btn" type="button" data-page="${current + 1}"${current >= last ? " disabled" : ""} aria-label="Next page">Next ›</button>`;
       if (last > 1) {
-        html += `<span class="page-btn" style="border:none; background:none; cursor:default;" aria-live="polite">Page ${current} of ${last}</span>`;
+        html += `<span class="page-btn page-btn-static" aria-live="polite">Page ${current} of ${last}</span>`;
       }
       paginationWrap.innerHTML = html;
       paginationWrap.hidden = false;
@@ -2823,8 +2827,8 @@
         <div class="zoro-card zoro-card-skeleton" aria-hidden="true">
           <div class="zoro-card-poster skeleton-shimmer"></div>
           <div class="zoro-card-info">
-            <div class="skeleton-line skeleton-shimmer" style="width: 85%;"></div>
-            <div class="skeleton-line skeleton-shimmer" style="width: 55%;"></div>
+            <div class="skeleton-line skeleton-shimmer skeleton-w-85"></div>
+            <div class="skeleton-line skeleton-shimmer skeleton-w-55"></div>
           </div>
         </div>`).join("");
 
@@ -2878,14 +2882,14 @@
         const rating = scoreLabel(t);
         tip.innerHTML = `
           <div class="tooltip-title">${escapeHtml(t.name)}</div>
-          <div class="tooltip-rating">${rating ? `★ ${rating} <span style="color: var(--text-muted); font-size: 0.75rem;">(AniList)</span>` : `<span style="color: var(--text-muted); font-size: 0.75rem;">Not yet rated</span>`}</div>
+          <div class="tooltip-rating">${rating ? `★ ${rating} <span class="tooltip-rating-meta">(AniList)</span>` : `<span class="tooltip-rating-meta">Not yet rated</span>`}</div>
           <div class="tooltip-synopsis">${escapeHtml(t.synopsis || t.tagline)}</div>
           <div class="tooltip-meta-rows">
             <span><strong>Type:</strong> ${t.kind}</span>
             <span><strong>Studio:</strong> ${escapeHtml(t.studio)}</span>
             <span><strong>Genres:</strong> ${t.genres ? t.genres.map(genreLabel).join(", ") : "Action"}</span>
           </div>
-          <a class="btn-zoro-primary" href="${watchHref(t.slug, 1)}" style="width: 100%; justify-content: center; margin-top: 10px; padding: 6px;">▶ Watch Now</a>
+          <a class="btn-zoro-primary btn-tooltip-watch" href="${watchHref(t.slug, 1)}">▶ Watch Now</a>
         `;
 
         const rect = card.getBoundingClientRect();
@@ -3637,12 +3641,12 @@
       const coverBadge = document.getElementById("player-cover-badge");
       if (coverBadge) {
         coverBadge.innerHTML = onMegaPlay
-          ? '<span style="color: var(--zoro-lime);">⚡</span> Stream with MegaPlay (Auto-Play)'
+          ? '<span class="text-zoro-lime">⚡</span> Stream with MegaPlay (Auto-Play)'
           : onBackup
-          ? '<span style="color: var(--zoro-lime);">⚡</span> Stream with TVplus (press Play)'
+          ? '<span class="text-zoro-lime">⚡</span> Stream with TVplus (press Play)'
           : onAnimegg
-          ? '<span style="color: var(--zoro-lime);">⚡</span> Stream with animegg (Sub, SD)'
-          : '<span style="color: var(--zoro-lime);">⚡</span> Stream with ZokoAnime (Auto-Skip)';
+          ? '<span class="text-zoro-lime">⚡</span> Stream with animegg (Sub, SD)'
+          : '<span class="text-zoro-lime">⚡</span> Stream with ZokoAnime (Auto-Skip)';
       }
       updateTrackLabel();
     }
@@ -4103,11 +4107,11 @@
       resumeNoteArmOnPlay = true;
       
       const restartBtnHtml = (activeServer === "megaplay" || activeServer === ANIMEGG_SERVER_ID) ? "" :
-        `<button class="btn-zoro-primary" id="resume-restart-btn" type="button" style="margin-left: 0.5rem; font-size: 0.75rem;">Restart</button>`;
+        `<button class="btn-zoro-primary btn-resume-restart" id="resume-restart-btn" type="button">Restart</button>`;
       resumeNote.innerHTML = `
         Resumed from ${formatTime(seconds)}
         ${restartBtnHtml}
-        <button id="resume-dismiss-btn" type="button" aria-label="Dismiss resume notice" style="margin-left: 0.35rem; background: none; border: none; color: var(--zoro-lime); font-size: 0.9rem; cursor: pointer; line-height: 1;">✕</button>
+        <button class="btn-resume-dismiss" id="resume-dismiss-btn" type="button" aria-label="Dismiss resume notice">✕</button>
       `;
       resumeNote.hidden = false;
       const restartBtn = resumeNote.querySelector("#resume-restart-btn");
@@ -5334,7 +5338,7 @@
         loadedEpisode = activeEpisode;
         if (countEl) countEl.textContent = `${comments.length} Comments`;
         if (comments.length === 0) {
-          list.innerHTML = `<p style="color: var(--text-muted); font-size: 0.85rem; padding: 12px 0;">No comments on this episode yet. Be the first to start the discussion!</p>`;
+          list.innerHTML = `<p class="comments-empty-msg">No comments on this episode yet. Be the first to start the discussion!</p>`;
           return;
         }
         list.textContent = "";
@@ -5342,9 +5346,9 @@
       } else {
         if (countEl) countEl.textContent = "Comments unavailable";
         list.innerHTML = `
-          <p style="color: var(--text-muted); font-size: 0.85rem; padding: 12px 0;">
+          <p class="comments-empty-msg">
             Comments could not be loaded.
-            <button class="btn-zoro-primary" type="button" id="comments-retry-btn" style="padding: 0.3rem 0.8rem; font-size: 0.75rem; margin-left: 6px;">Retry</button>
+            <button class="btn-zoro-primary btn-comments-retry" type="button" id="comments-retry-btn">Retry</button>
           </p>`;
         const retryBtn = list.querySelector("#comments-retry-btn");
         if (retryBtn) retryBtn.addEventListener("click", () => loadComments(true));
@@ -5538,9 +5542,9 @@
     const epList = document.getElementById("detail-episode-list");
     if (epList) {
       if (episodesUnknown) {
-        epList.innerHTML = `<p style="color:var(--text-muted);padding:12px 0;">Episode list unavailable for this title.</p>`;
+        epList.innerHTML = `<p class="ep-empty-msg">Episode list unavailable for this title.</p>`;
       } else if (!airedCount) {
-        epList.innerHTML = `<p style="color:var(--text-muted);padding:12px 0;">No episodes have aired yet${next ? ` — Ep ${next.episode} airs on ${escapeHtml(formatAiringDate(next.airingAt))}.` : "."}</p>`;
+        epList.innerHTML = `<p class="ep-empty-msg">No episodes have aired yet${next ? ` — Ep ${next.episode} airs on ${escapeHtml(formatAiringDate(next.airingAt))}.` : "."}</p>`;
       } else {
         const rows = [];
         for (let n = 1; n <= airedCount; n++) {
@@ -5792,7 +5796,7 @@
     const epList = document.getElementById("detail-episode-list");
     if (epList) {
       if (!episodes.length) {
-        epList.innerHTML = `<p style="color:var(--text-muted);padding:12px 0;">No episodes available for this title.</p>`;
+        epList.innerHTML = `<p class="ep-empty-msg">No episodes available for this title.</p>`;
       } else {
         epList.innerHTML = episodes
           .map((e) => {
@@ -5941,7 +5945,7 @@
     function renderScheduleForDay(dayKey) {
       const slots = SCHEDULE_DATA[dayKey] || [];
       if (!Object.keys(titleMap).length) {
-        timelineEl.innerHTML = `<p style="color: var(--text-muted); padding: 2rem; text-align: center;">Schedule is temporarily unavailable — the catalog could not be loaded.</p>`;
+        timelineEl.innerHTML = `<p class="schedule-empty-msg">Schedule is temporarily unavailable — the catalog could not be loaded.</p>`;
         return;
       }
       
@@ -5949,7 +5953,7 @@
         .map((slot) => ({ slot, real: titleMap[slot.slug] }))
         .filter((x) => x.real && x.real.name);
       if (!items.length) {
-        timelineEl.innerHTML = `<p style="color: var(--text-muted); padding: 2rem; text-align: center;">No scheduled releases for this day.</p>`;
+        timelineEl.innerHTML = `<p class="schedule-empty-msg">No scheduled releases for this day.</p>`;
         return;
       }
 
@@ -5976,7 +5980,7 @@
               <div class="schedule-meta-badges">
                 ${subBadge(real)}
                 ${dubBadge(real)}
-                <span style="color: var(--text-muted); font-size: 0.75rem;">• ${escapeHtml(studio)}</span>
+                <span class="schedule-studio-meta">• ${escapeHtml(studio)}</span>
               </div>
             </div>
           </div>
@@ -5984,7 +5988,7 @@
             <button class="btn-remind-slot${isReminded(slot.slug) ? " is-set" : ""}" type="button" data-slug="${escapeHtml(slot.slug)}" data-title="${escapeHtml(name)}">
               ${isReminded(slot.slug) ? "✓ Alert Set" : `${BELL_SVG} Remind Me`}
             </button>
-            <a class="btn-zoro-primary" href="${wHref}" style="padding: 0.55rem 1rem;">
+            <a class="btn-zoro-primary btn-schedule-watch" href="${wHref}">
               ${watchLabel}
             </a>
           </div>
