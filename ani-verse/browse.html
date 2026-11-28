@@ -6,48 +6,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Browse Anime - AniFlick (Zoro UI × Aizen Motion)</title>
   <meta name="description" content="Browse full anime catalog with genre filters, ratings, and instant streaming on AniFlick.">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <!-- Loaded async: a slow Google Fonts response must never block the app script or render. -->
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
-  <noscript><link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet"></noscript>
-  <link rel="preload" href="css/zoro-aizen.css?v=22" as="style">
-  <link rel="preload" href="js/zoro-aizen.js?v=24" as="script">
-  <script>
-    /* Warm the API while the app script is still downloading: this removes a
-       full round trip from the critical path. The app script adopts these
-       in-flight requests instead of issuing duplicates. */
-    window.__zoroPrefetch = {};
-    (function () {
-      var paths = ["/api/auth/me", "/api/titles?limit=18"];
-      paths.forEach(function (path) {
-        var ctl = new AbortController();
-        var to = setTimeout(function () { ctl.abort(); }, 10000);
-        window.__zoroPrefetch[path] = fetch(path, { credentials: "same-origin", signal: ctl.signal })
-          .then(function (r) {
-            clearTimeout(to);
-            return r.json().then(function (d) { return { ok: r.ok, status: r.status, data: d, error: null }; });
-          })
-          .catch(function (e) {
-            clearTimeout(to);
-            return { ok: false, status: 0, data: null, error: String((e && e.message) || e) };
-          });
-      });
-    })();
-  </script>  <script>
-    /* Set the theme before first paint (no flash of the wrong palette). The
-       shared app script owns the toggle; this only reads the stored choice. */
-    (function () {
-      try {
-        var t = localStorage.getItem("av_theme");
-        document.documentElement.setAttribute("data-theme", t === "light" ? "light" : "dark");
-      } catch (e) {
-        document.documentElement.setAttribute("data-theme", "dark");
-      }
-    })();
-  </script>
+  <noscript></noscript>
+  <link rel="preload" href="css/zoro-aizen.css?v=23" as="style">
+  <link rel="preload" href="js/zoro-aizen.js?v=25" as="script">
+  <script src="/js/boot.js?v=1"></script>
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
-  <link rel="stylesheet" href="css/zoro-aizen.css?v=22">
+  <link rel="stylesheet" href="css/zoro-aizen.css?v=23">
 </head>
 <body>
 
@@ -116,15 +80,13 @@
       </div>
     </div>
 
-    <!-- Honest per-view note (Subbed / Dubbed): rendered by zoro-aizen.js and
-         set at parse time for ?view=subbed / ?view=dubbed. -->
+    <!-- View notice -->
     <div class="browse-view-note" id="browse-view-note" hidden></div>
 
     <!-- Filter Bar -->
     <div class="filter-bar-zoro" style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem;">
       <div class="genre-chips-wrap" id="genre-chips-container">
-        <!-- Genre chips are rendered by zoro-aizen.js — AniList genres for the
-             live catalog (the local catalog's genres are mapped onto them). -->
+        <!-- Genre chips -->
         <button class="genre-chip-zoro active" data-genre="all" type="button">All</button>
       </div>
       <div class="live-filter-row" id="live-filter-row" style="margin-bottom: 0;">
@@ -170,9 +132,7 @@
       </div>
     </div>
 
-    <!-- FULL FILTERS (Phase 2): score range, season, curated tags and a start
-         end date range. Collapsible; every control composes with the genre /
-         format / status / year filters above and updates the URL. -->
+    <!-- Full filters panel -->
     <div class="filters-panel" id="filters-panel">
       <button class="filters-panel-head" id="filters-toggle" type="button" aria-expanded="false" aria-controls="filters-panel-body">
         <span>⚙ Filters</span>
@@ -217,7 +177,7 @@
         <div class="filters-field" style="margin-top: 1rem;">
           <label>Tags</label>
           <div class="filters-tags" id="browse-tag-chips">
-            <!-- Tag chips rendered by zoro-aizen.js (curated AniList tags). -->
+            <!-- Tag chips -->
           </div>
         </div>
         <div class="filters-actions">
@@ -227,10 +187,7 @@
       </div>
     </div>
 
-    <!-- Browse by Year: AniList caps one query at 5,000 titles, so a year is
-         the only way to reach every title in the catalog. Chips are rendered
-         by zoro-aizen.js, grouped by decade; clicking one applies the same
-         year filter as the dropdown above. -->
+    <!-- Browse by Year -->
     <div class="browse-year-section" id="browse-year-section">
       <div class="browse-year-section-head">
         <span class="browse-year-title">Browse by Year</span>
@@ -239,114 +196,18 @@
       <div class="browse-year-decades" id="browse-year-decades"></div>
     </div>
 
-    <!-- Live catalog notice: "Service is busy — try again in a moment." or
-         the library fallback notice. Rendered by zoro-aizen.js. -->
+    <!-- Catalog notice -->
     <div id="browse-notice"></div>
 
-    <script>
-      /* Set the filters, heading and nav highlight from the URL at PARSE time
-         (before first paint) so ?sort=top never flashes "Trending" and
-         ?view=top-airing / ?kind=film / ?q= never flash "Explore Anime Shelf"
-         while the app script waits on the live catalog API. The app
-         re-renders the heading with the live result count once the catalog
-         answers. */
-      (function () {
-        var p = new URLSearchParams(location.search);
-        var s = p.get("sort");
-        var el = document.getElementById("catalog-sort-select");
-        if (el && ["trending", "popular", "top", "newest", "az", "name", "episodes", "updated", "favourites"].indexOf(s) >= 0) el.value = s;
-        var fmt = document.getElementById("browse-format-select");
-        if (fmt && p.get("format")) fmt.value = p.get("format").toUpperCase();
-        var st = document.getElementById("browse-status-select");
-        if (st && p.get("status")) st.value = p.get("status").toUpperCase();
-        /* Phase 2 filters: reflect the URL in the panel controls before first
-           paint so a shared ?minScore=80&season=WINTER view never flashes
-           "Any score / All seasons". */
-        var score = document.getElementById("browse-score-select");
-        if (score && p.get("minScore")) score.value = p.get("minScore");
-        var season = document.getElementById("browse-season-select");
-        if (season && p.get("season")) season.value = p.get("season").toUpperCase();
-        var startYear = document.getElementById("browse-start-year");
-        if (startYear && p.get("startAfter")) startYear.value = p.get("startAfter");
-        var endYear = document.getElementById("browse-end-year");
-        if (endYear && p.get("startBefore")) endYear.value = p.get("startBefore");
-        var h = document.getElementById("browse-heading");
-        var sub = document.getElementById("browse-subheading");
-        var q = (p.get("q") || "").trim();
-        var view = (p.get("view") || "").toLowerCase();
-        var kind = (p.get("kind") || "").toLowerCase();
-        var mode = q ? "search"
-          : view === "subbed" ? "subbed"
-          : view === "dubbed" ? "dubbed"
-          : (view === "movie" || kind === "film") ? "movies"
-          : view === "ona" ? "ona"
-          : view === "special" ? "special"
-          : view === "tv" ? "tv"
-          : view === "top-airing" ? "topairing"
-          : view === "top-upcoming" ? "topupcoming"
-          : "browse";
-        if (h) {
-          if (mode === "search") {
-            h.innerHTML = "<span>Results for '<span class=\"accent\"></span>'</span>";
-            h.querySelector(".accent").textContent = q;
-            if (sub) sub.textContent = "Searching the full AniList catalog — your curated shelf comes first.";
-          } else if (mode === "movies") {
-            h.innerHTML = "Movies";
-            if (sub) sub.textContent = "Every film in the live catalog — feature-length titles ready to stream.";
-          } else if (mode === "ona") {
-            h.innerHTML = "ONAs";
-            if (sub) sub.textContent = "Original Net Animations — titles made for online release.";
-          } else if (mode === "special") {
-            h.innerHTML = "Specials";
-            if (sub) sub.textContent = "Special episodes and one-off productions from the live catalog.";
-          } else if (mode === "tv") {
-            h.innerHTML = "TV";
-            if (sub) sub.textContent = "Television series in the live catalog.";
-          } else if (mode === "subbed") {
-            h.innerHTML = "Subbed";
-            if (sub) sub.textContent = "Every title streams with subtitles.";
-          } else if (mode === "dubbed") {
-            h.innerHTML = "Dubbed";
-            if (sub) sub.textContent = "Catalog titles with a verified English dub.";
-          } else if (mode === "topairing") {
-            h.innerHTML = "Top <span class=\"accent\">Airing</span>";
-            if (sub) sub.textContent = "Currently airing anime, ranked by popularity.";
-          } else if (mode === "topupcoming") {
-            h.innerHTML = "Top <span class=\"accent\">Upcoming</span>";
-            if (sub) sub.textContent = "The most anticipated unreleased anime, ranked by popularity.";
-          }
-        }
-        /* The honest note is set before first paint too, so ?view=dubbed never
-           flashes an empty line. */
-        var note = document.getElementById("browse-view-note");
-        if (note) {
-          if (mode === "subbed") { note.textContent = "Every title streams with subtitles."; note.hidden = false; }
-          else if (mode === "dubbed") { note.textContent = "Dub status is verified for catalog titles only."; note.hidden = false; }
-          else { note.textContent = ""; note.hidden = true; }
-        }
-        var wantHref = mode === "movies" ? "browse.html?view=movie"
-          : mode === "ona" ? "browse.html?view=ona"
-          : mode === "special" ? "browse.html?view=special"
-          : mode === "tv" ? "browse.html?view=tv"
-          : mode === "subbed" ? "browse.html?view=subbed"
-          : mode === "dubbed" ? "browse.html?view=dubbed"
-          : mode === "topairing" ? "browse.html?view=top-airing"
-          : mode === "topupcoming" ? "browse.html?view=top-upcoming"
-          : "browse.html";
-        document.querySelectorAll(".header-nav .nav-link").forEach(function (a) {
-          a.classList.toggle("active", a.getAttribute("href") === wantHref);
-        });
-      })();
-    </script>
+    <script src="js/browse-boot.js?v=1"></script>
 
     <!-- Zoro Card Grid with Hover Tooltip System -->
     <div id="browse-results"></div>
     <div class="cards-grid-zoro" id="zoro-main-grid">
-      <!-- Populated dynamically via zoro-aizen.js -->
+      <!-- Dynamic content -->
     </div>
 
-    <!-- Client-side pagination (12 per page). Rendered by zoro-aizen.js only
-         when the filtered list spans more than one page. -->
+    <!-- Pagination -->
     <div class="catalog-pagination" id="catalog-pagination" hidden></div>
   </main>
 
@@ -385,6 +246,6 @@
     </div>
   </footer>
 
-  <script src="js/zoro-aizen.js?v=24"></script>
+  <script src="js/zoro-aizen.js?v=25"></script>
 </body>
 </html>

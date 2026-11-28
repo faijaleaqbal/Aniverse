@@ -6,44 +6,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Frequently Asked Questions | AniFlick</title>
   <meta name="description" content="Answers to common questions about AniFlick: free streaming, accounts, Sub vs Dub, broken episodes, and more.">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <!-- Loaded async: a slow Google Fonts response must never block the app script or render. -->
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
-  <noscript><link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet"></noscript>
-  <link rel="preload" href="/css/zoro-aizen.css?v=22" as="style">
-  <link rel="preload" href="/js/zoro-aizen.js?v=24" as="script">
-  <script>
-    /* Warm the auth check while the app script is still downloading: the
-       header needs it to render the sign-in / account slot. */
-    window.__zoroPrefetch = {};
-    (function () {
-      var ctl = new AbortController();
-      var to = setTimeout(function () { ctl.abort(); }, 10000);
-      window.__zoroPrefetch["/api/auth/me"] = fetch("/api/auth/me", { credentials: "same-origin", signal: ctl.signal })
-        .then(function (r) {
-          clearTimeout(to);
-          return r.json().then(function (d) { return { ok: r.ok, status: r.status, data: d, error: null }; });
-        })
-        .catch(function (e) {
-          clearTimeout(to);
-          return { ok: false, status: 0, data: null, error: String((e && e.message) || e) };
-        });
-    })();
-  </script>  <script>
-    /* Set the theme before first paint (no flash of the wrong palette). The
-       shared app script owns the toggle; this only reads the stored choice. */
-    (function () {
-      try {
-        var t = localStorage.getItem("av_theme");
-        document.documentElement.setAttribute("data-theme", t === "light" ? "light" : "dark");
-      } catch (e) {
-        document.documentElement.setAttribute("data-theme", "dark");
-      }
-    })();
-  </script>
+  <noscript></noscript>
+  <link rel="preload" href="/css/zoro-aizen.css?v=23" as="style">
+  <link rel="preload" href="/js/zoro-aizen.js?v=25" as="script">
+  <script src="/js/boot.js?v=1" data-prefetch="auth"></script>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-  <link rel="stylesheet" href="/css/zoro-aizen.css?v=22">
+  <link rel="stylesheet" href="/css/zoro-aizen.css?v=23">
   <style>
     .info-page { max-width: 860px; margin: 0 auto; padding: 2.5rem 1.5rem 3.5rem; }
     .info-lede { color: var(--text-sub); font-size: 1rem; line-height: 1.65; margin-bottom: 2rem; }
@@ -209,6 +177,6 @@
     </div>
   </footer>
 
-  <script src="/js/zoro-aizen.js?v=24"></script>
+  <script src="/js/zoro-aizen.js?v=25"></script>
 </body>
 </html>

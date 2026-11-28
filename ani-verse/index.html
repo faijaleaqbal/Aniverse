@@ -10,48 +10,12 @@
   <meta property="og:title" content="AniFlick - Watch Anime Online Free">
   <meta property="og:description" content="AniFlick anime streaming platform featuring Zoro.to layout and Aizen cinematic motion design.">
   <meta property="og:image" content="/img/aniflick-logo.png">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <!-- Loaded async: a slow Google Fonts response must never block the app script or render. -->
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
-  <noscript><link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet"></noscript>
-  <link rel="preload" href="css/zoro-aizen.css?v=22" as="style">
-  <link rel="preload" href="js/zoro-aizen.js?v=24" as="script">
-  <script>
-    /* Warm the API while the app script is still downloading: this removes a
-       full round trip from the critical path. The app script adopts these
-       in-flight requests instead of issuing duplicates. */
-    window.__zoroPrefetch = {};
-    (function () {
-      var paths = ["/api/auth/me", "/api/titles?limit=18"];
-      paths.forEach(function (path) {
-        var ctl = new AbortController();
-        var to = setTimeout(function () { ctl.abort(); }, 10000);
-        window.__zoroPrefetch[path] = fetch(path, { credentials: "same-origin", signal: ctl.signal })
-          .then(function (r) {
-            clearTimeout(to);
-            return r.json().then(function (d) { return { ok: r.ok, status: r.status, data: d, error: null }; });
-          })
-          .catch(function (e) {
-            clearTimeout(to);
-            return { ok: false, status: 0, data: null, error: String((e && e.message) || e) };
-          });
-      });
-    })();
-  </script>  <script>
-    /* Set the theme before first paint (no flash of the wrong palette). The
-       shared app script owns the toggle; this only reads the stored choice. */
-    (function () {
-      try {
-        var t = localStorage.getItem("av_theme");
-        document.documentElement.setAttribute("data-theme", t === "light" ? "light" : "dark");
-      } catch (e) {
-        document.documentElement.setAttribute("data-theme", "dark");
-      }
-    })();
-  </script>
+  <noscript></noscript>
+  <link rel="preload" href="css/zoro-aizen.css?v=23" as="style">
+  <link rel="preload" href="js/zoro-aizen.js?v=25" as="script">
+  <script src="/js/boot.js?v=1"></script>
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
-  <link rel="stylesheet" href="css/zoro-aizen.css?v=22">
+  <link rel="stylesheet" href="css/zoro-aizen.css?v=23">
 </head>
 <body>
 
@@ -116,7 +80,7 @@
     <!-- Zoro Spotlight Hero Slider with Aizen Kinetic Transitions -->
     <section class="spotlight-hero" aria-label="Spotlight Carousel">
       <div id="spotlight-slider-container">
-        <!-- Rendered dynamically via zoro-aizen.js -->
+        <!-- Dynamic content -->
         <div class="spotlight-slide is-active" id="spotlight-static-slide">
           <div class="spotlight-backdrop" style="background-image: url('img/banners/kagerou-protocol.jpg');"></div>
           <div class="spotlight-overlay"></div>
@@ -141,56 +105,7 @@
         </div>
       </div>
 
-      <script>
-        /* The static fallback slide (visible until the catalog API answers)
-           must show the SAME probe-backed badges as the rendered carousel —
-           never a stale hardcoded DUB claim. Patch it from the title API at
-           parse time; the app replaces the slide once it renders. */
-        (function () {
-          var path = "/api/titles/kagerou-protocol";
-          window.__zoroPrefetch = window.__zoroPrefetch || {};
-          var ctl = new AbortController();
-          var to = setTimeout(function () { ctl.abort(); }, 10000);
-          window.__zoroPrefetch[path] = fetch(path, { credentials: "same-origin", signal: ctl.signal })
-            .then(function (r) {
-              clearTimeout(to);
-              return r.json().then(function (d) {
-                var t = d && d.title;
-                /* ONLY the static fallback slide — once the app renders the
-                   carousel this element is gone and the patch is a no-op.
-                   (A generic selector raced the render and stamped JJK's
-                   badges onto the first rendered slide.) */
-                var staticSlide = document.getElementById("spotlight-static-slide");
-                var badges = staticSlide ? staticSlide.querySelector(".spotlight-badges") : null;
-                if (t && badges) {
-                  /* Runtime/year come from the SAME catalog source the
-                     rendered slides use — never a hardcoded number that
-                     drifts from the live value. */
-                  var rt = document.getElementById("spotlight-static-runtime");
-                  if (rt && t.runtimeMin) rt.textContent = (t.year ? t.year + " • " : "") + t.runtimeMin + "m";
-                  var sub = badges.querySelector(".badge-sub");
-                  if (sub) sub.textContent = "SUB " + (t.episodes || 1);
-                  var dub = badges.querySelector(".badge-dub");
-                  if (t.dubCount > 0) {
-                    if (!dub) {
-                      dub = document.createElement("span");
-                      dub.className = "badge badge-dub";
-                      if (sub) sub.insertAdjacentElement("afterend", dub); else badges.appendChild(dub);
-                    }
-                    dub.textContent = "DUB " + t.dubCount;
-                  } else if (dub) {
-                    dub.remove();
-                  }
-                }
-                return { ok: r.ok, status: r.status, data: d, error: null };
-              });
-            })
-            .catch(function (e) {
-              clearTimeout(to);
-              return { ok: false, status: 0, data: null, error: String((e && e.message) || e) };
-            });
-        })();
-      </script>
+      <script src="js/index-spotlight.js?v=1"></script>
 
       <div class="spotlight-nav-anchor">
         <div class="spotlight-nav">
@@ -209,15 +124,13 @@
       <div class="cards-grid-zoro" id="continue-watching-row"></div>
     </section>
 
-    <!-- Top 10 tabs (live AniList): Trending / Most Popular / Top Rated.
-         AniList has no historical trending window, so the tabs are named
-         after the sort they really are — never "Today / This Week". -->
+    <!-- Top 10 tabs -->
     <section class="section-trending container-main">
       <div class="section-header-zoro">
         <div>
           <h2 class="section-title">Top <span class="accent">10</span></h2>
           <span class="top10-tabs" id="top10-tabs" role="tablist" aria-label="Top 10 category">
-            <!-- Rendered by zoro-aizen.js -->
+            <!-- Dynamic content -->
           </span>
         </div>
         <div class="trending-nav">
@@ -250,8 +163,7 @@
       </div>
     </section>
 
-    <!-- Zoro Main Catalog Grid with Genre Filter Chips & Hover Tooltips.
-         The CURATED shelf (the 18 titles with full data) stays untouched. -->
+    <!-- Catalog grid -->
     <section class="container-main" style="margin-bottom: 3rem;">
       <div class="section-header-zoro">
         <h2 class="section-title">From <span class="accent">Your Library</span></h2>
@@ -260,8 +172,7 @@
 
       <div class="filter-bar-zoro">
         <div class="genre-chips-wrap" id="genre-chips-container">
-          <!-- Genre chips are rendered from GET /api/genres by zoro-aizen.js so
-               every genre with titles gets a chip (no hardcoded subset). -->
+          <!-- Genre chips -->
           <button class="genre-chip-zoro active" data-genre="all" type="button">All</button>
         </div>
       </div>
@@ -271,11 +182,7 @@
       </div>
     </section>
 
-    <!-- ==================================================================
-         LIVE CATALOG RAILS (AniList) — the full world catalog.
-         Trending Now / Top Rated / Latest Episodes, plus Top Airing as its
-         own section (currently-airing anime by popularity).
-         ================================================================== -->
+    <!-- Catalog rails -->
     <section class="container-main live-rail-section" id="live-top-airing-section">
       <div class="section-header-zoro">
         <div>
@@ -377,6 +284,6 @@
     </div>
   </footer>
 
-  <script src="js/zoro-aizen.js?v=24"></script>
+  <script src="js/zoro-aizen.js?v=25"></script>
 </body>
 </html>

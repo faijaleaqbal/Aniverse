@@ -6,46 +6,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Anime Details - AniFlick (Zoro UI × Aizen Motion)</title>
   <meta name="description" content="Anime details, episodes, and recommendations on AniFlick.">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
-  <noscript><link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet"></noscript>
-  <link rel="preload" href="css/zoro-aizen.css?v=22" as="style">
-  <link rel="preload" href="js/zoro-aizen.js?v=24" as="script">
-  <script>
-    /* Warm the API while the app script is still downloading. */
-    window.__zoroPrefetch = {};
-    (function () {
-      var paths = ["/api/auth/me", "/api/titles?limit=18"];
-      paths.forEach(function (path) {
-        var ctl = new AbortController();
-        var to = setTimeout(function () { ctl.abort(); }, 10000);
-        window.__zoroPrefetch[path] = fetch(path, { credentials: "same-origin", signal: ctl.signal })
-          .then(function (r) {
-            clearTimeout(to);
-            return r.json().then(function (d) { return { ok: r.ok, status: r.status, data: d, error: null }; });
-          })
-          .catch(function (e) {
-            clearTimeout(to);
-            return { ok: false, status: 0, data: null, error: String((e && e.message) || e) };
-          });
-      });
-    })();
-  </script>
-  <script>
-    /* Set the theme before first paint (no flash of the wrong palette). The
-       shared app script owns the toggle; this only reads the stored choice. */
-    (function () {
-      try {
-        var t = localStorage.getItem("av_theme");
-        document.documentElement.setAttribute("data-theme", t === "light" ? "light" : "dark");
-      } catch (e) {
-        document.documentElement.setAttribute("data-theme", "dark");
-      }
-    })();
-  </script>
+  <noscript></noscript>
+  <link rel="preload" href="css/zoro-aizen.css?v=23" as="style">
+  <link rel="preload" href="js/zoro-aizen.js?v=25" as="script">
+  <script src="/js/boot.js?v=1"></script>
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
-  <link rel="stylesheet" href="css/zoro-aizen.css?v=22">
+  <link rel="stylesheet" href="css/zoro-aizen.css?v=23">
 </head>
 <body>
 
@@ -139,11 +105,7 @@
                 Watch Now
               </a>
               <button class="btn-zoro-primary" id="detail-add-list" type="button" data-active="false" style="padding: 0.7rem 1.5rem;">+ Add to My List</button>
-              <!-- Remind Me (live-browser defect #2, 23 Nov): hidden by
-                   default; the app shows it only for airing/upcoming titles
-                   and wires it to the same localStorage reminders as the
-                   schedule page. Label is set by JS ("Remind Me" / "✓ Alert
-                   Set") so the state is always in sync. -->
+              <!-- Remind Me -->
               <button class="btn-remind-slot" id="detail-remind" type="button" hidden>Remind Me</button>
             </div>
           </div>
@@ -159,8 +121,7 @@
         <div class="detail-episode-list" id="detail-episode-list"></div>
       </section>
 
-      <!-- Phase 2 live metadata. Each block carries its own id and is filled
-           (or hidden) by zoro-aizen.js — an empty section never renders. -->
+      <!-- Metadata sections -->
       <section class="container-main detail-section live-detail-section" id="detail-cast-section" hidden>
         <div class="section-header-zoro">
           <h2 class="section-title">Characters &amp; <span class="accent">Voice Actors</span></h2>
@@ -227,6 +188,6 @@
     </div>
   </footer>
 
-  <script src="js/zoro-aizen.js?v=24"></script>
+  <script src="js/zoro-aizen.js?v=25"></script>
 </body>
 </html>

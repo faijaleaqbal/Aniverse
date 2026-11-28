@@ -1,17 +1,6 @@
 (function () {
   "use strict";
 
-  /* ==========================================================================
-     DEVTOOLS BLOCKING (user request, 2026-11-28: DevTools must not open)
-     Layer 1: block the keyboard shortcuts + the right-click menu.
-     Layer 2: detect a DevTools panel opened via the browser menu and blank
-     the page. Runs on every page — this script is included site-wide.
-     Normal keys (letters, Enter, Space, arrows, Escape) and normal clicks
-     are never touched, so playback, search, filters and login keep working.
-     ========================================================================== */
-
-  /* Layer 1a — block DevTools keyboard shortcuts. Capture phase so the
-     event is stopped before any other handler sees it. */
   document.addEventListener(
     "keydown",
     (e) => {
@@ -33,16 +22,8 @@
     true
   );
 
-  /* Layer 1b — block the right-click context menu site-wide, so "Inspect"
-     cannot be reached from it. */
   document.addEventListener("contextmenu", (e) => e.preventDefault(), true);
 
-  /* Layer 2 — detect a DevTools panel opened via the browser menu (which
-     keyboard/contextmenu blocking cannot stop). A docked DevTools panel
-     makes window.outerWidth/outerHeight much larger than the inner size;
-     normal browser chrome stays well under the threshold. Two consecutive
-     detections are required so a transient resize cannot blank the page.
-     The interval is cleared before blanking, so there is no reload loop. */
   let devtoolsHits = 0;
   const devtoolsCheck = setInterval(() => {
     const widthGap = window.outerWidth - window.innerWidth;
@@ -59,11 +40,6 @@
     }
   }, 1000);
 
-
-  /* ==========================================================================
-     API HELPER & STATE
-     ========================================================================== */
-
   let currentUser = null;
 
   function escapeHtml(str) {
@@ -77,9 +53,7 @@
   }
 
   /* __COMMENT_TEXT_LOGIC_START__ */
-  /* The API serves comment names/bodies HTML-escaped. Decode the FIVE entities
-     the server can emit (in this order, &amp; last) before handing the text to
-     textContent — the browser never parses it as markup. */
+  
   function decodeHtml(value) {
     if (value == null) return "";
     return String(value)
@@ -90,10 +64,6 @@
       .replace(/&amp;/g, "&");
   }
 
-  /* One comment row, built with DOM APIs ONLY: the name and body are assigned
-     via textContent, never innerHTML, so a stored payload can never become
-     markup. Lives in this marked block so the tests can render a comment
-     against a minimal fake DOM and prove no SCRIPT/IMG element is produced. */
   function buildCommentNode(c) {
     const wrap = document.createElement("div");
     wrap.className = "single-comment";
@@ -139,15 +109,7 @@
   /* __COMMENT_TEXT_LOGIC_END__ */
 
   /* __AUTONEXT_LOGIC_START__ */
-  /* Auto-next decision — ONE pure function for every player that reports an
-     end-of-episode event (Zoko `ended`, MegaPlay `complete`). The TVplus
-     backup and the animegg embed emit no such event, so they never reach
-     here. totalEps is the title's real count (the AIRED count for a live
-     title); 0 = unknown, and an unknown count must NEVER invent a next
-     episode. `continuation` (optional) is a split-cour follow-on
-     ({ live, name }): when the last episode of THIS title ends and a
-     continuation exists, the decision is "continue" into the follow-on
-     title instead of "completed" (Spy x Family Part 1 -> Cour 2). */
+  
   function autoNextAction({ server, currentEp, totalEps, autonext, continuation }) {
     if (server === "backup") return { action: "none" };
     if (server === "animegg") return { action: "none" };
@@ -156,8 +118,7 @@
     const current = Number(currentEp) || 0;
     if (total <= 0) return { action: "none" };
     if (current >= total) {
-      /* Split-cour title: the story continues under a DIFFERENT title id,
-         so the last episode continues there instead of ending. */
+      
       if (continuation && continuation.live) {
         return { action: "continue", live: continuation.live, name: continuation.name || "" };
       }
@@ -167,26 +128,11 @@
   }
   /* __AUTONEXT_LOGIC_END__ */
 
-  /* ---- Real metadata helpers (Phase 1) ----
-     Local cover art is the primary image; the remote URL is only a fallback.
-     Title cards/links navigate to the detail page; explicit "Watch"/"Resume"
-     actions go straight to the watch page. */
   /* __POSTER_LOGIC_START__ */
   const COVER_FALLBACK = "img/banner.jpg";
-  /* AniList's CDN (s4.anilist.co) answers cross-site hotlinked <img> requests
-     with 403 when a Referer is sent, so live posters are loaded with
-     referrerpolicy="no-referrer". The onerror fallback guarantees a failed
-     poster degrades to the local placeholder instead of a broken-image card. */
+  
   const LIVE_POSTER_FALLBACK = "img/banner.jpg";
 
-  /* A catalog title's OWN shipped artwork (img/covers/<slug>.jpg and
-     img/banners/<slug>.jpg are real files in the site bundle). A catalog row
-     can reach the API with NO cover metadata at all — a fresh seed, or a
-     deployment where the metadata fetch never ran — and when every card fell
-     back to the ONE shared placeholder, a whole rail rendered the same
-     poster for ten different titles. This per-title path is truthful (it is
-     that title's real art) and distinct per title. Used ONLY when the API
-     gave no artwork at all, so an enriched row behaves exactly as before. */
   function localAssetFor(t, dir) {
     const slug = t && t.slug;
     return slug ? `img/${dir}/${slug}.jpg` : "";
@@ -199,7 +145,7 @@
   }
 
   function livePosterAttrs() {
-    return `referrerpolicy="no-referrer" onerror="this.onerror=null;this.src='${LIVE_POSTER_FALLBACK}';"`;
+    return `referrerpolicy="no-referrer" data-fallback-src="${LIVE_POSTER_FALLBACK}"`;
   }
 
   function bannerOf(t) {
@@ -208,9 +154,21 @@
     return known || localAssetFor(t, "banners") || COVER_FALLBACK;
   }
   /* __POSTER_LOGIC_END__ */
-  /* Truncate at a WORD boundary. The hero's CSS 3-line clamp alone sliced
-     mid-word ("romantic lov…") — pre-trimming the synopsis means the clamp
-     never has to cut a word. */
+  if (typeof document !== "undefined") {
+    document.addEventListener(
+      "error",
+      (e) => {
+        const img = e.target;
+        if (!img || img.tagName !== "IMG") return;
+        const fallback = img.getAttribute("data-fallback-src");
+        if (!fallback) return;
+        img.removeAttribute("data-fallback-src");
+        img.src = fallback;
+      },
+      true
+    );
+  }
+  
   function truncateWords(text, max = 200) {
     const t = String(text || "").trim();
     if (t.length <= max) return t;
@@ -220,13 +178,6 @@
     return base.replace(/[\s.,;:!?-]+$/, "") + "…";
   }
 
-  /* ONE badge format on every card: "SUB N" (the title's episode count) and
-     "DUB N" (the probe-backed dub count, only when one really exists).
-     Pure live titles have no dub probe data, so they NEVER get a DUB badge;
-     a live title that IS a catalog twin carries its catalog dubCount from
-     the server, so its card agrees with the spotlight/detail cards.
-     A badge is NEVER rendered without a count: when the episode count is
-     unknown the badge is hidden instead of showing a bare "SUB". */
   function subCount(t) {
     const n = Number(t && t.episodes);
     return Number.isFinite(n) && n > 0 ? n : null;
@@ -245,9 +196,7 @@
   function watchHref(slug, ep) {
     return `watch.html?slug=${encodeURIComponent(slug)}&ep=${encodeURIComponent(ep == null ? 1 : ep)}`;
   }
-  /* A comma-separated ?tags= list -> array, trimmed, de-duplicated. Kept
-     case-sensitive (AniList tags are); the server canonicalises the known
-     ones, so the panel can send the display spelling. */
+  
   function parseTagList(value) {
     const parts = String(value == null ? "" : value)
       .split(",")
@@ -265,13 +214,8 @@
     return map[s] || s;
   }
 
-  /* Every API call is bounded: a stalled connection must never freeze a page
-     on fallback content. GETs are retried once (bodyless = safe to repeat). */
   const API_TIMEOUT_MS = 10000;
 
-  /* Requests that the inline head script already started. Reusing them removes
-     a full round trip from the critical path (the API call no longer waits for
-     the app script to download). */
   function prefetchStore() {
     return window.__zoroPrefetch || null;
   }
@@ -284,20 +228,15 @@
     }
     options.credentials = "same-origin";
 
-    /* A request that was already issued by the inline prefetch is adopted
-       instead of being sent a second time. */
     const store = prefetchStore();
     if (!options.body && store && store[path]) {
       const pending = store[path];
       delete store[path];
       const pre = await pending;
       if (pre && pre.ok) return pre;
-      /* A failed prefetch falls through to the normal path below. */
+      
     }
 
-    /* Per-call timeout override: some routes are legitimately slow on a cold
-       lookup (the animegg probe can take 15–25s while Anivexa resolves the
-       title). Default stays 10s for everything else. */
     const timeoutMs =
       Number(options.timeoutMs) > 0 ? Number(options.timeoutMs) : API_TIMEOUT_MS;
     const controller = new AbortController();
@@ -325,8 +264,6 @@
     }
   }
 
-  /* In-flight request coalescing: several sections ask for the same catalog
-     slice at once, so they share one network round trip instead of three. */
   const inflightTitles = new Map();
 
   function fetchTitles(limit) {
@@ -341,18 +278,10 @@
     return inflightTitles.get(key);
   }
 
-  /* ==========================================================================
-     LIVE CATALOG (AniList) HELPERS
-     The browser NEVER calls AniList — it goes through the server endpoints
-     (/api/search, /api/browse, /api/live/:id, /api/airing), which enforce
-     the content rules and add the is18plus flag.
-     ========================================================================== */
-
   const LIVE_BUSY_MESSAGE = "Service is busy — try again in a moment.";
   const LIVE_LIBRARY_MESSAGE = "Showing your library — live catalog is busy.";
   const LIVE_PAGE_SIZE = 12;
 
-  /* AniList's genre list — the browse filters speak these names. */
   const ANILIST_GENRES = [
     "Action", "Adventure", "Comedy", "Drama", "Ecchi", "Fantasy", "Horror",
     "Mahou Shoujo", "Mecha", "Music", "Mystery", "Romance", "Sci-Fi",
@@ -364,7 +293,7 @@
     popular: "Most Popular",
     top: "Top Rated",
     newest: "Newest",
-    /* Phase 2: full-filter browse sorts. az/name both mean TITLE_ROMAJI. */
+    
     az: "Name A-Z",
     name: "Name A-Z",
     episodes: "Most Episodes",
@@ -372,9 +301,6 @@
     favourites: "Most Favourited",
   };
 
-  /* Phase 2 curated tag list for the browse filter panel. These are real
-     AniList TAGS (case-sensitive upstream; canonicalTag maps them). No
-     age-rating or SUB/DUB tag exists here — AniList has no such data. */
   const BROWSE_TAGS = [
     "Isekai", "CGDCT", "Mahou Shoujo", "Mecha", "Sports", "Supernatural",
     "Thriller", "Vampire", "Military", "Parody", "Space", "Josei",
@@ -382,18 +308,6 @@
     "Strategy Game", "Team Sports", "Urban Fantasy",
   ];
 
-  /* ==========================================================================
-     BROWSE YEAR RANGE
-     AniList caps a single query's TOTAL at 5,000 titles, so unfiltered Browse
-     can only ever show the first ~5,000 of ~20,000 anime. A single year is
-     always far below that cap (hundreds at most), which is what makes the
-     whole library reachable through its year. The range therefore starts at
-     1960 — anime's TV era, and where AniList's own catalog begins — and runs
-     through NEXT year (AniList carries upcoming seasonYear ahead of release).
-     No per-year counts are fetched; the chips are navigation only.
-     Pure helpers, no DOM: server/test/e2e.js extracts this marked block and
-     evaluates it directly to test the shipped range.
-     ========================================================================== */
   /* __BROWSE_YEAR_LOGIC_START__ */
   const BROWSE_YEAR_MIN = 1960;
 
@@ -410,8 +324,6 @@
   }
   /* __BROWSE_YEAR_LOGIC_END__ */
 
-  /* The local catalog's genre names mapped onto AniList's spelling — the
-     genres page and the detail pages link with the local names. */
   const GENRE_ALIASES = {
     life: "Slice of Life",
     "slice of life": "Slice of Life",
@@ -427,9 +339,6 @@
     return GENRE_ALIASES[raw.toLowerCase()] || raw;
   }
 
-  /* A live title that IS one of the 18 curated catalog titles links to the
-     CATALOG detail page (it has the full data: dub badges, episode titles).
-     Everything else opens the live detail view. */
   function liveDetailHref(t) {
     if (!t) return "browse.html";
     if (t.catalogSlug) return detailHref(t.catalogSlug);
@@ -442,9 +351,6 @@
     return `watch.html?live=${encodeURIComponent(t.anilistId)}&ep=${encodeURIComponent(ep == null ? 1 : ep)}`;
   }
 
-  /* Live titles have NO dub data (no dub_checks rows) — never show a DUB
-     badge or count for them. The 18+ badge comes from the server's
-     is18plus flag (Ecchi genre) and nothing else. */
   function eighteenBadge(t) {
     return t && t.is18plus ? `<span class="badge-mini-18">18+</span>` : "";
   }
@@ -464,16 +370,6 @@
     return map[t.status] || t.status || "Unknown";
   }
 
-  /* ========================================================================
-     REMINDERS — real, persisted, this-device only (fix #9, 23 Nov audit).
-     Shared by the schedule page AND the detail pages (live-browser defect
-     #2, 23 Nov: detail pages had no Remind Me button at all). A reminder is
-     a {slug, name} in localStorage; the schedule page lists reminded titles
-     with their weekly airing time in the "Your Reminders" section. There is
-     NO push/browser notification (no service worker) — the copy promises
-     none. Live titles key by "live-<anilistId>" (they have no catalog slug);
-     their Watch link goes to watch.html?live=<id>&ep=1.
-     ======================================================================== */
   const LS_REMINDERS_KEY = "av_reminders";
   const BELL_SVG = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>`;
   function readReminders() {
@@ -489,7 +385,7 @@
   function isReminded(slug) {
     return readReminders().some((r) => r.slug === slug);
   }
-  /* Toggle: returns true when the reminder was ADDED, false when removed. */
+  
   function toggleReminder(slug, name) {
     const list = readReminders();
     const i = list.findIndex((r) => r.slug === slug);
@@ -498,8 +394,7 @@
     writeReminders(list);
     return true;
   }
-  /* Watch link for a reminder key: live keys ("live-<anilistId>") go to the
-     live watch URL, catalog slugs to the slug watch URL. */
+  
   function reminderWatchHref(key) {
     if (typeof key === "string" && key.startsWith("live-")) {
       const id = key.slice("live-".length);
@@ -507,15 +402,11 @@
     }
     return watchHref(key, 1);
   }
-  /* Only titles with something still to air get a reminder: airing or
-     upcoming. Finished/cancelled titles have nothing to remind about. */
+  
   function titleNeedsReminder(status) {
     return status === "RELEASING" || status === "NOT_YET_RELEASED";
   }
-  /* Wire the detail-page Remind Me button (shared by catalog + live detail
-     pages): shows it, paints the current state, toggles on click. The
-     button starts `hidden` in the markup and stays hidden for finished
-     titles — the caller decides whether to call this at all. */
+  
   function wireDetailRemindButton(btn, key, name) {
     if (!btn) return;
     const paint = () => {
@@ -534,7 +425,6 @@
     });
   }
 
-  /* "2 hours ago" / "3 days ago" for the Latest Episodes rail. */
   function timeSinceLabel(unixSeconds) {
     const ts = Number(unixSeconds);
     if (!Number.isFinite(ts) || ts <= 0) return "";
@@ -559,18 +449,13 @@
     }
   }
 
-  /* ---- "More Like This" (ONE renderer for the catalog AND live detail pages) ----
-     A recommendation is a poster card with a link and the SUB/DUB/18+ badges,
-     whichever side of the catalog it came from. The section hides itself
-     when there is nothing to show — an empty "More Like This" is noise. */
   function renderRecommendationCard(o) {
     if (!o) return "";
     const isCatalog = !!o.slug;
     const href = isCatalog ? detailHref(o.slug) : liveDetailHref(o);
     const cover = coverOf(o);
     const typeLabel = isCatalog ? (o.kind || "Series") : liveFormatLabel(o);
-    /* A live recommendation carries no start date in the detail payload, so
-       its year is unknown — show the type alone rather than an invented "—". */
+    
     const yearPart = o.year != null ? ` • <span>${escapeHtml(String(o.year))}</span>` : "";
     return `
       <div class="zoro-card" ${isCatalog ? `data-slug="${escapeHtml(o.slug)}"` : `data-anilist-id="${escapeHtml(o.anilistId)}"`}>
@@ -602,10 +487,6 @@
     if (section) section.hidden = false;
   }
 
-  /* Catalog "More Like This" — up to 6 same-genre catalog titles. ONE helper
-     shared by the catalog detail page and the watch page, so both rails pick
-     the same titles in the same order. Live titles use AniList's own
-     recommendation edges (already in the /api/live payload), never this. */
   function sameGenreRecommendations(titles, currentSlug, genres) {
     const myGenres = new Set((genres || []).map((g) => String(g).toLowerCase()));
     return (Array.isArray(titles) ? titles : [])
@@ -616,12 +497,9 @@
       .map((x) => x.o);
   }
 
-  /* One live card — same markup/style as the catalog cards. */
   function renderLiveCard(t, opts = {}) {
     if (!t) return "";
-    /* Catalog rows (the DUBBED shelf) carry a slug + kind instead of an
-       AniList id + format. Same card, but the link must open the catalog
-       detail page and the type label reads the catalog's own kind. */
+    
     const isCatalog = !!(t && t.slug);
     const href = opts.href || (isCatalog ? detailHref(t.slug) : liveDetailHref(t));
     const cover = coverOf(t);
@@ -654,8 +532,6 @@
     `;
   }
 
-  /* One row in the search dropdown — works for catalog titles and live
-     AniList titles alike. */
   function searchRowHtml(t, href) {
     const isLive = !!(t && t.live);
     const meta = isLive
@@ -671,7 +547,6 @@
       </a>`;
   }
 
-  /* The busy / library-fallback notice above a grid. */
   function renderLiveNotice(message, kind) {
     const wrap = document.getElementById("browse-notice");
     if (!wrap) return;
@@ -687,12 +562,6 @@
       </div>`;
   }
 
-  /* ==========================================================================
-     1. AIZEN CINEMATIC SHUTTER INTRO
-     ========================================================================== */
-
-  /* The intro is a flourish, never a gate: as soon as the real content is on
-     screen it steps aside instead of holding the page for its full runtime. */
   let contentReadyDispatched = false;
 
   function markContentReady() {
@@ -745,12 +614,10 @@
       if (timer) clearInterval(timer);
       overlay.classList.add("is-exiting");
       sessionStorage.setItem("aizen_intro_seen", "true");
-      /* The shutter transition runs for 0.6s - remove the overlay after it. */
+      
       setTimeout(() => overlay.remove(), 650);
     }
 
-    /* Real content is ready -> let it through (after a short minimum so the
-       intro still reads as an intro). */
     window.addEventListener("zoro:contentReady", () => {
       const elapsed = Date.now() - startedAt;
       if (elapsed >= 450) {
@@ -762,8 +629,7 @@
 
     timer = setInterval(() => {
       progress += Math.floor(Math.random() * 12) + 6;
-      /* Wall-clock cap: a throttled background tab must not keep the intro
-         (and the page behind it) waiting for the next tick. */
+      
       if (progress >= 100 || Date.now() - startedAt > 1000) {
         progress = 100;
         clearInterval(timer);
@@ -781,10 +647,6 @@
     overlay.addEventListener("click", finish);
   }
 
-  /* ==========================================================================
-     TOAST NOTIFICATIONS
-     ========================================================================== */
-
   function showToast(message, icon = "✓", duration = 2000) {
     let container = document.querySelector(".aizen-toast-container");
     if (!container) {
@@ -795,8 +657,7 @@
 
     const toast = document.createElement("div");
     toast.className = "aizen-toast";
-    /* Escape both slots: callers pass user display names and AniList
-       titles, so raw interpolation is an XSS sink (audit M-3). */
+    
     toast.innerHTML = `
       <div class="aizen-toast-icon">${escapeHtml(icon)}</div>
       <span>${escapeHtml(message)}</span>
@@ -810,19 +671,11 @@
     }, duration);
   }
 
-  /* Server-switch cleanup: transient player toasts ("TVplus player ready —
-     press Play inside the player", skip notices, ...) belong to the player
-     that was just torn down. Left alone they linger over the NEXT server's
-     UI, which is exactly the stray-toast report. */
   function clearPlayerToasts() {
     document.querySelectorAll(".aizen-toast-container, #zoro-toasts").forEach((c) => {
       c.innerHTML = "";
     });
   }
-
-  /* ==========================================================================
-     LIGHT / DARK THEME (Phase 3b)
-     ========================================================================== */
 
   const LS_THEME_KEY = "av_theme";
 
@@ -836,9 +689,6 @@
     if (btn) btn.setAttribute("aria-pressed", theme === "light" ? "true" : "false");
   }
 
-  /* The palette itself lives in zoro-aizen.css ([data-theme="light"]); this
-     only owns the attribute and the persisted choice. An inline head script
-     already set the attribute before first paint, so there is no flash. */
   function initThemeToggle() {
     const btn = document.getElementById("btn-theme-toggle");
     if (!btn) return;
@@ -851,20 +701,12 @@
     });
   }
 
-  /* ==========================================================================
-     MOBILE DRAWER NAVIGATION
-     ========================================================================== */
-
   function initMobileDrawer() {
     const toggleBtns = document.querySelectorAll(".menu-toggle-btn");
     if (!toggleBtns.length) return;
 
     let backdrop = document.querySelector(".mobile-nav-backdrop");
-    /* Single open/close path: the body class lifts the site header (and its
-       hamburger toggle) ABOVE the backdrop while the drawer is open, so the
-       toggle itself stays clickable and closes the drawer. Without it the
-       280px drawer slides over the hamburger and its brand link hijacks the
-       click (navigating to index.html instead of closing). */
+    
     const setDrawer = (open) => {
       if (!backdrop) return;
       backdrop.classList.toggle("is-open", open);
@@ -907,7 +749,7 @@
       backdrop.addEventListener("click", (e) => {
         if (e.target === backdrop) setDrawer(false);
       });
-      /* Escape closes the drawer (it used to do nothing). */
+      
       document.addEventListener("keydown", (e) => {
         if (e.key === "Escape" && backdrop.classList.contains("is-open")) {
           setDrawer(false);
@@ -917,15 +759,11 @@
 
     toggleBtns.forEach((btn) => {
       btn.addEventListener("click", () => {
-        /* Toggle: clicking the hamburger again closes the drawer. */
+        
         setDrawer(!backdrop.classList.contains("is-open"));
       });
     });
   }
-
-  /* ==========================================================================
-     2. AUTH MODAL & NAVBAR USER PILL
-     ========================================================================== */
 
   function renderAuthModal() {
     if (document.querySelector(".aizen-modal-backdrop")) return;
@@ -978,9 +816,6 @@
 
     document.body.appendChild(modal);
 
-    /* Social logins (Google / Discord / MAL / AniList): the server says
-       which providers are configured — unconfigured providers never render
-       a button. Fetched once per page load; the modal reuses the result. */
     renderSocialLogins(modal.querySelector("#zoro-social-block"), modal.querySelector("#zoro-social-logins"));
 
     let activeTab = "login";
@@ -999,10 +834,6 @@
     const forgotBack = modal.querySelector("#btn-forgot-back");
     const forgotSubmit = modal.querySelector("#btn-forgot-submit");
 
-    /* Forgot password: the modal swaps the sign-in form for a small email
-       form. The server answers the SAME generic message whether or not the
-       email is registered, and the modal shows exactly that message — never
-       a hint about whether the account exists. */
     function showForgotView(show) {
       forgotView.style.display = show ? "block" : "none";
       form.style.display = show ? "none" : "";
@@ -1045,9 +876,7 @@
         body: { email: forgotForm.email.value.trim() },
       });
       forgotSubmit.disabled = false;
-      /* The server's message is the same for every email — show it
-         verbatim. A 429 (too many requests) shows the rate-limit message
-         instead, in the red style. */
+      
       forgotMsg.textContent =
         (res.data && (res.data.message || (res.data.error && res.data.error.message))) ||
         "If an account exists for that email, a reset link has been sent.";
@@ -1102,11 +931,6 @@
     }
   }
 
-  /* Social-login buttons for the auth modal. The list comes from the
-     server (GET /api/auth/providers) and is cached for the page's life —
-     a provider with no credentials configured simply has no button. Each
-     button is a plain link to /auth/<provider> (full navigation, as OAuth
-     requires); `next` returns the user to the page they signed in from. */
   let socialProvidersCache = null;
 
   async function renderSocialLogins(block, list) {
@@ -1260,10 +1084,6 @@
     updateHeaderUser();
   }
 
-  /* ==========================================================================
-     3. ZORO AUTOCOMPLETE SEARCH
-     ========================================================================== */
-
   function initSearch() {
     const input = document.getElementById("zoro-search-input");
     const dropdown = document.getElementById("zoro-search-dropdown");
@@ -1276,19 +1096,12 @@
       const q = input.value.trim();
       clearTimeout(debounceTimer);
 
-      /* The header search ONLY drives the suggestion dropdown. It must never
-         live-filter a page content grid (typing "Naruto" on Home used to shrink
-         the Latest Episodes grid to one card). Filtering happens on submit:
-         Enter navigates to browse.html?q=… (or applies the query there). */
-
       if (!q) {
         dropdown.classList.remove("is-open");
         dropdown.innerHTML = "";
         return;
       }
 
-      /* Minimum 2 characters — a single letter matches thousands of titles
-         and burns the AniList rate limit for nothing. */
       if (q.length < 2) {
         dropdown.innerHTML = `<div style="padding: 12px; font-size: 0.8rem; color: var(--text-muted); text-align: center;">Type at least 2 characters</div>`;
         dropdown.classList.add("is-open");
@@ -1301,14 +1114,14 @@
       const token = ++searchToken;
       debounceTimer = setTimeout(async () => {
         const res = await api(`/api/search?q=${encodeURIComponent(q)}&page=1`);
-        /* A newer keystroke won the race — this answer is stale. */
+        
         if (token !== searchToken) return;
 
         const local = (res.ok && res.data && Array.isArray(res.data.local)) ? res.data.local : [];
         const more = (res.ok && res.data && Array.isArray(res.data.results)) ? res.data.results : [];
 
         if (!res.ok) {
-          /* AniList is down: the LOCAL catalog still searches. */
+          
           const localRes = await api(`/api/titles?q=${encodeURIComponent(q)}&limit=6`);
           if (token !== searchToken) return;
           const localTitles = (localRes.ok && localRes.data && Array.isArray(localRes.data.titles))
@@ -1362,8 +1175,6 @@
       }
     }
 
-    // Submit on Enter, close on Escape (the dropdown used to survive Escape
-    // and only closed on navigation).
     input.addEventListener("keydown", (e) => {
       if (e.key === "Enter") {
         e.preventDefault();
@@ -1386,10 +1197,6 @@
     }
   }
 
-  /* ==========================================================================
-     4. ZORO SPOTLIGHT HERO CAROUSEL WITH AIZEN TRANSITION
-     ========================================================================== */
-
   async function initSpotlightSlider() {
     const sliderContainer = document.getElementById("spotlight-slider-container");
     if (!sliderContainer) return;
@@ -1400,8 +1207,6 @@
     let autoInterval = null;
     let drainTimer = null;
 
-    /* Backdrops are multi-hundred-KB images: only pull the one on screen.
-       The rest are fetched when their slide becomes active. */
     function applyBackdrop(slide) {
       if (!slide || slide.dataset.backdropLoaded === "true") return;
       const poster = slide.dataset.poster;
@@ -1420,9 +1225,6 @@
       applyBackdrop(slides[currentSlide]);
     }
 
-    /* Auto rotate every 6s. ANY manual navigation must clear AND restart the
-       timer — a click landing just before a scheduled tick used to advance
-       two slides at once (only mouseleave reset the interval before). */
     function startAutoRotate() {
       if (autoInterval) clearInterval(autoInterval);
       autoInterval = setInterval(() => goToSlide(currentSlide + 1), 6000);
@@ -1432,11 +1234,6 @@
       startAutoRotate();
     }
 
-    /* Arrow handlers bind IMMEDIATELY — before the catalog fetch. Clicks that
-       arrive before the dynamic slides render (a window of seconds on slow
-       connections) are queued and replayed one step at a time, so rapid input
-       is never swallowed. There is NO transition lock: every click advances
-       exactly one slide, whenever it lands. */
     function drainPending() {
       drainTimer = null;
       if (!pendingDirs.length) return;
@@ -1462,7 +1259,7 @@
 
     const res = await fetchTitles(18);
     if (!res.ok || !res.data || !res.data.titles || res.data.titles.length === 0) {
-      /* Keep the static fallback slide; the arrows work on whatever exists. */
+      
       rendered = true;
       applyBackdrop(sliderContainer.querySelector(".spotlight-slide"));
       startAutoRotate();
@@ -1470,10 +1267,6 @@
       return;
     }
 
-    /* Every catalog title gets a spotlight slide with the SAME probe-backed
-       SUB/DUB badges as the detail page and cards (DUB hidden at 0). The
-       static JJK fallback is patched probe-backed by index.html's inline
-       prefetch for the pre-render window. */
     const titles = res.data.titles;
 
     sliderContainer.innerHTML = titles
@@ -1508,13 +1301,9 @@
     rendered = true;
     applyBackdrop(sliderContainer.querySelector(".spotlight-slide"));
     startAutoRotate();
-    /* Replay any clicks that landed before the slides existed — one step each. */
+    
     if (pendingDirs.length) drainTimer = setTimeout(drainPending, 150);
   }
-
-  /* ==========================================================================
-     4.5 CONTINUE WATCHING RAIL (SERVER-BACKED)
-     ========================================================================== */
 
   async function initContinueWatchingRail() {
     const section = document.getElementById("continue-watching-section");
@@ -1522,7 +1311,6 @@
     const row = document.getElementById("continue-watching-row");
     if (!row) return;
 
-    // If user is logged out, keep section hidden
     if (!currentUser) {
       section.hidden = true;
       section.style.display = "none";
@@ -1564,7 +1352,7 @@
           const safeName = escapeText(item.titleName || item.slug);
           const epNum = item.episodeNum || 1;
           const detailLink = detailHref(item.slug);
-          // Resume keeps going straight to the saved episode (correct behaviour).
+          
           const resumeHref = `watch.html?slug=${encodeURIComponent(item.slug)}&ep=${encodeURIComponent(epNum)}`;
           const pct = Math.min(100, Math.max(0, typeof item.percent === "number" ? item.percent : 0));
           const timeLabel = item.durationSec ? `${formatSec(item.positionSec)} / ${formatSec(item.durationSec)}` : `${pct}%`;
@@ -1608,14 +1396,9 @@
     }
   }
 
-  // Refresh Continue Watching rail when auth state changes (login / logout)
   window.addEventListener("zoro:auth", () => {
     initContinueWatchingRail();
   });
-
-  /* ==========================================================================
-     5. HOME 4-COLUMN SECTIONS (curated catalog)
-     ========================================================================== */
 
   async function initHomeCatalogColumns() {
     const airingList = document.getElementById("col-airing-list");
@@ -1623,8 +1406,6 @@
     const favoriteList = document.getElementById("col-favorite-list");
     const completedList = document.getElementById("col-completed-list");
 
-    /* First paint: skeleton placeholders hold the column layout while the
-       catalog API answers — never empty dark boxes (Bug 9). */
     for (const list of [airingList, popularList, favoriteList, completedList]) {
       if (list && !list.querySelector(".col-item")) {
         list.innerHTML = Array.from({ length: 5 }, () => `
@@ -1665,15 +1446,6 @@
     renderColItems(completedList, allTitles.slice(3, 8));
   }
 
-  /* ==========================================================================
-     5B. HOME TOP 10 TABS (live AniList)
-     One rail, three honest tabs — Trending / Most Popular / Top Rated.
-     AniList has NO historical trending window, so the tabs are named after
-     what the sort actually is (never "Today / This Week / This Month").
-     Data comes from /api/browse with perPage=10, the same endpoint Browse
-     uses — the numbered cards are the site's real top ten.
-     ========================================================================== */
-
   const TOP_TEN_TABS = [
     { sort: "trending", label: "Trending" },
     { sort: "popular", label: "Most Popular" },
@@ -1711,8 +1483,6 @@
       });
     }
 
-    /* The rail scroll arrows behave exactly like the old trending rail:
-       whole-card jumps, flush at the end. */
     const prev = document.getElementById("top10-prev");
     const next = document.getElementById("top10-next");
     const scrollBy = (dirCards) => {
@@ -1778,10 +1548,6 @@
     await load();
   }
 
-  /* ==========================================================================
-     6. MAIN ANIME CARD GRID & AIZEN HOVER TOOLTIPS
-     ========================================================================== */
-
   let tooltipEl = null;
   let activeHoverSlug = null;
 
@@ -1801,7 +1567,6 @@
     }
   }
 
-  // Dismiss preview on click outside, mouse movement over empty space, or scroll (Bug 1)
   document.addEventListener("click", (e) => {
     if (!e.target.closest(".zoro-card") && !e.target.closest(".zoro-tooltip")) {
       hideHoverTooltip();
@@ -1816,16 +1581,11 @@
     const isBrowse = window.location.pathname.endsWith("browse.html") || window.location.pathname.endsWith("/browse");
     const PAGE_SIZE = 12;
 
-    /* Browse is now the FULL live catalog (AniList, ~20k titles). The home
-       page keeps its curated local grid untouched. */
     if (isBrowse) {
       initLiveBrowse();
       return;
     }
 
-    /* First paint must never be a blank dark grid: skeleton cards hold the
-       layout until the catalog API answers (~1s), then real posters replace
-       them. Above-the-fold posters load eagerly (see renderCards). */
     if (!grid.querySelector(".zoro-card")) {
       grid.innerHTML = Array.from({ length: 12 }, () => `
         <div class="zoro-card zoro-card-skeleton" aria-hidden="true">
@@ -1838,19 +1598,12 @@
       `).join("");
     }
 
-    /* URL state is read BEFORE any await so the sort dropdown, heading and
-       nav highlight never flash the wrong default (the sort select used to
-       show "Popularity" for a full fetch round-trip before correcting to
-       "Release date" on ?sort=newest). */
     const urlParams = new URLSearchParams(window.location.search);
     const initialGenre = urlParams.get("genre");
     const initialQ = urlParams.get("q");
     const initialSort = urlParams.get("sort");
     const initialKind = (urlParams.get("kind") || "").toLowerCase();
-    /* Top Airing is a VIEW, not a sort: ?view=top-airing keeps the heading
-       and nav highlight on "Top Airing" no matter which sort the viewer
-       picks. Plain Browse sorted by Release date stays "Explore Anime
-       Shelf" (the old sort-keyed heading renamed the page on every sort). */
+    
     const initialView = (urlParams.get("view") || "").toLowerCase();
 
     const chipsWrap = document.getElementById("genre-chips-container");
@@ -1871,9 +1624,6 @@
     const searchInput = document.getElementById("zoro-search-input");
     if (searchInput && initialQ) searchInput.value = initialQ;
 
-    /* Browse page modes: search results (?q=), Movies (?kind=film), Top
-       Airing (?view=top-airing) or the plain shelf. Heading AND header nav
-       highlight follow the mode — never the sort order. */
     function browseMode() {
       if (currentSearch) return "search";
       if (currentKind === "film") return "movies";
@@ -1896,15 +1646,11 @@
     function updateHeading(count) {
       if (!headingEl) return;
       const mode = browseMode();
-      /* A genre filter names the shelf and shows the result count, like
-         search does ("Action (7 titles)") — in every non-search mode. */
+      
       const genreFiltered = currentGenre && currentGenre !== "all";
       if (mode === "search") {
         const countPart = count == null ? "" : ` (${count} ${count === 1 ? "result" : "results"})`;
-        /* One outer span = one flex item: .section-title is display:flex
-           with a gap, so bare text nodes + the accent span became separate
-           flex items and the gap rendered as stray spaces inside the
-           quotes ("Results for ' Naruto '"). */
+        
         headingEl.innerHTML = `<span>Results for '<span class="accent">${escapeHtml(currentSearch)}</span>'${countPart}</span>`;
         if (subheadingEl) subheadingEl.textContent = "Refine with the genre filters below, or clear the search to see the full shelf.";
       } else if (genreFiltered) {
@@ -1924,12 +1670,9 @@
       }
       setActiveNav();
     }
-    /* Set heading + nav synchronously (count lands with the first render). */
+    
     updateHeading(null);
 
-    /* Genre chips are rendered from GET /api/genres so EVERY genre that has
-       titles gets a working chip. The pills persist across searches — they
-       are never collapsed down to just "All". */
     if (chipsWrap) {
       const gRes = await api("/api/genres");
       if (gRes.ok && gRes.data && gRes.data.counts) {
@@ -1963,9 +1706,6 @@
     function filteredList() {
       let list = titles.slice();
 
-      // 1. Filter by search query — REAL titles only (english/romaji/native).
-      // The fictional placeholder name (oldTitle) must not match: searching
-      // "Ronin" used to surface One Piece. Synopsis/genres are not titles.
       if (currentSearch) {
         const qLower = currentSearch.toLowerCase();
         list = list.filter(
@@ -1988,21 +1728,17 @@
         );
       }
 
-      // 4. Sort by popularity, release date, or A-Z
       if (currentSort === "newest") {
         list.sort((a, b) => (b.year || 0) - (a.year || 0) || (b.created_at || 0) - (a.created_at || 0));
       } else if (currentSort === "az") {
         list.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
       } else if (currentSort === "popularity") {
-        // default catalog order (popularity)
+        
       }
 
       return list;
     }
 
-    /* Client-side pagination: Browse shows 12 titles per page; the controls
-       render only when the filtered list spans MORE than one page. Home
-       keeps its full "Latest Episodes" shelf (no pagination). */
     function renderPagination(totalItems) {
       if (!paginationWrap) return;
       const totalPages = Math.ceil(totalItems / PAGE_SIZE);
@@ -2039,8 +1775,7 @@
             <a href="browse.html" class="empty-state-browse-link">Back to Browse</a>
           </div>
         `;
-        /* Tight layout: the empty state sits naturally above the footer
-           instead of leaving the full-grid bottom padding as a dead gap. */
+        
         if (mainEl) mainEl.classList.add("grid-is-empty");
         renderPagination(0);
         markContentReady();
@@ -2054,9 +1789,7 @@
         ? list.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
         : list;
       grid.innerHTML = pageItems.map((t, i) => {
-        /* Home's "Latest Episodes" shelf jumps STRAIGHT into the latest
-           episode (watch.html?slug=X&ep=N); Browse cards keep opening the
-           detail page. */
+        
         const cardHref = isBrowse ? detailHref(t.slug) : watchHref(t.slug, t.episodes || 1);
         return `
         <div class="zoro-card" data-slug="${t.slug}" data-genres="${t.genres ? t.genres.join(" ") : ""}" data-title="${escapeHtml(t.name)}">
@@ -2084,7 +1817,7 @@
 
       attachTooltipListeners();
       renderPagination(list.length);
-      /* The card grid is the page's real content: release the intro. */
+      
       markContentReady();
     }
 
@@ -2115,7 +1848,6 @@
       });
     }
 
-    // Pagination controls (delegated; re-rendered on every page change)
     if (paginationWrap) {
       paginationWrap.addEventListener("click", (e) => {
         const btn = e.target.closest(".page-btn");
@@ -2124,14 +1856,12 @@
         if (!Number.isFinite(p) || p === currentPage) return;
         currentPage = p;
         renderCards(filteredList());
-        /* Bring the grid top back into view (below the sticky header). */
+        
         const top = grid.getBoundingClientRect().top + window.scrollY - 90;
         window.scrollTo({ top: Math.max(0, top), behavior: "instant" });
       });
     }
 
-    // Hook up live search on Browse ONLY. On Home the same grid exists, but
-    // the header search must never filter it (it only suggests + navigates).
     if (isBrowse) {
       window.__onSearchLiveFilter = (q) => {
         currentSearch = (q || "").trim();
@@ -2140,15 +1870,6 @@
     }
   }
 
-  /* ==========================================================================
-     BROWSE TOTAL / PAGINATION LABEL LOGIC
-     Pure helpers shared by updateHeading() and renderPagination(). A filtered
-     browse below AniList's 5,000-title cap has a REAL total and a REAL last
-     page, so it must show exact numbers (a single year is always in this
-     regime). Only a capped total keeps the "5,000+" / "Page X of Y+" floor
-     treatment. No DOM: server/test/e2e.js extracts this marked block to test
-     the shipped logic against sample years.
-     ========================================================================== */
   /* __BROWSE_LABEL_LOGIC_START__ */
   const ANILIST_TOTAL_CAP = 5000;
 
@@ -2157,16 +1878,12 @@
     if (rawTotal == null) {
       return count != null && searchMode ? `${count} ${count === 1 ? "title" : "titles"}` : "";
     }
-    /* AniList caps the reported total at 5,000 — say "5,000+" rather than
-       pretending that is the exact number. */
+    
     return rawTotal >= ANILIST_TOTAL_CAP
       ? `5,000+ ${rawTotal === 1 ? "title" : "titles"}`
       : `${rawTotal.toLocaleString()} ${rawTotal === 1 ? "title" : "titles"}`;
   }
 
-  /* True only for a CAPPED FILTERED browse — the one view whose end AniList
-     will not reveal. A year view (or any filtered view under the cap) knows
-     its own last page, exactly like unfiltered Browse. */
   function browsePaginationBounds(hasFilter, pageInfo, current) {
     const bounded = !!(hasFilter && pageInfo && Number(pageInfo.total) >= ANILIST_TOTAL_CAP);
     const last = bounded
@@ -2175,17 +1892,6 @@
     return { bounded, last };
   }
   /* __BROWSE_LABEL_LOGIC_END__ */
-
-  /* ==========================================================================
-     6C. LIVE BROWSE — the full AniList catalog on browse.html
-     One grid, two modes:
-       - search  (?q=…): "On AniFlick" (the curated catalog) first, then
-                         "More results" (the live catalog).
-       - browse  (no q): the live catalog with genre / format / status /
-                         sort / year filters and AniList pagination.
-     If AniList is down, the page falls back to the local library with a
-     notice — it never shows an empty grid or a stack trace.
-     ========================================================================== */
 
   async function initLiveBrowse() {
     const grid = document.getElementById("zoro-main-grid");
@@ -2217,15 +1923,10 @@
     const params = new URLSearchParams(window.location.search);
     const view = (params.get("view") || "").toLowerCase();
     const kind = (params.get("kind") || "").toLowerCase();
-    /* Top Airing and Top Upcoming are VIEWS with a fixed status preset (a
-       view's status comes from the URL only as an override; the preset wins
-       so ?view=top-upcoming can never silently mean "finished"). */
+    
     const viewIsTopAiring = view === "top-airing";
     const viewIsTopUpcoming = view === "top-upcoming";
-    /* Phase 3a browse presets. subbed = the whole catalog (every title plays
-       SUB); dubbed = only catalog titles with a VERIFIED dub (the server
-       reads dub_checks, so live titles never appear here); the type views are
-       format presets. `kind=film` is the old Movies link and still works. */
+    
     const viewIsSubbed = view === "subbed";
     const viewIsDubbed = view === "dubbed";
     const VIEW_FORMAT = { movie: "MOVIE", ona: "ONA", special: "SPECIAL", tv: "TV" };
@@ -2240,9 +1941,7 @@
       format: params.get("format") || viewFormat || (kind === "film" ? "MOVIE" : ""),
       status: params.get("status") || (viewIsTopAiring ? "RELEASING" : viewIsTopUpcoming ? "NOT_YET_RELEASED" : ""),
       year: params.get("year") || "",
-      /* Phase 2 filters. minScore is the AniList 0-100 floor; maxScore the
-         ceiling. startAfter/startBefore are YYYY (or YYYY-MM / YYYY-MM-DD)
-         and reach AniList as startDate_greater / startDate_lesser. */
+      
       minScore: params.get("minScore") || "",
       maxScore: params.get("maxScore") || "",
       season: (params.get("season") || "").toUpperCase(),
@@ -2260,7 +1959,6 @@
     function isSearch() { return !!state.q; }
     if (searchInput && state.q) searchInput.value = state.q;
 
-    /* ---- skeleton (never an empty dark grid, and never a stale one) ---- */
     function renderGridSkeleton() {
       grid.innerHTML = Array.from({ length: LIVE_PAGE_SIZE }, () => `
         <div class="zoro-card zoro-card-skeleton" aria-hidden="true">
@@ -2273,10 +1971,6 @@
     }
     renderGridSkeleton();
 
-    /* ---- genre chips (the FULL AniList genre list) ----
-       The server's /api/genres answers with AniList's own GenreCollection
-       (cached 24 h). The hardcoded 17 stay as the immediate paint and as the
-       fallback, so the chips never regress and never wait on the network. */
     let chipGenres = ANILIST_GENRES;
     function renderChips() {
       if (!chipsWrap) return;
@@ -2295,7 +1989,6 @@
       renderChips();
     }).catch(() => {});
 
-    /* ---- year select (the full library range) ---- */
     function renderYears() {
       if (!yearSelect) return;
       let html = `<option value="">All years</option>`;
@@ -2306,11 +1999,6 @@
       yearSelect.value = state.year || "";
     }
 
-    /* ---- Phase 2 full filters ----
-       The panel is populated from the SAME year range as the year dropdown
-       (start/end year are date-range bounds, not the seasonYear filter) and
-       the curated AniList tag list. Every control writes state and the URL on
-       Apply, so a filtered view is shareable and survives a reload. */
     function renderFilterOptions() {
       const years = browseYearRange();
       const yearOptions = (sel, current) => {
@@ -2338,8 +2026,6 @@
       renderTagChips();
     }
 
-    /* The panel is open when it carries any filter (so a shared filtered URL
-       never hides its own controls), and starts closed otherwise. */
     function setFiltersOpen(open) {
       if (!filtersPanel || !filtersBody || !filtersToggle) return;
       filtersPanel.classList.toggle("is-open", open);
@@ -2378,12 +2064,6 @@
       load();
     }
 
-    /* ---- "Browse by Year" chips, grouped by decade ----
-       AniList caps a single query's total at 5,000 titles, so unfiltered
-       Browse cannot reach the whole catalog. A single YEAR is always far
-       below the cap, which makes every title reachable through its year.
-       Chips are navigation only: no per-year counts are fetched (that would
-       mean ~65 AniList calls and would trip the rate limit). */
     const yearSection = document.getElementById("browse-year-section");
     const yearDecadesWrap = document.getElementById("browse-year-decades");
 
@@ -2414,8 +2094,6 @@
       if (endEl) endEl.textContent = String(browseYearRange()[0]);
     }
 
-    /* The dropdown and the chips are two views of ONE filter: they must never
-       disagree about which year is active. */
     function syncYearUI() {
       if (yearSelect) yearSelect.value = state.year || "";
       if (yearDecadesWrap) {
@@ -2425,7 +2103,6 @@
       }
     }
 
-    /* ---- URL sync (so the filters survive a reload / share) ---- */
     function updateUrl() {
       const p = new URLSearchParams();
       if (state.q) p.set("q", state.q);
@@ -2434,7 +2111,7 @@
       if (state.format) p.set("format", state.format);
       if (state.status) p.set("status", state.status);
       if (state.year) p.set("year", state.year);
-      /* Phase 2 filters: tags is a comma list, the rest single values. */
+      
       if (state.minScore) p.set("minScore", state.minScore);
       if (state.maxScore) p.set("maxScore", state.maxScore);
       if (state.season) p.set("season", state.season);
@@ -2448,13 +2125,9 @@
       window.history.replaceState({}, "", `browse.html${qs ? `?${qs}` : ""}`);
     }
 
-    /* ---- heading: active filter + result count ---- */
     function updateHeading(count, pageInfo) {
       if (!headingEl) return;
-      /* The total comes from the server and is STABLE: the same number for
-         every page of the same query. A filtered browse total below the
-         5,000 cap is real and shown exactly; a capped total (>= 5,000) is
-         shown as "5,000+". */
+      
       const countLabel = browseCountLabel(pageInfo, count, isSearch());
 
       if (isSearch()) {
@@ -2471,7 +2144,7 @@
       if (state.format) chips.push(state.format === "MOVIE" ? "Movies" : state.format);
       if (state.status) chips.push(state.status === "RELEASING" ? "Airing" : state.status === "FINISHED" ? "Finished" : state.status);
       if (state.year) chips.push(state.year);
-      /* Phase 2 filters read as human labels in the heading. */
+      
       if (state.minScore) chips.push(`${state.minScore}+ score`);
       if (state.maxScore) chips.push(`≤ ${state.maxScore} score`);
       if (state.season) chips.push(state.season.charAt(0) + state.season.slice(1).toLowerCase());
@@ -2509,11 +2182,6 @@
       }
     }
 
-    /* ---- the honest per-view note ----
-       Subbed and Dubbed make claims about audio that the catalog has to back,
-       so each says exactly what is true: every title streams with subtitles;
-       dub availability is VERIFIED for catalog titles only (a live title has
-       no dub data and is never listed as dubbed). */
     function updateViewNote() {
       const note = document.getElementById("browse-view-note");
       if (!note) return;
@@ -2530,14 +2198,11 @@
     }
     updateViewNote();
 
-    /* ---- pagination (AniList page numbers, windowed) ---- */
     function renderPagination(pageInfo) {
       if (!paginationWrap) return;
       const current = (pageInfo && Number(pageInfo.currentPage)) || state.page;
       const hasFilter = !!(state.genre || state.format || state.status || state.year || hasPhase2Filters());
-      /* Only a CAPPED filtered browse has an unknown end. A search has a real
-         lastPage (the snapshot is a fixed size), and any filtered browse below
-         the 5,000 cap — a single year always — knows its own last page too. */
+      
       const { bounded, last } = browsePaginationBounds(hasFilter, pageInfo, current);
       if (!pageInfo || !pageInfo.hasNextPage && current >= last) {
         if (current <= 1) {
@@ -2565,10 +2230,7 @@
         }
       }
       html += `<button class="page-btn" type="button" data-page="${current + 1}"${current >= last ? " disabled" : ""} aria-label="Next page">Next ›</button>`;
-      /* "Page X of Y" whenever the last page is really known. A bounded
-         (filtered + capped) view still gets a label, but the "+" marks the
-         last page as a FLOOR, not an exact count — AniList caps the total
-         at 5,000, so the true end is at least pageInfo.lastPage. */
+      
       if (bounded) {
         const lastFloor = (pageInfo && Number(pageInfo.lastPage)) || last;
         html += `<span class="page-btn" style="border:none; background:none; cursor:default;" aria-live="polite">Page ${current} of ${lastFloor}+</span>`;
@@ -2579,7 +2241,6 @@
       paginationWrap.hidden = false;
     }
 
-    /* ---- the local library fallback (AniList is down) ---- */
     async function renderLibraryFallback() {
       renderLiveNotice(LIVE_LIBRARY_MESSAGE, "library");
       const res = await api("/api/titles?limit=18");
@@ -2634,9 +2295,7 @@
     let loadToken = 0;
     async function load() {
       const token = ++loadToken;
-      /* Page/filter change: clear the stale grid IMMEDIATELY and hold the
-         layout with skeletons. The old page-1 cards used to stay on screen
-         for the whole network round trip, reading as "page 2 is broken". */
+      
       renderGridSkeleton();
       updateHeading(null, null);
       let path;
@@ -2645,16 +2304,14 @@
       } else {
         const qs = new URLSearchParams();
         qs.set("sort", state.sort);
-        /* The view preset must ride the request: ?view=dubbed is a DIFFERENT
-           shelf (catalog titles with a verified dub), not a sorted AniList
-           list. */
+        
         if (view) qs.set("view", view);
         if (kind) qs.set("kind", kind);
         if (state.genre) qs.set("genre", state.genre);
         if (state.format) qs.set("format", state.format);
         if (state.status) qs.set("status", state.status);
         if (state.year) qs.set("year", state.year);
-        /* Phase 2 filters ride the same /api/browse call. */
+        
         if (state.minScore) qs.set("minScore", state.minScore);
         if (state.maxScore) qs.set("maxScore", state.maxScore);
         if (state.season) qs.set("season", state.season);
@@ -2669,8 +2326,7 @@
       if (token !== loadToken) return;
 
       if (!res.ok) {
-        /* 502 = AniList is busy / down → the local library keeps the page
-           usable. Any other error → same graceful fallback. */
+        
         await renderLibraryFallback();
         updateHeading(null, null);
         return;
@@ -2683,8 +2339,7 @@
       if (isSearch()) {
         const local = Array.isArray(data.local) ? data.local : [];
         const more = Array.isArray(data.results) ? data.results : [];
-        /* The genre chip refines the live results client-side (the search
-           endpoint itself is a pure SEARCH_MATCH query). */
+        
         const filtered = state.genre
           ? more.filter((t) => (t.genres || []).some((g) => g.toLowerCase() === state.genre.toLowerCase()))
           : more;
@@ -2694,9 +2349,7 @@
           updateHeading(0, pageInfo);
           return;
         }
-        /* The group count reports the results on this page out of the
-           server's STABLE total for the whole query (the snapshot is one
-           immutable set, so the total never moves between pages). */
+        
         const total = Number.isFinite(Number(pageInfo.total)) ? Number(pageInfo.total) : filtered.length;
         const availableTotal = total;
         grid.innerHTML =
@@ -2789,8 +2442,7 @@
         load();
       });
     }
-    /* A year chip does exactly what picking that year in the dropdown does:
-       same state.year, same ?year= URL param, same /api/browse call. */
+    
     if (yearDecadesWrap) {
       yearDecadesWrap.addEventListener("click", (e) => {
         const chip = e.target.closest(".browse-year-chip");
@@ -2803,7 +2455,6 @@
       });
     }
 
-    /* Pagination (delegated; re-rendered on every page change). */
     if (paginationWrap) {
       paginationWrap.addEventListener("click", (e) => {
         const btn = e.target.closest(".page-btn");
@@ -2825,8 +2476,7 @@
       });
     }
     if (tagChipsWrap) {
-      /* Toggle a tag: the chip is a filter, not a single-select, so a tag can
-         be added and removed without losing the others. */
+      
       tagChipsWrap.addEventListener("click", (e) => {
         const chip = e.target.closest(".filter-tag-chip");
         if (!chip) return;
@@ -2840,13 +2490,11 @@
     if (filtersApply) filtersApply.addEventListener("click", applyFilters);
     if (filtersReset) filtersReset.addEventListener("click", resetFilters);
 
-    /* The header search drives this page live. */
     window.__onSearchLiveFilter = (q) => {
       state.q = (q || "").trim();
       state.page = 1;
       if (searchInput) searchInput.value = state.q;
-      /* Search mode has no server-side sort/format/status/year filters —
-         only the genre chip refines the results. */
+      
       if (filterRow) filterRow.hidden = isSearch();
       if (yearSection) yearSection.hidden = isSearch();
       if (filtersPanel) filtersPanel.hidden = isSearch();
@@ -2867,12 +2515,6 @@
     await load();
   }
 
-  /* ==========================================================================
-     PHASE 2 — LIVE DETAIL METADATA HELPERS
-     Pure functions (no DOM) so server/test/e2e.js can extract and test the
-     exact formatting the page renders: date ranges, season labels, relation
-     grouping and section visibility.
-     ========================================================================== */
   /* __LIVE_DETAIL_LOGIC_START__ */
   const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -2886,8 +2528,6 @@
     return { y, m, d };
   }
 
-  /* "Jan 7 – Mar 31, 2024"; "Jan 7, 2024 –" when the end date is unknown
-     (an airing title); a single date when both ends match. */
   function liveAiredRange(start, end) {
     const s = liveDateParts(start);
     const e = liveDateParts(end);
@@ -2926,21 +2566,10 @@
       .filter((r) => r && RELATED_ANIME_TYPES.has(String(r.relationType || "").toUpperCase()));
   }
 
-  /* The top 6 characters, already sliced server-side. */
   function liveCharacters(characters) {
     return (Array.isArray(characters) ? characters : []).slice(0, 6);
   }
   /* __LIVE_DETAIL_LOGIC_END__ */
-
-  /* ==========================================================================
-     6E. A-Z LIST — az-list.html
-     One letter = one immutable snapshot from /api/az (AniList has no prefix
-     search, so the server filters a SEARCH_MATCH candidate pool by title
-     prefix). "All" is the plain TITLE_ROMAJI browse. A snapshot that hit the
-     server's fetch cap reports pageInfo.capped, and the total is a FLOOR —
-     the heading shows "N+ titles" and never presents the partial set as the
-     whole letter.
-     ========================================================================== */
 
   async function initAzList() {
     const grid = document.getElementById("az-grid");
@@ -2999,9 +2628,6 @@
         </div>`).join("");
     }
 
-    /* The heading shows the letter and the REAL total. A capped snapshot
-       reports a floor, so it gets a "+" (the same convention browse uses for
-       its 5,000 cap). */
     function updateHeading(pageInfo) {
       if (!headingEl) return;
       const total = pageInfo && Number.isFinite(Number(pageInfo.total)) ? Number(pageInfo.total) : null;
@@ -3017,13 +2643,6 @@
       }
     }
 
-    /* Pagination: same windowed controls as browse. A letter's last page is
-       always known (the snapshot is a fixed set), so no "+" floor mark here —
-       the capped "+" belongs to the TOTAL only.
-
-       The controls are rendered ONLY from data the server has confirmed:
-       `pageInfo` is never invented, so a letter load never flashes a total
-       the data has not backed (no placeholder "Page 1 of N"). */
     function renderPagination(pageInfo) {
       if (!paginationWrap) return;
       if (!pageInfo) {
@@ -3116,14 +2735,12 @@
       const token = ++loadToken;
       renderSkeleton();
       updateHeading(null);
-      /* A new load invalidates the previous letter's pagination: clear it
-         BEFORE the round trip so a stale "Page 1 of N" never survives into
-         the loading state (the container stays empty until real data lands). */
+      
       if (paginationWrap) {
         paginationWrap.hidden = true;
         paginationWrap.innerHTML = "";
       }
-      /* "All" is the plain A-Z browse; a letter is served by /api/az. */
+      
       const path = state.letter === "all"
         ? `/api/browse?sort=az&page=${state.page}`
         : `/api/az?letter=${encodeURIComponent(state.letter)}&page=${state.page}`;
@@ -3186,21 +2803,13 @@
     await load();
   }
 
-  /* ==========================================================================
-     6D. HOME LIVE RAILS (AniList)
-     Top Airing / Trending Now / Top Rated / Latest Episodes. A rail that
-     fails is simply hidden — the curated catalog keeps working.
-     ========================================================================== */
-
   async function initLiveRails() {
     const rails = [
       { id: "live-top-airing-grid", path: "/api/browse?sort=popular&status=RELEASING&page=1", mode: "browse" },
       { id: "live-top-upcoming-grid", path: "/api/browse?sort=popular&status=NOT_YET_RELEASED&page=1", mode: "browse" },
       { id: "live-trending-grid", path: "/api/browse?sort=trending&page=1", mode: "browse" },
       { id: "live-top-rated-grid", path: "/api/browse?sort=top&page=1", mode: "browse" },
-      /* New On AniFlick: the most recently STARTED titles. Distinct from
-         Latest Episodes (the airing schedule) — this is a title list, not an
-         episode feed. */
+      
       { id: "live-new-on-grid", path: "/api/browse?sort=newest&page=1", mode: "browse" },
       { id: "live-latest-episodes-grid", path: "/api/airing?page=1", mode: "airing" },
     ];
@@ -3233,14 +2842,13 @@
       }
 
       if (rail.mode === "airing") {
-        /* Latest Episodes: the card opens the watch page at THAT episode. */
+        
         el.innerHTML = results.map((row) => {
           const media = row.media || {};
           const aired = timeSinceLabel(row.airingAt);
           return renderLiveCard(media, {
             href: liveWatchHref(media, row.episode),
-            /* The episode number belongs with the air time, not a separate
-               "Ep N" badge span — every card uses the same SUB/DUB format. */
+            
             submeta: `Ep ${row.episode}${aired ? ` · ${aired}` : ""}`,
           });
         }).join("");
@@ -3255,15 +2863,14 @@
     const cards = document.querySelectorAll(".zoro-card");
 
     cards.forEach((card) => {
-      /* Live cards have no catalog slug — the tooltip fetches the catalog
-         title by slug, so it simply does not apply to them. */
+      
       if (!card.dataset.slug) return;
       card.addEventListener("mouseenter", async (e) => {
         const slug = card.dataset.slug;
         activeHoverSlug = slug;
 
         const res = await api(`/api/titles/${encodeURIComponent(slug)}`);
-        // If mouse left the card or another card hovered in the meantime, abort (Bug 1)
+        
         if (activeHoverSlug !== slug || !card.matches(":hover")) return;
         if (!res.ok || !res.data) return;
 
@@ -3288,7 +2895,6 @@
         }
         if (left < 10) left = 10;
 
-        // Position: MUST NEVER cover the header (header is height 70px)
         const minTop = window.scrollY + 76;
         let top = Math.max(rect.top + window.scrollY, minTop);
 
@@ -3304,13 +2910,6 @@
     });
   }
 
-  /* ==========================================================================
-     6B. GENRES PAGE DYNAMIC SHELF COUNTS
-     ========================================================================== */
-
-  /* Genre display metadata (icon / kanji / flavour). Cards themselves are
-     rendered from GET /api/genres so every genre in the catalog — including
-     Adventure — appears automatically with its honest title count. */
   const GENRE_META = {
     action: { icon: "⚔️", kanji: "戦闘", label: "Action", desc: "High-octane sword fights, jujutsu martial arts, ninja battles, and intense physical confrontations." },
     adventure: { icon: "🗺️", kanji: "冒険", label: "Adventure", desc: "Grand voyages, uncharted lands, pirate crews, and journeys beyond the horizon." },
@@ -3327,10 +2926,6 @@
     life: { icon: "🍜", kanji: "日常", label: "Slice of Life", desc: "Cozy noodle bars after hours, quiet afternoon walks, nostalgic memories, and everyday companionship." },
   };
 
-  /* Display labels for the rest of AniList's genre list. GENRE_META already
-     carries the catalog's own shelves (icon / kanji / flavour); this covers
-     the genres AniList has beyond them, spelled the way AniList spells them
-     ("Sci-Fi", "Mahou Shoujo", "Slice of Life"). */
   const GENRE_LABELS = {
     action: "Action", adventure: "Adventure", comedy: "Comedy", drama: "Drama",
     ecchi: "Ecchi", fantasy: "Fantasy", horror: "Horror", "mahou shoujo": "Mahou Shoujo",
@@ -3339,9 +2934,6 @@
     sports: "Sports", supernatural: "Supernatural", thriller: "Thriller",
   };
 
-  /* One display label per genre everywhere: the curated label when known
-     ("life" -> "Slice of Life"), otherwise capitalised ("drama" -> "Drama").
-     Raw lowercase keys must never leak into chips/tooltips. */
   function genreLabel(g) {
     const k = String(g || "").toLowerCase();
     return (GENRE_META[k] && GENRE_META[k].label) || GENRE_LABELS[k] || k.charAt(0).toUpperCase() + k.slice(1);
@@ -3354,16 +2946,11 @@
     const res = await api("/api/genres");
     if (!res.ok || !res.data) return;
     const counts = res.data.counts || {};
-    /* EVERY AniList genre (GenreCollection, cached server-side). The local
-       counts are the fallback list, so the page still renders while AniList
-       is unreachable. */
+    
     const all = Array.isArray(res.data.allGenres) && res.data.allGenres.length
       ? res.data.allGenres
       : Object.keys(counts);
-    /* The local catalog spells one genre "life" where AniList says "Slice of
-       Life" — that count is real, so it is attached to the AniList spelling
-       instead of being dropped. A genre with no local count shows no number
-       at all (never an invented one). */
+    
     const countKeyFor = (name) => {
       const k = String(name).toLowerCase();
       if (counts[k] != null) return k;
@@ -3417,11 +3004,6 @@
     markContentReady();
   }
 
-  /* ==========================================================================
-     7. ZORO WATCH PAGE: ZOKOANIME EMBED PLAYER
-     ========================================================================== */
-
-  /* Episode currently loaded in the player (comments follow it). */
   let activeEpisode = 1;
   let reloadComments = null;
 
@@ -3430,61 +3012,27 @@
     if (!watchStage) return;
 
     const params = new URLSearchParams(window.location.search);
-    /* ?slug= is canonical; ?id= is the same alias the detail page accepts.
-       An UNKNOWN or MISSING slug must resolve to a not-found state — never
-       silently fall back to a catalog title (the old `|| "kagerou-protocol"`
-       loaded Jujutsu Kaisen for any garbage id). */
+    
     const currentSlug = (params.get("slug") || params.get("id") || "").trim();
     let currentEp = parseInt(params.get("ep"), 10) || 1;
 
-    /* LIVE MODE — watch.html?live=<anilistId>&ep=<n>
-       A title from the FULL AniList catalog (not one of the 18 curated
-       titles): the metadata comes from /api/live/:id, the episode list from
-       the AIRED episode count, and the player from the MAL id — or the
-       AniList id when the title has no MAL id. Progress lives under its own
-       "live-<id>" key namespace so live progress never collides with the
-       catalog slugs. */
     const liveParam = params.get("live");
     const liveId = liveParam ? parseInt(liveParam, 10) : null;
     const isLive = !!liveId && Number.isFinite(liveId) && liveId > 0;
     const progressKey = isLive ? `live-${liveId}` : currentSlug;
-    /* Live titles have no dub data at all (no dub_checks rows), so the
-       episode list is derived from the AIRED episode count. */
+    
     let liveAiredCount = 0;
     let liveEpisodesUnknown = false;
-    /* currentTrack  = the track of the stream that is actually loaded in the
-       player right now. The highlighted pill ALWAYS mirrors it.
-       preferredTrack = the viewer's audio choice. It survives episode
-       switches for the rest of the session and is NEVER destroyed by an
-       episode that happens to lack the track (that episode falls back to
-       Sub for itself only — the preference comes back on the next episode
-       that really has the preferred track). */
+    
     let currentTrack = "sub";
     let preferredTrack = "sub";
-    /* True while an episode load is in flight (from the load's first line
-       until the iframe src is assigned). A track switch requested during a
-       load must NOT swap the iframe src a second time — tearing the embed
-       down mid-load races its own stream fetch (the live "Unable to play
-       media. 24 seconds of 0 seconds" flash). The in-flight load simply
-       picks the new track up. */
+    
     let loadInFlight = false;
 
-    /* The iframe node is rebuilt by the switch watchdog when a player never
-       settles, so the reference is mutable (listeners are re-bound in
-       bindIframeListeners). */
     /* __PLAYER_IFRAME_SANDBOX_START__ */
-    /* Sandbox value for the shared #zoko-embed-frame iframe. The sandbox is
-       PER PLAYER: Zoko (the default) REFUSES to run inside a sandboxed iframe
-       ("EMBED BLOCKED: This player does not run inside a sandboxed iframe"),
-       so it must get NO sandbox attribute at all; TVplus (backup), MegaPlay
-       and animegg run fine sandboxed and keep the popup-blocking value (no
-       allow-popups / allow-top-navigation / allow-modals / allow-downloads —
-       the popup-ad vector). PLAYER_IFRAME_SANDBOX is the source of truth for
-       the sandboxed players; watch.html ships the iframe unsandboxed and the
-       per-player map below decides at runtime. */
+    
     const PLAYER_IFRAME_SANDBOX = "allow-scripts allow-same-origin allow-forms allow-presentation";
-    /* Per-player sandbox map. A null value means: remove the sandbox attribute
-       entirely (Zoko's hard requirement). */
+    
     const PLAYER_IFRAME_SANDBOX_BY_SERVER = {
       zoko: null,
       backup: PLAYER_IFRAME_SANDBOX,
@@ -3493,10 +3041,7 @@
     };
     /* __PLAYER_IFRAME_SANDBOX_END__ */
     let iframe = document.getElementById("zoko-embed-frame");
-    /* Apply the per-player sandbox to the resolved iframe node: set the
-       attribute from the map, or REMOVE it when the map value is null (Zoko
-       hard-refuses a sandboxed iframe). The sandbox only takes effect when
-       the iframe navigates, so this must run before any src assignment. */
+    
     function applyIframeSandbox(server) {
       if (!iframe) return;
       const value = Object.prototype.hasOwnProperty.call(PLAYER_IFRAME_SANDBOX_BY_SERVER, server)
@@ -3516,9 +3061,6 @@
     const progressFill = document.getElementById("video-progress-fill");
     const timeText = document.getElementById("video-time-text");
 
-    /* All elements are resolved once, up front. Declaring them here (instead of
-       re-declaring inside a block below) keeps every binding out of the
-       temporal dead zone, which used to abort the whole page init. */
     const wlBtn = document.getElementById("watch-add-list-btn");
     const epGrid = document.getElementById("zoro-episodes-grid");
     const epSubtitle = document.getElementById("watch-ep-subtitle");
@@ -3534,25 +3076,15 @@
     let episodesList = [];
     let currentPosition = 0;
     let duration = 1440;
-    /* The seeded runtime (24m) is only a resume-math fallback — it is NOT the
-       stream's real duration. The time readout must show --:-- until the player
-       itself reports a duration, never a placeholder that later "corrects". */
+    
     let durationIsReal = false;
-    /* The episode whose events the player is currently emitting. It flips
-       only when the NEW player's `ready` event arrives — NOT at the src swap:
-       the old document keeps playing (and emitting time events) until the
-       navigation commits, and those in-flight events belong to the OLD
-       episode. Attributing them to the new episode leaked ep 1's position
-       into ep 2's saved progress and armed the resume notice's auto-hide
-       before the new episode even started. */
+    
     let playerEp = null;
     let playerReady = false;
     let isPaused = true;
     let lastProgressSync = 0;
     let lastLocalSave = 0;
-    /* Resume-notice lifecycle: the note must stay up until dismissed or a few
-       seconds AFTER playback actually starts — never a flat timer from page
-       load (the player has not even begun then, so nobody ever saw it). */
+    
     let resumeNoteTimer = null;
     let resumeNoteArmOnPlay = false;
     let resumeNoteShownForLoad = false;
@@ -3593,20 +3125,8 @@
       } catch {}
     }
 
-    /* Signed-out resume: the server only stores progress for signed-in users,
-       so for everyone else the site keeps its own per-episode position in
-       localStorage. Without this, resume still happened (the EMBED keeps an
-       internal osp:pos store) but the site never knew about it — no "Resumed
-       from…" notice, no Restart button. Mirrors the embed's own rules:
-       ignore <5s, ignore the last 20s / >95% (counts as finished). */
     const LS_PROGRESS_KEY = "av_zoko_progress";
 
-    /* Signed-out audio preference (one GLOBAL viewer choice, not per-title).
-       It lives next to the resume store above, same "av_zoko_*" naming. The
-       in-memory variable alone died with the page, so a reload forgot a
-       selected Dub (verified live: watch?slug=second-wind&ep=2 came back on
-       Sub). Every SUCCESSFUL track change writes it immediately; a refused
-       Dub click (episode has no dub) never touches it. */
     const LS_TRACK_KEY = "av_zoko_track";
     function readPreferredTrack() {
       try {
@@ -3621,28 +3141,13 @@
         localStorage.setItem(LS_TRACK_KEY, track);
       } catch {}
     }
-    /* Restore BEFORE the first loadEpisode: the bootstrap at the bottom of
-       this function is what starts the player, and the optimistic pill reads
-       `preferredTrack` on its very first line. */
+    
     preferredTrack = readPreferredTrack();
 
-    /* ------------------------------------------------------------------
-       SERVER STATE — Zoko is PRIMARY; TVplus and animegg are
-       alternates the viewer chooses (never auto-switched to). The choice is
-       session-scoped (sessionStorage): a fresh tab always starts on Zoko,
-       a reload inside the same tab keeps the choice. ?player=backup /
-       ?player=animegg are harmless test hooks
-       (loadEpisode's replaceState strips the param from the URL after load).
-       NOTE: MegaPlay was removed as a player option (dead upstream, HTTP
-       410) — it is no longer offered in the switcher and is not accepted
-       as a stored or ?player= choice; such a choice falls back to Zoko.
-       ------------------------------------------------------------------ */
     const SS_SERVER_KEY = "av_player_server";
     const BACKUP_ORIGIN = "https://embed.animetvplus.site";
     const MEGAPLAY_ORIGIN = "https://megaplay.buzz";
-    /* animegg needs no origin constant: its URL is handed over by the server
-       route (a live /watch call per view, rotating token), so the client
-       never builds one itself. */
+    
     const ANIMEGG_SERVER_ID = "animegg";
     let activeServer = "zoko";
     try {
@@ -3656,63 +3161,24 @@
       activeServer = playerHook;
       try { sessionStorage.setItem(SS_SERVER_KEY, playerHook); } catch {}
     }
-    /* activeServer is now fully resolved (default + sessionStorage + ?player=
-       hook): apply its sandbox before the first load assigns the iframe src.
-       Zoko (the default) gets no sandbox — it refuses sandboxed iframes. */
+    
     applyIframeSandbox(activeServer);
-    /* MegaPlay session state:
-       megaPlayTrack — the last explicit track choice made ON MegaPlay.
-       Session-only, NEVER persisted to av_zoko_track: MegaPlay's dub
-       availability differs from Zoko's probe data, so its choices must not
-       rewrite the Zoko preference. Carries the choice across episode
-       switches while MegaPlay is active.
-       megaPlayFrameLoaded — attribution gate. MegaPlay has no reliable
-       pre-playback ready event (its PLAYER_READY can arrive AFTER the first
-       time events on a resumed load — live-verified), so the iframe load
-       commit is the boundary: until the NEW document has loaded, same-
-       episode events belong to the dying player and are ignored. */
+    
     let megaPlayTrack = null;
     let megaPlayFrameLoaded = false;
 
-    /* ------------------------------------------------------------------
-       animegg (4th server, manual-only fallback). Its URL is NOT built
-       client-side: the server proxies the self-hosted Anivexa-API and
-       resolves a LIVE /watch on every request, because the returned
-       `?for=` token rotates per call. The client only ever holds the URL
-       for the current load — never a cache, never sessionStorage.
-
-       animeggState: "unknown" | "available" | "unavailable" per episode, so
-       the pill can be honest before the viewer asks for it. No URL is kept
-       here — the stream URL is resolved per load and lives only in the
-       caller's local variable.
-       ------------------------------------------------------------------ */
     let animeggState = "unknown";
     let animeggLoadToken = 0;
     let animeggFailTimer = null;
     const ANIMEGG_NO_PLAY_TIMEOUT_MS = 20000;
 
-    /* Playback kill-switch (2026-11-23): the embed player never starts in
-       live-browser checks — it hangs on "Please wait", then "Could not load
-       player" — even though the mp4 files are alive, so the pill must not be
-       offered as available until playback is confirmed on a real device.
-       Server routes stay live; flip this to true to re-enable. */
     const ANIMEGG_ENABLED = false;
 
-    /* The AniList id this page's title carries (live: the ?live id; catalog:
-       titleData.anilistId). Null = the server cannot be asked. */
     function animeggAniListId() {
       if (isLive) return liveId || null;
       return (titleData && titleData.anilistId) || null;
     }
 
-    /* Resolve the stream URL for THIS load's episode. One place, so the
-       animegg route is hit exactly once per load and never from the pill's
-       background probe (that probe only feeds the pill). The URL is
-       deliberately NOT stored: the `?for=` token rotates per /watch call, so
-       a later episode or a reload must resolve a fresh one.
-
-       @returns {Promise<string|null>} the URL to hand to the iframe, or null
-       when the provider has no stream for this episode. */
     async function resolveAnimeggStreamUrl(epNum) {
       const id = animeggAniListId();
       if (!id) {
@@ -3724,9 +3190,6 @@
       return url || null;
     }
 
-    /* GET /api/animegg/:anilistId/:ep — availability + (when available) a
-       freshly resolved stream URL. Never auto-switches anything; the caller
-       only learns whether the pill should be offered. */
     async function probeAnimegg(epNum) {
       const id = animeggAniListId();
       if (!ANIMEGG_ENABLED) {
@@ -3738,16 +3201,12 @@
         return null;
       }
       try {
-        /* 45s budget: the server resolves availability (up to 25s on a cold
-           Anivexa lookup) and then a live /watch (up to 20s) in sequence.
-           The generic 10s api() timeout aborts both attempts on a cold
-           lookup and wrongly marks the title unavailable. */
+        
         const res = await api(`/api/animegg/${encodeURIComponent(id)}/${encodeURIComponent(epNum)}`, { timeoutMs: 45000 });
         const d = res && res.data;
         const ok = !!(d && d.available && (d.embedUrl || d.url));
         animeggState = ok ? "available" : "unavailable";
-        /* The URL is returned to the caller, never stored: it carries a
-           rotating token and belongs to exactly one load. */
+        
         return ok ? (d.embedUrl || d.url) : null;
       } catch {
         animeggState = "unavailable";
@@ -3755,38 +3214,16 @@
       }
     }
 
-    /* animeTVplus embed URLs. IDs come from the catalog (titleData.malId /
-       titleData.anilistId) — never invented — with three LIVE-VERIFIED
-       exceptions (tested 2026-11-19), pinned here so a future catalog
-       "correction" cannot silently break the backup: */
     const BACKUP_ID_EXCEPTIONS = {
-      /* Kaguya-sama: Love is War –Ultra Romantic–: the MAL route (43608)
-         hangs on a black spinner; the AniList route (125367) plays the same
-         file. Force the AniList route for this title. */
+      
       "encore-one-more": { route: "anilist", id: 125367 },
-      /* UPSTREAM MAPPING BUG: animeTVplus swaps the MAL ids of A Silent
-         Voice and ERASED — its "A Silent Voice" entry lives at mal 28851
-         (ERASED's real MAL id) and its "ERASED" entry at mal 31043 (A Silent
-         Voice's real MAL id); both routes resolve to the same swapped
-         entries. So A Silent Voice is served via ERASED's id. The catalog
-         already carries the provider-space id; this pin documents it.
-         TODO: re-check upstream periodically and drop the pin if fixed. */
+      
       "paper-cranes-at-dawn": { route: "mal", id: 28851 },
-      /* Same upstream swap, other direction: ERASED is served via A Silent
-         Voice's id (31043). TODO: re-check upstream periodically. */
+      
       "the-quiet-ward": { route: "mal", id: 31043 },
-      /* Attack on Titan S1 (16498) is FLAKY on animeTVplus (played once,
-         black spinner another time) — deliberately NO special handling. */
+      
     };
 
-    /* Split-cour continuations: a catalog title whose later episodes stream
-       under a DIFFERENT title id. Spy x Family Part 1 (MAL 50265) is 12 eps
-       on every player — eps 13-25 are "SPY x FAMILY Cour 2" (AniList 142838,
-       MAL 50602, verified streaming on Zoko 2026-11-23). Without this pin,
-       Next Ep on ep 12 looked broken (disabled at the "last" episode) even
-       though the story continues. The continuation is a LIVE title, so Next
-       Ep / auto-next navigate to watch.html?live=<id>&ep=1. `short` is the
-       button label (the full name is too long for the episode row). */
     const TITLE_CONTINUATIONS = {
       "corner-store-hours": { live: 142838, name: "SPY x FAMILY Cour 2", short: "Cour 2" },
     };
@@ -3796,16 +3233,14 @@
     }
 
     function getBackupEmbedUrl(epNum, startTime, restart) {
-      /* The pinned exceptions are CATALOG titles — a live title never uses
-         them (it has no catalog slug). */
+      
       const ex = isLive ? null : BACKUP_ID_EXCEPTIONS[currentSlug];
       let route, id;
       if (ex) {
         route = ex.route;
         id = ex.id;
       } else {
-        /* Catalog ids only. The Zoko debug MAL override (av_zoko_ids) is
-           deliberately NOT applied to the backup — it is a Zoko tool. */
+        
         if (titleData && titleData.malId) {
           route = "mal";
           id = titleData.malId;
@@ -3816,100 +3251,35 @@
           return null;
         }
       }
-      /* accent matches the site lime. No autoplay/mute params exist (the
-         embed ignores them); no nav=1 — the site has its own episode list. */
+      
       let url = `${BACKUP_ORIGIN}/home/embed/${route}/${id}/${epNum}?accent=cae962`;
-      /* t = whole seconds 1..86400, applied when the viewer presses Play;
-         it takes priority over Uqload's own remembered position. Restart
-         uses t=1: the embed has no resume=0-style switch, and t=1 is the
-         only documented way to override the remembered position. */
+      
       let t = Math.floor(startTime || 0);
       if (restart) t = 1;
       if (t >= 1 && t <= 86400) url += `&t=${t}`;
       return url;
     }
 
-    /* MegaPlay embed URLs (third server). The catalog MAL id is used
-       DIRECTLY — all 18 catalog titles verified playing with their catalog
-       ids (2026-11-19), including the ASV/ERASED pair: MegaPlay's upstream
-       mapping is swapped the SAME way the catalog is, so the catalog ids
-       serve the correct content with NO pins (no exceptions table here).
-       The Zoko debug MAL override (av_zoko_ids) is deliberately not applied
-       — it is a Zoko tool.
-       RESUME: ?t= was live-tested (t=60 on Solo ep1 started playback at
-       0.13s; t=0 and resume=0 also failed to override the provider's own
-       internal resume) — MegaPlay ignores start-offset params, so NO t= is
-       emitted. The provider keeps its OWN internal per-video resume store
-       (verified: a reload resumed at the previous position); the site can
-       neither query nor disable it, and surfaces it honestly via the
-       fallback resume notice. Position tracking still runs on MegaPlay, so
-       a switch back to Zoko resumes from the stored position. */
     function getMegaPlayEmbedUrl(epNum, track) {
       const lang = track === "dub" ? "dub" : "sub";
       if (titleData && titleData.malId) {
         return `${MEGAPLAY_ORIGIN}/stream/mal/${titleData.malId}/${epNum}/${lang}`;
       }
-      /* Live titles without a MAL id use MegaPlay's AniList route. */
+      
       if (titleData && titleData.anilistId) {
         return `${MEGAPLAY_ORIGIN}/stream/ani/${titleData.anilistId}/${epNum}/${lang}`;
       }
       return null;
     }
 
-    /* ------------------------------------------------------------------
-       ZOKO FAILURE DETECTION (diagnosed against the live embed core JS)
-       1. REAL error signal: the embed emits {channel:'zokoanime',
-          type:'error', message} on JW Player errors ("Unable to play
-          media" arrives this way) and on video-element errors. The embed
-          may still self-heal (edge-host failover), so an error OFFERS the
-          backup — it never auto-switches — and the offer hides again if
-          playback demonstrably recovers (ready/play/time events).
-       2. DEAD provider (domain down / blocked / error-state page): NO
-          events arrive at all. Two honest signals:
-          a) a no-cors fetch of the EXACT embed URL rejects only on a real
-             network failure (blocked/DNS/connection refused) — a slow
-             response still resolves (opaque), so slowness never triggers
-             it. An aborted probe (20s) is UNKNOWN, not failure.
-          b) backstop: 45s without `ready`. A slow-but-working load emits
-             ready/play/time long before that (AoT S1 took ~16s with a
-             Zoko-side loading screen and played fine — ready arrived in
-             under a second). Elapsed time alone never fires while the
-             player is alive.
-       3. LOAD-START NO-PLAYBACK DEADLINE (23 Nov, live-browser defect #1):
-          the 30s ready-without-playback backstop is armed ONLY in the
-          `ready` handler — but a 404ing player (Doraemon) serves a static
-          error page with NO scripts, so `ready` never fires and that timer
-          never starts. The 45s no-ready timer above SHOULD have caught it,
-          but the live browser still saw the spinner minutes later (the
-          exact mechanism could not be reproduced from the VM). So a third
-          timer is armed when the load STARTS (in armZokoFailureDetection,
-          called from loadEpisode right after the src assignment): if no
-          playback evidence (play / first time event with a real position)
-          arrives within 45s of the src assignment, the spinner hides and
-          the fallback offer shows — ready or not. `ready` must NEVER retire
-          this deadline; only playback evidence, an error, or a teardown
-          does. 45s matches the no-ready threshold; a slow-but-real start
-          (Paper Cranes class) self-corrects when playback begins — the
-          play/time handlers withdraw the stale offer.
-       ------------------------------------------------------------------ */
     const ZOKO_NO_READY_TIMEOUT_MS = 45000;
-    /* Backstop for ready-without-playback (fix #1, 23 Nov audit): the embed
-       reported `ready` but never plays or errors (Doraemon). `ready` clears
-       every other timer, so without this the spinner stays forever. 30s: a
-       healthy embed starts within seconds. Armed ONCE per load: a retrying
-       embed that fires `ready` repeatedly must not keep resetting the
-       window (that was a second way the spinner could stick forever). */
+    
     const ZOKO_NO_PLAY_AFTER_READY_MS = 30000;
-    /* Load-start no-playback deadline (live-browser defect #1, 23 Nov):
-       armed in armZokoFailureDetection — i.e. at load start, not on ready.
-       Fires only on NO playback evidence within 45s of the src assignment. */
+    
     const ZOKO_NO_PLAYBACK_DEADLINE_MS = 45000;
     const ZOKO_PROBE_ABORT_MS = 20000;
     const BACKUP_NO_READY_TIMEOUT_MS = 45000;
-    /* MegaPlay emits no reliable pre-play signal; a dead file (the 410 page)
-       produces no events at all. A healthy embed reports its first time event
-       within a few seconds, so 12s is a safe "no playback evidence" backstop —
-       long enough for a slow start, short enough not to trap the viewer. */
+    
     const MEGAPLAY_NO_PLAY_TIMEOUT_MS = 12000;
     let loadToken = 0;
     let zokoFailTimer = null;
@@ -3920,23 +3290,11 @@
     let megaplayFailTimer = null;
     let fallbackOfferVisible = false;
 
-    /* ------------------------------------------------------------------
-       SWITCH HARDENING — teardown + idempotency + settle watchdog.
-       A server switch used to flip `activeServer` and assign a new iframe
-       src with NO teardown of the dying document: its backstops, its
-       reachability probe and its per-load flags survived into the new
-       load, a still-in-flight loadEpisode from the old server could resume
-       after the swap and touch the player again, and if the new document
-       never reported ready/play/time the page just sat on the spinner
-       forever. Everything player-side is now cleared in ONE place before
-       every switch, stale loads are invalidated by token, and a watchdog
-       rebuilds the iframe on the target server if nothing settles in time.
-       ------------------------------------------------------------------ */
     const SWITCH_SETTLE_TIMEOUT_MS = 20000;
     let settleWatchdog = null;   // watchdog timer for the current switch
     let settleAttempt = 0;       // 0 = first load, 1 = after one rebuild
     let playerSettled = false;   // became true on ready/play/time/error/offer
-    let probeController = null;  // AbortController of the live Zoko probe
+    let probeController = null;  
     let switchBusy = false;      // one accepted switch at a time
     let pendingSwitchWatchdog = false; // consumed by the switch's load
 
@@ -3960,10 +3318,6 @@
       if (settleWatchdog) { clearTimeout(settleWatchdog); settleWatchdog = null; }
     }
 
-    /* Rebuild the iframe element itself: replacing the node guarantees the
-       stuck document (TVplus/Uqload, a half-dead Zoko load) is gone, not
-       merely re-navigated. Listener re-binding happens in
-       bindIframeListeners; the focus poller reads `iframe` dynamically. */
     function rebuildIframe() {
       if (!iframe || !iframe.parentNode) return;
       const fresh = document.createElement("iframe");
@@ -3972,9 +3326,7 @@
       fresh.title = iframe.title;
       fresh.setAttribute("allow", iframe.getAttribute("allow") || "fullscreen; autoplay");
       fresh.setAttribute("allowfullscreen", "");
-      /* The fresh node must carry the CURRENT server's sandbox: the sandbox
-         only takes effect on navigation, and this rebuild immediately
-         re-navigates in loadEpisode. */
+      
       const sandboxForFresh = Object.prototype.hasOwnProperty.call(PLAYER_IFRAME_SANDBOX_BY_SERVER, activeServer)
         ? PLAYER_IFRAME_SANDBOX_BY_SERVER[activeServer]
         : null;
@@ -3992,8 +3344,7 @@
         settleWatchdog = null;
         if (token !== loadToken || playerSettled) return;
         if (attempt === 0) {
-          /* First strike: tear the player area down and rebuild the iframe
-             on the target server, then reload the episode once. */
+          
           settleAttempt = 1;
           switchBusy = false;
           rebuildIframe();
@@ -4001,7 +3352,7 @@
           armSettleWatchdog(loadToken, server, 1);
           return;
         }
-        /* Second strike: stop recovering and surface the honest state. */
+        
         settleAttempt = 0;
         switchBusy = false;
         if (spinner) spinner.hidden = true;
@@ -4013,13 +3364,9 @@
       }, SWITCH_SETTLE_TIMEOUT_MS);
     }
 
-    /* When the last Zoko error event arrived. Recovery (offer/overlay hide)
-       requires playback evidence MORE than 2s after the error: the old
-       document keeps emitting in-flight time events for ~0.5s after a fatal
-       error, and a single stale event must not withdraw the offer. */
     let lastZokoErrorAt = 0;
     const ZOKO_RECOVERY_GUARD_MS = 2000;
-    /* Same recovery guard for MegaPlay's failure offer. */
+    
     let lastMegaPlayErrorAt = 0;
     const MEGAPLAY_RECOVERY_GUARD_MS = 2000;
     const fallbackNote = document.getElementById("zoko-fallback-note");
@@ -4033,8 +3380,6 @@
       }
     }
 
-    /* The failure OFFER (Zoko context only). The viewer chooses; nothing
-       switches automatically. */
     function showFallbackOffer() {
       if (!fallbackNote || activeServer !== "zoko") return;
       fallbackOfferVisible = true;
@@ -4049,8 +3394,6 @@
       if (dismissBtn) dismissBtn.addEventListener("click", hideFallbackNote);
     }
 
-    /* Backup-context notice: status after a switch, or a backup failure.
-       Always offers the way back to the primary player. */
     function showBackupNote(message) {
       if (!fallbackNote) return;
       fallbackOfferVisible = false;
@@ -4065,9 +3408,6 @@
       if (dismissBtn) dismissBtn.addEventListener("click", hideFallbackNote);
     }
 
-    /* MegaPlay-context failure OFFER: the same notice component as the Zoko
-       failure offer, but the way out is back to the PRIMARY player. The
-       viewer chooses; nothing switches automatically. */
     function showMegaPlayFailureOffer(message) {
       if (!fallbackNote || activeServer !== "megaplay") return;
       fallbackOfferVisible = true;
@@ -4082,8 +3422,6 @@
       if (dismissBtn) dismissBtn.addEventListener("click", hideFallbackNote);
     }
 
-    /* animegg-context failure OFFER: same component and same rule (manual
-       only — the viewer picks the way back, nothing auto-switches). */
     function showAnimeggFailureOffer(message) {
       if (!fallbackNote || activeServer !== ANIMEGG_SERVER_ID) return;
       fallbackOfferVisible = true;
@@ -4098,8 +3436,6 @@
       if (dismissBtn) dismissBtn.addEventListener("click", hideFallbackNote);
     }
 
-    /* animegg status note when the episode simply is not on the provider: the
-       honest not-available state, offering the way back. */
     function showAnimeggUnavailableNote(message) {
       if (!fallbackNote || activeServer !== ANIMEGG_SERVER_ID) return;
       fallbackOfferVisible = false;
@@ -4119,22 +3455,13 @@
       zokoFailTimer = setTimeout(() => {
         zokoFailTimer = null;
         if (token !== loadToken || activeServer !== "zoko" || playerReady) return;
-        /* Failure is detected: release the switch lock (so the offer's
-           button actually works) and clear the loading overlays instead of
-           leaving them stacked over the error. */
+        
         markPlayerSettled();
         if (spinner) spinner.hidden = true;
         if (coverOverlay) coverOverlay.style.display = "none";
         showFallbackOffer();
       }, ZOKO_NO_READY_TIMEOUT_MS);
-      /* Load-start no-playback deadline (live-browser defect #1): armed
-         HERE — at load start, not on ready — so a player that emits nothing
-         at all (Doraemon's static 404 page: no scripts, no ready, no error)
-         still gets a spinner-hide + fallback offer. The guard deliberately
-         does NOT check playerReady: `ready` must never retire this
-         deadline — only playback evidence, an error, or a teardown does.
-         If the 30s ready-without-play timer already fired, this is a no-op
-         re-render of the same offer (harmless). */
+      
       if (zokoNoPlaybackTimer) clearTimeout(zokoNoPlaybackTimer);
       zokoNoPlaybackTimer = setTimeout(() => {
         zokoNoPlaybackTimer = null;
@@ -4145,9 +3472,7 @@
         if (coverOverlay) coverOverlay.style.display = "none";
         showFallbackOffer();
       }, ZOKO_NO_PLAYBACK_DEADLINE_MS);
-      /* Reachability probe of the exact embed URL (see detection notes).
-         The previous switch's probe is aborted first: probes must never
-         stack up across switches. */
+      
       if (probeController) {
         try { probeController.abort(); } catch {}
       }
@@ -4173,7 +3498,7 @@
       backupFailTimer = setTimeout(() => {
         backupFailTimer = null;
         if (token !== loadToken || activeServer !== "backup" || playerReady) return;
-        /* Release the switch lock so "Back to Zoko" works immediately. */
+        
         markPlayerSettled();
         if (spinner) spinner.hidden = true;
         if (coverOverlay) coverOverlay.style.display = "none";
@@ -4181,19 +3506,12 @@
       }, BACKUP_NO_READY_TIMEOUT_MS);
     }
 
-    /* MegaPlay failure detection: an error event OR 45s without a single
-       time/watching-log event (the documented alive signal — PLAYER_READY
-       does not count). NO reachability probe here: direct access to a
-       MegaPlay stream URL returns HTTP 410 BY DESIGN (embed-only block),
-       so a no-cors probe would false-positive on healthy titles. */
     function armMegaPlayFailureDetection(token) {
       if (megaplayFailTimer) clearTimeout(megaplayFailTimer);
       megaplayFailTimer = setTimeout(() => {
         megaplayFailTimer = null;
         if (token !== loadToken || activeServer !== "megaplay" || playerReady) return;
-        /* Failure detected: release the switch lock (the offer's "Try Zoko
-           player" must work), clear the loading overlays and offer the way
-           back. The dead file's own 410 page stays visible inside the frame. */
+        
         markPlayerSettled();
         if (spinner) spinner.hidden = true;
         if (coverOverlay) coverOverlay.style.display = "none";
@@ -4201,10 +3519,6 @@
       }, MEGAPLAY_NO_PLAY_TIMEOUT_MS);
     }
 
-    /* animegg failure detection: the embed emits no documented postMessage
-       events, so the ONLY honest signal is elapsed time without the iframe
-       producing anything. 20s: the embed is a plain page (animegg.org embed)
-       that loads its player quickly; the site never auto-switches. */
     function armAnimeggFailureDetection(token) {
       if (animeggFailTimer) clearTimeout(animeggFailTimer);
       animeggFailTimer = setTimeout(() => {
@@ -4217,37 +3531,17 @@
       }, ANIMEGG_NO_PLAY_TIMEOUT_MS);
     }
 
-    /* Swap the iframe in place — no page reload, no lost comment draft, no
-       lost resume notice. The last observable position travels with the
-       switch (Zoko and MegaPlay report time events; TVplus exposes none, so
-       this captured position is also what a later switch BACK resumes from).
-
-       Idempotent + teardown-first: every player-side timer/probe from the
-       dying document is cleared before the new load, per-load flags are reset
-       (playerEp is nulled so stale events can't be attributed to the new
-       document), server toasts are dropped, and a settle watchdog arms for
-       the new load.
-
-       A manual switch is NEVER swallowed: it works while a load is in flight
-       (the pending load is invalidated by token, so it cannot re-assign the
-       iframe src after the swap) and while a previous switch is still
-       settling (the settle lock exists to serialize recovery, not to block
-       the viewer's own click — that lock used to make the server pills dead
-       for up to 40s on a failed MegaPlay load). */
     function switchServer(server) {
       if (server !== "zoko" && server !== "backup" && server !== ANIMEGG_SERVER_ID) return;
       if (server === activeServer) return;
-      /* Cancel the in-flight load/probes BEFORE swapping: the token bump
-         makes every awaiting loadEpisode abort at its next guard. */
+      
       loadToken++;
       loadInFlight = false;
       switchBusy = false;
       settleAttempt = 0;
       const pos = Math.floor(currentPosition || 0);
       activeServer = server;
-      /* Sandbox FIRST, before loadEpisode assigns the iframe src: the
-         sandbox attribute only takes effect when the iframe navigates, so it
-         must be in place for the navigation this switch triggers. */
+      
       applyIframeSandbox(server);
       try { sessionStorage.setItem(SS_SERVER_KEY, server); } catch {}
       clearPlayerTimersAndProbes();
@@ -4258,21 +3552,15 @@
       lastZokoErrorAt = 0;
       lastMegaPlayErrorAt = 0;
       playerSettled = false;
-      /* The stream URL is resolved per load; nothing to clear here beyond
-         the state (loadEpisode re-resolves it). */
+      
       clearPlayerToasts();
       applyServerUI();
-      /* The note is recomputed by loadEpisode for the server now active:
-         backup shows its status note, animegg re-resolves availability and
-         shows the honest state, Zoko/MegaPlay clear it. */
+      
       hideFallbackNote();
       pendingSwitchWatchdog = true;
       loadEpisode(currentEp, null, false, pos);
     }
 
-    /* One place owns the server-dependent UI: pills, track availability,
-       Zoko-only settings, cover badge. preferredTrack / av_zoko_track are
-       NEVER written here — the viewer's Dub choice survives the alternates. */
     function applyServerUI() {
       const onBackup = activeServer === "backup";
       const onMegaPlay = activeServer === "megaplay";
@@ -4280,11 +3568,7 @@
       if (serverSwitcher) {
         serverSwitcher.querySelectorAll(".server-pill").forEach((p) => {
           p.classList.toggle("active", p.dataset.server === activeServer);
-          /* animegg is offered ONLY for an episode the provider actually
-             lists: the pill is disabled with an honest tooltip otherwise,
-             exactly like the other players' unavailable states. Unknown
-             (probe still in flight) stays enabled but unhighlighted — the
-             click itself re-resolves and shows the honest state. */
+          
           if (p.dataset.server === ANIMEGG_SERVER_ID) {
             const off = animeggState === "unavailable";
             p.disabled = off;
@@ -4304,11 +3588,7 @@
         trackSwitcher.querySelectorAll(".server-pill").forEach((p) => {
           const t = p.dataset.track || "sub";
           if (onBackup) {
-            /* The backup exposes no track control: the audio/subtitle track
-               is whatever the source file carries, and the site cannot
-               choose or switch it. Pills stay disabled (honest — no site
-               track switch exists here); the wording no longer claims the
-               file is "Sub only", which the site cannot know. */
+            
             p.classList.toggle("active", t === "sub");
             p.disabled = t !== "sub";
             p.classList.toggle("is-disabled", t !== "sub");
@@ -4316,11 +3596,7 @@
                     : t === "hsub" ? "Track switching isn't available on TVplus — subs depend on the source file"
                     : "";
           } else if (onAnimegg) {
-            /* animegg is SUB-ONLY (verified: 0 dub episodes across the
-               covered titles). Same treatment as the backup: Sub active,
-               Dub/Hard-sub disabled with an honest tooltip, and the stored
-               av_zoko_track preference is never touched — it returns when
-               the viewer goes back to Zoko. */
+            
             p.classList.toggle("active", t === "sub");
             p.disabled = t !== "sub";
             p.classList.toggle("is-disabled", t !== "sub");
@@ -4328,11 +3604,7 @@
                     : t === "hsub" ? "animegg is sub only — hard-sub isn't available either"
                     : "";
           } else if (onMegaPlay) {
-            /* MegaPlay serves REAL dubs and its availability differs from
-               Zoko's probe data — Sub and Dub stay enabled ALWAYS (never
-               disabled from dub_checks). A truly missing dub surfaces as a
-               player error → the failure notice handles it. Hard-sub is not
-               a MegaPlay track: disabled with an honest tooltip. */
+            
             p.disabled = t === "hsub";
             p.classList.toggle("is-disabled", t === "hsub");
             p.title = t === "hsub" ? "Hard-sub isn't a MegaPlay track — choose Sub or Dub" : "";
@@ -4347,12 +3619,7 @@
       }
       if (settingToggles) {
         settingToggles.querySelectorAll("input[data-setting]").forEach((cb) => {
-          /* Zoko embed settings stay disabled on the alternates — except
-             auto-next on MegaPlay, which is SITE-driven (the complete event
-             loads the next episode), so that toggle genuinely works there.
-             MegaPlay always auto-plays and has no intro/outro skip.
-             animegg has no documented postMessage control bridge and no
-             parent-driven end event, so all three toggles are disabled. */
+          
           const key = cb.dataset.setting;
           const disabled = onBackup || onAnimegg || (onMegaPlay && key !== "autonext");
           cb.disabled = disabled;
@@ -4401,7 +3668,7 @@
       try {
         const map = readProgressMap();
         map[`${slug}:${ep}`] = { t: Math.floor(pos), d: Math.floor(dur || 0), at: Date.now() };
-        // Keep the store bounded: drop the oldest entries past 200.
+        
         const keys = Object.keys(map);
         if (keys.length > 200) {
           keys.sort((a, b) => (map[a].at || 0) - (map[b].at || 0));
@@ -4417,14 +3684,12 @@
         localStorage.setItem(LS_PROGRESS_KEY, JSON.stringify(map));
       } catch {}
     }
-    /* Same "watched enough to resume, not finished" window the embed uses. */
+    
     function resumablePosition(pos, dur) {
       const d = dur > 0 ? dur : 1440;
       return typeof pos === "number" && pos >= 5 && pos < d - 20 && pos / d <= 0.95;
     }
 
-    // Helper: Send postMessage commands to ZokoAnime embed player.
-    // Zoko-only: the backup embed accepts just goto/info — site play/pause/
     // seek/settings commands would be fake controls there.
     function sendPlayerCommand(cmd) {
       if (activeServer !== "zoko") return;
@@ -4446,8 +3711,7 @@
     }
 
     // Spec-compliant embed URL builder (ZokoAnime spec only).
-    /* `source` is always "mal": Zoko's /stream/anilist/ route is dead upstream
-       (HTTP 404 for every id probed), so this builder never emits one. */
+    
     function getEmbedUrl(malId, epNum, track, opts = {}) {
       const source = opts.source === "anilist" ? "anilist" : "mal";
       const id = opts.id != null ? opts.id : malId;
@@ -4455,10 +3719,7 @@
         showToast("No anime id mapped for this title");
         return null;
       }
-      /* Zoko's /stream/anilist/... route does not exist upstream (HTTP 404 for
-         every id probed). Never build one: a caller that still asks for the
-         anilist route gets null, and the caller routes the title to the
-         working TVplus AniList route instead. */
+      
       if (source === "anilist") {
         return null;
       }
@@ -4468,26 +3729,17 @@
       const an = opts.autonext ? 1 : 0;
       let url = `https://zokoanime.video/stream/${source}/${id}/${epNum}/${track}?color=${color}&autoplay=${ap}&autoskip=${as}&autonext=${an}`;
       if (opts.startTime && opts.startTime > 0) {
-        /* The live embed reads the start offset from `time=` (verified: `t=`
-           alone is ignored and playback starts at 0). Emit both. */
+        
         const startSec = Math.floor(opts.startTime);
         url += `&t=${startSec}&time=${startSec}`;
       }
       if (opts.noResume) {
-        /* The embed keeps its OWN per-video resume store (localStorage
-           osp:pos:<id>) and applies it whenever no explicit start point is
-           given — so time=0 alone does NOT restart an episode. `resume=0`
-           is the provider's documented switch that disables that internal
-           resume (verified against the embed payload: resume:false). */
+        
         url += "&resume=0";
       }
       return url;
     }
 
-    /* ------------------------------------------------------------------
-       Visible states: the page must never sit silently on placeholder
-       text pretending to be real data.
-       ------------------------------------------------------------------ */
     function showDataError(message, onRetry) {
       if (!dataError) return;
       if (dataErrorText) dataErrorText.textContent = message;
@@ -4533,17 +3785,11 @@
       }
     }
 
-    /* Total episode count, or 0 while the title is unknown. */
     function totalEpisodes() {
       if (isLive) return liveAiredCount;
       return (titleData && titleData.episodes) || episodesList.length || 0;
     }
 
-    /* "More Like This" rail under the player (Phase 3b).
-       Live titles: the recommendation edges are ALREADY in the /api/live
-       payload — no second query. Catalog titles: the same same-genre shelf
-       the catalog detail page renders. Empty -> fillRecommendations hides the
-       section, so a title with no recommendations shows nothing at all. */
     async function loadWatchRecommendations() {
       const wrap = document.getElementById("detail-recommendations");
       if (!wrap) return;
@@ -4560,11 +3806,6 @@
       }
     }
 
-    /* LIVE title details — /api/live/:anilistId.
-       The episode list comes from the AIRED episode count: an airing title
-       has aired (nextAiringEpisode.episode - 1) episodes, a finished title
-       has all of them, a film has one. A title with an unannounced episode
-       count shows "Episode list unavailable" but can still play Ep 1. */
     async function loadLiveTitleData() {
       hideDataError();
       const res = await api(`/api/live/${encodeURIComponent(liveId)}`);
@@ -4603,7 +3844,6 @@
       if (animeTitleH1) animeTitleH1.textContent = titleData.name;
       if (animeDesc) animeDesc.textContent = titleData.synopsis || "";
 
-      /* Live titles have no dub data — the 18+ tag comes from the server. */
       const badgesEl = document.getElementById("watch-anime-badges");
       if (badgesEl) {
         badgesEl.innerHTML = t.is18plus
@@ -4634,8 +3874,6 @@
       if (detailLink) detailLink.href = liveDetailHref(titleData);
       if (coverOverlay) coverOverlay.style.backgroundImage = `url('${bannerOf(titleData)}')`;
 
-      /* No watchlist row and no comments for live titles — neither exists in
-         the catalog DB, and this feature must not write to it. */
       if (wlBtn) wlBtn.hidden = true;
       const discussion = document.getElementById("watch-discussion");
       if (discussion) discussion.hidden = true;
@@ -4651,9 +3889,7 @@
     async function loadTitleData() {
       if (isLive) return loadLiveTitleData();
       hideDataError();
-      /* Missing/unknown slug: an honest not-found state. The watch page must
-         never invent a title (the old default silently played Jujutsu Kaisen
-         for any ?id= garbage). */
+      
       if (!currentSlug) {
         showNotFoundState("No title specified. Browse the catalog to pick an anime.");
         return false;
@@ -4673,16 +3909,13 @@
       const data = titleRes.data;
       titleData = data.title;
       episodesList = Array.isArray(data.episodes) ? data.episodes : [];
-      /* Seed per-episode dub availability BEFORE the first loadEpisode runs:
-         the optimistic pill then knows the answer on a cold episode and never
-         flashes Sub → Dub. Runs after every title load, so a retry re-seeds. */
+      
       seedDubAvailability(data);
 
       if (animeTitle) animeTitle.textContent = titleData.name;
       if (animeTitleH1) animeTitleH1.textContent = titleData.name;
       if (animeDesc) animeDesc.textContent = titleData.synopsis || titleData.tagline || "";
 
-      // Real metadata in the sidebar details card + the player cover backdrop.
       const setText = (id, val) => {
         const el = document.getElementById(id);
         if (el) el.textContent = val;
@@ -4692,10 +3925,7 @@
       setText("watch-detail-year", titleData.year || "—");
       setText("watch-detail-score", scoreLabel(titleData) ? `★ ${scoreLabel(titleData)} / 10` : "—");
       setText("watch-detail-episodes", titleData.episodes || episodesList.length || "—");
-      /* Runtime has ONE source of truth: the catalog's runtimeMin (same
-         value the spotlight/cards show). Never fabricate a 24m fallback —
-         a missing runtime renders as "—", not a number that later
-         "corrects" itself. */
+      
       setText("watch-detail-duration", titleData.runtimeMin ? `${titleData.runtimeMin}m per ep` : "—");
       const detailLink = document.getElementById("watch-detail-link");
       if (detailLink) detailLink.href = detailHref(currentSlug);
@@ -4708,7 +3938,7 @@
 
       renderEpisodesGrid();
       updateEpisodeNavState();
-      /* The episode list is the watch page's real content. */
+      
       loadWatchRecommendations();
       markContentReady();
       return true;
@@ -4721,8 +3951,7 @@
       const totalEps = totalEpisodes();
       if (!totalEps) {
         if (isLive && liveEpisodesUnknown) {
-          /* The episode count is unannounced — say so honestly, but Ep 1 is
-             still playable. */
+          
           epGrid.innerHTML = `
             <p class="ep-grid-status">Episode list unavailable for this title.</p>
             <button class="ep-btn" data-ep="1" type="button" title="Episode 1"><span class="ep-btn-num">001</span><span class="ep-btn-title">Episode 1</span></button>`;
@@ -4733,13 +3962,11 @@
         return;
       }
 
-      // Update range tabs label (Bug 7)
       if (rangeTabs) {
         const maxEpStr = String(totalEps).padStart(3, "0");
         rangeTabs.innerHTML = `<button class="ep-tab-btn active" type="button">001 - ${maxEpStr}</button>`;
       }
 
-      // Build map of episode titles (Bug 8)
       const epMap = new Map();
       episodesList.forEach((e) => {
         if (e && e.ep_num != null) {
@@ -4757,7 +3984,6 @@
       }
       epGrid.innerHTML = html;
 
-      // Filter episodes by search box (Bug 8)
       const searchInput = document.getElementById("ep-search-input");
       if (searchInput && searchInput.dataset.searchBound !== "true") {
         searchInput.dataset.searchBound = "true";
@@ -4787,12 +4013,9 @@
         });
       }
 
-      // Delegated click listener for episodes grid (ensures in-page swap without navigation)
       bindEpisodeGridEvents();
     }
 
-    /* The episode grid is re-rendered on every title/episode change, so the
-       delegated listener is bound ONCE and survives the re-render. */
     function bindEpisodeGridEvents() {
       if (!epGrid || epGrid.dataset.delegatedBound === "true") return;
       epGrid.dataset.delegatedBound = "true";
@@ -4808,7 +4031,6 @@
       });
     }
 
-    // Prev / Next button states (also used before the title has loaded)
     function updateEpisodeNavState() {
       const totalEps = totalEpisodes();
       const prevBtn = document.getElementById("btn-prev-ep");
@@ -4819,9 +4041,7 @@
       }
       if (nextBtn) {
         const atEnd = totalEps > 0 && currentEp >= totalEps;
-        /* A split-cour continuation turns the dead end into a door: Next
-           stays enabled at the last episode and is labelled with where it
-           goes (Spy x Family ep 12 -> Cour 2). */
+        
         const cont = atEnd ? titleContinuation() : null;
         nextBtn.disabled = (atEnd && !cont) || totalEps === 0;
         nextBtn.style.opacity = nextBtn.disabled ? "0.5" : "1";
@@ -4832,13 +4052,11 @@
     // Episode subtitle updater
     async function updateEpisodeSubtitle(epNum, prefetched) {
       const epRes = await (prefetched || fetchEpisodeData(epNum));
-      /* A newer episode switch may have started while this fetch was in
-         flight: the stale answer must not overwrite the new episode's title. */
+      
       const isCurrent = Number(epNum) === Number(currentEp);
       if (epRes.ok && epRes.data && epRes.data.episode) {
         const ep = epRes.data.episode;
-        /* Live titles have generic episode names — "Episode 1: Episode 1"
-           says nothing, so the subtitle stays clean. */
+        
         if (epSubtitle && isCurrent) {
           epSubtitle.textContent = isLive
             ? `Episode ${ep.epNum}`
@@ -4852,12 +4070,9 @@
     }
 
     /* Load an episode */
-    /* Episode metadata only needs the slug + episode number, so it is fetched
-       in parallel with the title instead of after it. */
+    
     function fetchEpisodeData(epNum) {
-      /* Live titles have no episode rows (no DB write for them): the episode
-         metadata is derived from the title's own runtime, and the resume
-         position comes from the local store under the live key. */
+      
       if (isLive) {
         const runtime = (titleData && titleData.runtimeMin) ? titleData.runtimeMin : 24;
         const saved = readLocalProgress(progressKey, epNum);
@@ -4878,10 +4093,6 @@
       return api(`/api/titles/${encodeURIComponent(currentSlug)}/episodes/${epNum}`);
     }
 
-    /* Resume notice — shown on BOTH resume paths (signed-in server position
-       AND signed-out localStorage position), plus a fallback for the embed's
-       own internal resume that the site cannot know about up front. Stays
-       visible until dismissed, or 6s after playback actually starts. */
     function showResumeNote(seconds) {
       if (!resumeNote) return;
       if (resumeNoteTimer) {
@@ -4890,10 +4101,7 @@
       }
       resumeNoteShownForLoad = true;
       resumeNoteArmOnPlay = true;
-      /* Restart stays on Zoko/TVplus only: MegaPlay's internal resume store
-         cannot be disabled (?t=0 / resume=0 live-tested — both ignored), so
-         a Restart button there would be a fake control. animegg is the same
-         (no documented start-offset param, its own player chrome). */
+      
       const restartBtnHtml = (activeServer === "megaplay" || activeServer === ANIMEGG_SERVER_ID) ? "" :
         `<button class="btn-zoro-primary" id="resume-restart-btn" type="button" style="margin-left: 0.5rem; font-size: 0.75rem;">Restart</button>`;
       resumeNote.innerHTML = `
@@ -4906,8 +4114,7 @@
       if (restartBtn) {
         restartBtn.addEventListener("click", () => {
           hideResumeNote();
-          /* loadEpisode's third argument is a BOOLEAN. Passing an object
-             here only ever worked by accident (truthy). */
+          
           loadEpisode(currentEp, null, true);
         });
       }
@@ -4925,8 +4132,7 @@
         resumeNote.innerHTML = "";
       }
     }
-    /* Called from the player's play / first time event: only NOW does the
-       auto-hide countdown start (a few seconds after playback begins). */
+    
     function armResumeNoteAutoHide() {
       if (!resumeNoteArmOnPlay) return;
       resumeNoteArmOnPlay = false;
@@ -4947,12 +4153,10 @@
       loadInFlight = true;
       loadToken++;
       const token = loadToken;
-      /* New load: retire any previous failure-detection timers and (on Zoko
-         or MegaPlay) the previous failure offer. A backup-status note stays
-         — the viewer is still on the backup player. */
+      
       clearPlayerTimersAndProbes();
       if (activeServer !== "backup") hideFallbackNote();
-      /* New load: retire any previous resume notice and its timers. */
+      
       hideResumeNote();
       resumeNoteShownForLoad = false;
       resumeTimeForLoad = 0;
@@ -4966,76 +4170,33 @@
       durationIsReal = false;
       playerReady = false;
       playerSettled = false;
-      /* New episode: animegg availability is re-resolved (the pill's probe
-         runs in the background below; an animegg load resolves its own URL). */
+      
       animeggState = "unknown";
       animeggLoadToken++;
 
-      /* TEARDOWN-FIRST (fix #2, 23 Nov audit): stop the OLD player in this
-         same frame, BEFORE any await. The new stream URL is only resolved
-         after async fetches below (episode data, subtitles, dub probe) —
-         without this the old document keeps PLAYING (audio included)
-         through the whole gap, and longest when the new player never loads
-         at all (switching to a dead player). Blanking the src kills it
-         immediately; the new src is assigned later in this same load. The
-         initial page load is a no-op (src is already about:blank). */
       if (iframe && iframe.src && iframe.src !== "about:blank") {
         iframe.src = "about:blank";
       }
 
-      /* ------------------------------------------------------------------
-         TRACK RESET — IMMEDIATELY, BEFORE ANY AWAIT.
-         The old code awaited the episode fetch AND the dub probe before it
-         touched the pills, so the PREVIOUS episode's highlight survived the
-         switch for seconds (verified live: switching from a dubbed episode
-         to an episode without a dub left DUB highlighted for a few seconds
-         and only then corrected itself to SUB).
-         Rule from here on: the pill shows the track that is loaded / being
-         loaded on THIS episode, and it is correct within the first frame of
-         the switch. While the answer is still unknown we show SUB — the
-         only track that is guaranteed to exist — and correct it the moment
-         the probe lands. The viewer's PREFERENCE is a separate variable and
-         is never destroyed by this fallback.
-         ------------------------------------------------------------------ */
       const knownAvail = dubAvailability.get(Number(epNum));
       if (activeServer === "backup") {
-        /* The backup exposes no track choice — the source file decides the
-           audio. currentTrack stays "sub" as internal state only (the site
-           cannot know the file's track); preferredTrack / av_zoko_track are
-           deliberately untouched so the viewer's Dub choice returns when
-           they go back to Zoko. */
+        
         currentTrack = "sub";
         applyTrackPill("sub");
         updateTrackLabel();
       } else if (activeServer === ANIMEGG_SERVER_ID) {
-        /* animegg is SUB-ONLY, so the track is forced to Sub (no dub claim,
-           no preference write — av_zoko_track keeps the viewer's choice for
-           the return to Zoko). */
+        
         currentTrack = "sub";
         applyTrackPill("sub");
         updateTrackLabel();
       } else if (activeServer === "megaplay") {
-        /* MegaPlay: Sub and Dub are ALWAYS offered — its dub availability
-           differs from Zoko's probe data, so there is NO dub_checks gate
-           here (a missing dub surfaces as a player error → failure notice).
-           An explicit MegaPlay choice (megaPlayTrack) carries across
-           episodes; otherwise the STORED preference maps over (hsub → sub:
-           MegaPlay has no hard-sub track). The stored value is read here on
-           purpose: `preferredTrack` also changes when the viewer picks a
-           track on a LIVE title, and those clicks deliberately do NOT touch
-           av_zoko_track. Mapping the volatile variable made MegaPlay open
-           Dub while the stored preference was still Sub (live-title click
-           leak). av_zoko_track remains never written from MegaPlay. */
+        
         const storedTrack = readPreferredTrack();
         currentTrack = megaPlayTrack || (storedTrack === "dub" ? "dub" : "sub");
         applyTrackPill(currentTrack);
         updateTrackLabel();
       } else if (isLive) {
-        /* LIVE titles: dub availability is UNKNOWN (there are no dub_checks
-           rows for them, and this feature must not write any). Sub AND Dub
-           stay enabled and the viewer's stored preference is honoured as-is
-           — a track that does not exist surfaces as a player error and the
-           existing failure notice handles it. */
+        
         currentTrack = preferredTrack === "hsub" ? "hsub" : preferredTrack;
         applyTrackPill(currentTrack);
         updateTrackLabel();
@@ -5048,18 +4209,8 @@
         updateTrackLabel();
       }
 
-      /* New episode: re-probe dub availability in the background (the Dub
-         pill awaits this probe if it is still running when clicked). The
-         fresh entry starts unknown, so the previous episode's answer can
-         never leak into this one. Zoko-only: the backup has no dub.
-         Live titles are never probed — they have no dub data at all. */
       const probePromise = activeServer === "zoko" && !isLive ? probeDubAvailability(epNum) : null;
 
-      /* New episode: re-resolve animegg availability in the background, so
-         the pill is honest (offered only when the provider lists the
-         episode) without blocking the load. Only the pill state is fed from
-         here — the URL used for an actual animegg load is resolved again in
-         the stream-URL step below (never reused). Never auto-switches. */
       if (activeServer !== ANIMEGG_SERVER_ID) {
         const bgToken = animeggLoadToken;
         probeAnimegg(epNum).then(() => {
@@ -5067,7 +4218,6 @@
         }).catch(() => {});
       }
 
-      // Clear episode-search filter and input box on every episode change (Bug 5)
       const epSearchInput = document.getElementById("ep-search-input");
       if (epSearchInput && epSearchInput.value) {
         epSearchInput.value = "";
@@ -5079,9 +4229,7 @@
         const noMatchEl = epGrid.querySelector(".ep-no-search-match");
         if (noMatchEl) noMatchEl.remove();
       }
-      // Optimistically update the episode heading from the already-cached
-      // episode list so it tracks the URL instantly instead of lagging ~1-2s
-      // behind while the episode fetch runs. The fetch below confirms it.
+
       const cachedEp = episodesList.find((e) => Number(e.ep_num ?? e.epNum) === Number(epNum));
       if (epSubtitle) {
         epSubtitle.textContent = cachedEp
@@ -5089,11 +4237,9 @@
           : `Episode ${epNum}`;
       }
 
-      // Reset overlay and show spinner
       if (overlay) overlay.hidden = true;
       if (spinner) spinner.hidden = false;
 
-      // Update URL without reload
       const newUrl = isLive
         ? `watch.html?live=${encodeURIComponent(liveId)}&ep=${epNum}`
         : `watch.html?slug=${encodeURIComponent(currentSlug)}&ep=${epNum}`;
@@ -5108,20 +4254,15 @@
         activeBtn.scrollIntoView({ block: "nearest", behavior: "smooth" });
       }
 
-      // Update Prev / Next button states
       updateEpisodeNavState();
 
       // Check saved position for resume
       const epData = await updateEpisodeSubtitle(epNum, prefetched);
-      /* A newer episode/server load started while this one was fetching: this
-         load is stale and must not touch the player, the URL or the pills.
-         The old check only compared the episode number, so a SERVER switch
-         (same episode) let the previous load resume after the swap and
-         re-assign the iframe src — the src-swap race behind the switch hang. */
+      
       if (token !== loadToken) return;
       if (currentEp !== epNum) return;
       if (!epData) {
-        // Episode metadata could not be loaded: show a retry state instead of
+        
         // leaving stale placeholder text on screen.
         loadInFlight = false;
         if (spinner) spinner.hidden = true;
@@ -5137,17 +4278,13 @@
 
       let resumeTime = 0;
       if (startFromBeginning) {
-        /* Restart: forget the saved position so the next reload does not
-           resume again, and tell the embed to skip its own resume store. */
+        
         clearLocalProgress(progressKey, epNum);
       } else if (positionOverride != null) {
-        /* Server switch: carry the last observable position across servers
-           (Zoko time events -> backup t= param, and back). */
+        
         resumeTime = positionOverride >= 1 ? Math.floor(positionOverride) : 0;
       } else if (isLive) {
-        /* Live titles have no server-side progress (no catalog row) — the
-           site's own local store under the "live-<id>" namespace is the only
-           source of truth. */
+        
         const epDur = epData.durationSec || 1440;
         const lp = readLocalProgress(progressKey, epNum);
         if (lp && resumablePosition(lp.t, lp.d || epDur)) {
@@ -5156,42 +4293,24 @@
       } else {
         const epDur = epData.durationSec || 1440;
         if (typeof epData.savedPositionSec === "number" && resumablePosition(epData.savedPositionSec, epDur)) {
-          /* Signed-in path: position saved on the server. */
+          
           resumeTime = Math.floor(epData.savedPositionSec);
         } else if (!currentUser) {
-          /* Signed-out path: position saved by this page in localStorage.
-             (The embed also resumes internally; the watching-log fallback
-             below catches any resume the site did not initiate.) */
+          
           const lp = readLocalProgress(currentSlug, epNum);
           if (lp && resumablePosition(lp.t, lp.d || epDur)) {
             resumeTime = Math.floor(lp.t);
           }
         }
       }
-      /* MegaPlay ignores start-offset params (?t= live-tested: playback
-         started at 0 regardless; t=0 / resume=0 cannot override its internal
-         resume either). The site therefore never claims a resume it cannot
-         deliver: as far as the site is concerned the load starts from the
-         episode start, and the provider's OWN internal resume (if any) is
-         surfaced honestly by the fallback resume notice. Position tracking
-         still runs on MegaPlay, so switching back to Zoko resumes correctly. */
+      
       if (activeServer === "megaplay") resumeTime = 0;
-      /* animegg ignores start-offset params too (the embed keeps its own
-         position), so the site never claims a resume it cannot deliver —
-         same honest treatment as MegaPlay. */
+      
       if (activeServer === ANIMEGG_SERVER_ID) resumeTime = 0;
       resumeTimeForLoad = resumeTime;
-      /* The notice is for a MEANINGFUL resume only (>=5s — the same floor
-         the resumable window uses). A server switch carrying a 1-4s
-         position still resumes there, but re-showing "Resumed from 00:03"
-         on every switch was noise. */
+      
       if (resumeTime >= 5) showResumeNote(resumeTime);
 
-      // Reflect the resumed position in the UI before the player reports back
-      /* MegaPlay exception: a carried switch position stays the "last known"
-         position until MegaPlay's own time events report the real one — a
-         quick switch back to Zoko must not lose it (MegaPlay may not have
-         emitted a single event yet). */
       currentPosition = activeServer === "megaplay" && positionOverride != null
         ? Math.floor(positionOverride)
         : resumeTime;
@@ -5203,56 +4322,36 @@
         timeText.textContent = `${formatTime(resumeTime)} / ${durationIsReal && duration > 0 ? formatTime(duration) : "--:--"}`;
       }
 
-      /* Re-resolve the track for THIS episode (probe-gated, Zoko only).
-         The preference is honoured when the episode really has that track;
-         when it does not, THIS episode falls back to Sub — and only this
-         episode. `preferredTrack` is deliberately left untouched, so the
-         moment the viewer reaches an episode that HAS the preferred track it
-         comes back automatically, with no click (verified live: the old
-         code overwrote the choice with "sub" and the dub never returned).
-         On the backup the stream is always Sub — no probe, no preference
-         write; the stored Dub choice waits for the return to Zoko. */
       if (activeServer === "zoko") {
         if (isLive) {
-          /* Live titles: the dub track is UNKNOWN, never probed and never
-             written to dub_checks. Both Sub and Dub stay enabled; the
-             viewer's stored preference plays as-is. */
+          
           currentTrack = preferredTrack === "hsub" ? "hsub" : preferredTrack;
           applyTrackPill(currentTrack);
         } else if (preferredTrack === "dub") {
-          /* A dub needs proof: wait for this episode's probe before handing
-             the dub URL to the embed. An answer already in the cache — a warm
-             visit OR the seed from the title payload — IS that proof, so it is
-             used immediately (no cold-load Sub→Dub flicker, no needless wait). */
+          
           const avail = typeof knownAvail === "boolean" ? knownAvail : await probePromise;
           if (token !== loadToken || currentEp !== epNum) return; // superseded while probing
           currentTrack = avail === true ? "dub" : "sub";
           applyTrackPill(currentTrack);
         } else {
-          /* Sub and hard-sub exist for every episode — no probe gate. */
+          
           currentTrack = preferredTrack === "hsub" ? "hsub" : "sub";
           applyTrackPill(currentTrack);
         }
         updateTrackLabel();
       }
 
-      // Build the stream URL for the ACTIVE server (Zoko primary, TVplus / MegaPlay / animegg alternates)
       let streamUrl;
       if (activeServer === "backup") {
         streamUrl = getBackupEmbedUrl(currentEp, resumeTime, startFromBeginning === true);
       } else if (activeServer === "megaplay") {
         streamUrl = getMegaPlayEmbedUrl(currentEp, currentTrack);
       } else if (activeServer === ANIMEGG_SERVER_ID) {
-        /* animegg: the URL comes from the server route, resolved LIVE for
-           THIS load (the `?for=` token rotates per /watch call). No resume
-           offset is applied — the embed keeps its own position and the site
-           surfaces that honestly rather than claiming a resume it cannot
-           deliver. */
+        
         const url = await resolveAnimeggStreamUrl(currentEp);
         if (token !== loadToken || currentEp !== epNum) return; // superseded while resolving
         if (!url) {
-          /* Honest not-available state, same notice component as the other
-             players. Manual only: no auto-switch. */
+          
           loadInFlight = false;
           animeggState = "unavailable";
           applyAnimeggPill();
@@ -5263,13 +4362,7 @@
         }
         streamUrl = url;
       } else {
-        /* Determine the player id: the MAL id is preferred (it is what every
-           player maps best). A live title WITHOUT a MAL id can never be served
-           by Zoko (its /stream/anilist/... route is dead upstream), so such a
-           title starts on the WORKING TVplus AniList route — the initial
-           server for a title Zoko cannot serve, not an auto-switch away from
-           a failing player. The viewer can still pick any server manually,
-           and getEmbedUrl() refuses to build a Zoko anilist URL at all. */
+        
         const useAnilistRoute = isLive && !(titleData && titleData.malId);
         if (useAnilistRoute) {
           streamUrl = getBackupEmbedUrl(currentEp, resumeTime, startFromBeginning === true);
@@ -5281,12 +4374,7 @@
             autoskip: playerSettings.autoskip,
             autonext: playerSettings.autonext,
             startTime: resumeTime,
-            /* The site's per-(slug,episode) store is the single source of truth
-               for resume. With no saved position, `resume=0` disables the embed's
-               OWN internal resume store so it can never start this episode at a
-               position the site does not know about. With a saved position the
-               explicit time= offset wins (the embed skips its internal resume
-               whenever a start point is given). */
+            
             noResume: startFromBeginning === true || resumeTime === 0,
           });
         }
@@ -5311,13 +4399,11 @@
           : activeServer === "backup" ? "TVplus player"
           : activeServer === ANIMEGG_SERVER_ID ? "animegg player"
           : "ZokoAnime player";
-        /* playerEp flips when the NEW player reports `ready` — until then,
-           in-flight events from the old document still belong to playerEp. */
+        
       }
-      /* The src is assigned: the load is over, so a track switch from now on
-         swaps the src itself (exactly once). */
+      
       loadInFlight = false;
-      /* Arm failure detection for the server actually loading. */
+      
       if (activeServer === "zoko") {
         armZokoFailureDetection(streamUrl, token);
       } else if (activeServer === "megaplay") {
@@ -5327,25 +4413,18 @@
       } else {
         armBackupFailureDetection(token);
       }
-      /* Switch settle watchdog: a switch that produces no ready/play/time,
-         no error and no failure offer within N seconds is recovered by
-         rebuilding the iframe on the target server. */
+      
       if (pendingSwitchWatchdog) {
         pendingSwitchWatchdog = false;
         armSettleWatchdog(token, activeServer, 0);
       }
       if (spinner) {
         spinner.hidden = false;
-        /* The loading overlay must never intercept clicks — keep it
-           click-through so nothing under it (the embed's own play button,
-           or any overlapping control) is ever blocked while loading. */
+        
         spinner.style.pointerEvents = "none";
       }
       if (coverOverlay) {
-        /* The title's OWN poster stays up as the loading backdrop (under the
-           spinner) until playback actually starts — never a stock photo and
-           never a black hole while the stream buffers. Click-through so the
-           embed's own play button stays reachable if autoplay is blocked. */
+        
         coverOverlay.style.display = "";
         coverOverlay.style.pointerEvents = "none";
         const bigPlay = coverOverlay.querySelector(".player-big-play");
@@ -5376,24 +4455,9 @@
     // Track switcher buttons (sub, hsub, dub)
     const trackSwitcher = document.getElementById("zoko-track-switcher");
 
-    /* Dub availability for the current episode, probed by the server (Zoko
-       serves the sub file under /dub for some titles — switching blindly used
-       to play Japanese while claiming Dub). Results are cached PER EPISODE
-       for the whole session: revisiting an episode resolves instantly, and a
-       slow probe for episode A can never clobber episode B's answer (the old
-       single shared `dubProbe` variable let ep5's late "true" overwrite
-       ep1's "false"). null = unknown / probe failed. */
     const dubAvailability = new Map(); // ep -> true | false | null
     const dubProbes = new Map();        // ep -> Promise<true | false | null>
 
-    /* Seed the per-episode cache from the title payload the watch page already
-       fetches (/api/titles/:slug), whose per-episode rows come from the same
-       persisted probe results (dub_checks) as the DUB counts everywhere else.
-       This is what kills the cold-load pill flicker: without it the first
-       visit to an episode has no answer, so the optimistic pill had to show
-       Sub and flip to Dub when the probe landed (verified live). A seed is
-       only used for episodes the map does not already know, and unknown /
-       failed probes stay unknown — the conservative Sub rule is unchanged. */
     function seedDubAvailability(data) {
       if (!data) return;
       const confirmed = Array.isArray(data.dubEpisodes) ? data.dubEpisodes : [];
@@ -5423,9 +4487,6 @@
       return p;
     }
 
-    /* The ONE place that owns the pill UI. The highlighted pill is always the
-       track of the stream that is loaded (or being loaded) — never a leftover
-       from the previous episode. */
     function applyTrackPill(track) {
       if (!trackSwitcher) return;
       const active = track || "sub";
@@ -5434,8 +4495,6 @@
       });
     }
 
-    /* animegg server pill state — the "offered only when the episode is
-       listed" rule lives here (the same single owner as the track pill). */
     function applyAnimeggPill() {
       if (!serverSwitcher) return;
       const pill = serverSwitcher.querySelector('.server-pill[data-server="animegg"]');
@@ -5448,17 +4507,10 @@
         : "animegg — sub only, SD. Manual fallback; no track switch.";
     }
 
-    /* Update the track label in the episode list header to reflect the true
-       state of dub availability for the current episode. */
     function updateTrackLabel() {
       const label = document.getElementById("track-label");
       if (!label) return;
-      /* On the alternates the site cannot know the file's audio track —
-         never advertise a specific track (SUB or DUB) there. TVplus: the
-         source file decides. MegaPlay: both tracks are always offered, but
-         per-episode availability differs from Zoko's probes and is unknown
-         to the site (a miss surfaces via the failure notice). animegg is
-         SUB-ONLY, so the label says exactly that (no dub claim). */
+      
       if (activeServer === ANIMEGG_SERVER_ID) {
         label.textContent = "SUB";
         return;
@@ -5467,7 +4519,7 @@
         label.textContent = "—";
         return;
       }
-      /* Live titles have no dub data: both tracks stay offered. */
+      
       if (isLive) {
         label.textContent = "SUB / DUB";
         return;
@@ -5479,21 +4531,13 @@
     if (trackSwitcher) {
       trackSwitcher.querySelectorAll(".server-pill").forEach((pill) => {
         pill.addEventListener("click", async () => {
-          /* On the backup the Dub/Hard-sub pills are disabled; this guard
-             keeps any stray activation from touching the track state.
-             animegg is sub-only for the same reason. */
+          
           if (activeServer === "backup" || activeServer === ANIMEGG_SERVER_ID) return;
           const requestedTrack = pill.dataset.track || "sub";
           const epAtClick = currentEp;
 
           if (activeServer === "megaplay") {
-            /* MegaPlay track switch = rebuild the iframe URL with the other
-               language (same shape as Zoko's track switch). NO dub probe:
-               MegaPlay's dub availability differs from Zoko's probe data —
-               a truly missing dub surfaces as a player error → the failure
-               notice handles it. NO preference write: av_zoko_track stays
-               the Zoko choice; megaPlayTrack carries the MegaPlay choice
-               across episodes for this session only. */
+            
             if (requestedTrack === "hsub") return; // disabled-pill guard
             if (requestedTrack === currentTrack) return;
             megaPlayTrack = requestedTrack;
@@ -5501,14 +4545,12 @@
             applyTrackPill(currentTrack);
             updateTrackLabel();
             showToast(`Switched audio track to ${currentTrack.toUpperCase()}`);
-            /* While a load is in flight the src must not be swapped a second
-               time — the in-flight load picks the new track up. */
+            
             if (loadInFlight) return;
             if (iframe && iframe.src && iframe.src !== "about:blank") {
               const newUrl = getMegaPlayEmbedUrl(epAtClick, currentTrack);
               if (newUrl) {
-                /* Same-episode swap: gate events until the NEW document
-                   loads (the dying one keeps emitting for ~0.5s). */
+                
                 megaPlayFrameLoaded = false;
                 iframe.src = newUrl;
               }
@@ -5523,8 +4565,7 @@
               avail = await probeDubAvailability(epAtClick);
             }
             updateTrackLabel();
-            /* The viewer may have switched episodes while the probe ran —
-               never apply a stale answer to a different episode. */
+            
             if (currentEp !== epAtClick) return;
             if (avail !== true) {
               showToast(
@@ -5534,24 +4575,14 @@
                 "!",
                 3500
               );
-              /* Keep the pill UI honest: the current track stays active, and
-                 the viewer's Dub PREFERENCE is left alone — this episode
-                 simply has no dub; the choice must survive it. */
+              
               applyTrackPill(currentTrack);
               return;
             }
           }
 
-          /* An explicit click is a statement of preference: it becomes the
-             track that plays now AND the track every later episode tries to
-             play (as far as that episode actually has it). Persist it
-             immediately so a full page reload keeps the choice — this line is
-             only reachable AFTER the Dub gate above, so a refused Dub click
-             (episode has no dub) never overwrites the stored preference. */
           preferredTrack = requestedTrack;
-          /* LIVE titles never overwrite the stored Dub preference: the
-             preference belongs to the catalog titles, and a live title's
-             track availability is unknown. */
+          
           if (!isLive) writePreferredTrack(preferredTrack);
           const changed = requestedTrack !== currentTrack;
           currentTrack = requestedTrack;
@@ -5559,20 +4590,12 @@
           if (!changed) return; // already playing this track: no toast, no reload
 
           showToast(`Switched audio track to ${currentTrack.toUpperCase()}`);
-          /* While an episode load is still in flight the iframe src must NOT
-             be swapped a second time — tearing the embed down mid-load races
-             its own stream fetch (the live "Unable to play media. 24 seconds
-             of 0 seconds" flash). The in-flight load picks the new track up
-             when it assigns the src. */
+          
           if (loadInFlight) return;
           if (iframe && iframe.src && iframe.src !== "about:blank") {
-            // Read current playback position BEFORE swapping the iframe src (Bug 5).
-            // The embed honours time= (t= alone is ignored), so every track
-            // switch resumes where the viewer was — dub included.
+
             const resumePos = Math.floor(currentPosition || 0);
-            /* A live title with no MAL id is on the TVplus player (Zoko has
-               no anilist route); a track switch there rebuilds the TVplus URL,
-               never a Zoko anilist one. */
+            
             const newUrl = activeServer === "backup"
               ? getBackupEmbedUrl(currentEp, resumePos, false)
               : getEmbedUrl(getCustomMalId(progressKey) || (titleData && titleData.malId), currentEp, currentTrack, {
@@ -5588,7 +4611,6 @@
       });
     }
 
-    // Initialize toggle checkboxes from localStorage
     const settingToggles = document.getElementById("zoko-setting-toggles");
     if (settingToggles) {
       settingToggles.querySelectorAll("input[data-setting]").forEach((cb) => {
@@ -5607,7 +4629,6 @@
       });
     }
 
-    // Prev / Next Ep buttons (in-page swap with preventDefault to guarantee zero reload)
     const prevBtn = document.getElementById("btn-prev-ep");
     if (prevBtn && prevBtn.dataset.bound !== "true") {
       prevBtn.dataset.bound = "true";
@@ -5628,9 +4649,7 @@
           loadEpisode(currentEp + 1);
           return;
         }
-        /* Last episode of a split-cour title: continue into the next part.
-           The continuation is a DIFFERENT title id, so this is a full
-           navigation to its watch page — not an in-page episode swap. */
+        
         if (totalEps > 0 && currentEp >= totalEps) {
           const cont = titleContinuation();
           if (cont && cont.live) {
@@ -5640,12 +4659,6 @@
       });
     }
 
-    /* ---- Theater mode (Phase 3b) ----
-       Layout only: the player column takes the full content width and the
-       episode sidebar is hidden. The iframe is never touched, so this behaves
-       identically on Zoko, TVplus and MegaPlay. The choice is persisted per
-       browser (localStorage) and restored before the first paint of the page
-       logic. */
     const LS_THEATER_KEY = "av_theater_mode";
     const watchLayout = document.querySelector(".watch-layout");
     const theaterBtn = document.getElementById("btn-theater-mode");
@@ -5675,11 +4688,6 @@
       });
     }
 
-    /* Fullscreen: ONE shared path for the F key and the embed's own
-       fullscreen request. A user-facing action must never fail silently:
-       rejections are logged AND shown (the old `.catch(() => {})` swallowed
-       every refusal — e.g. a click without user activation or a background
-       tab — leaving zero trace of why fullscreen "did nothing"). */
     function reportFullscreenError(action, err) {
       const reason = (err && (err.message || err.name)) || "unknown error";
       console.error(`Fullscreen ${action} rejected:`, err);
@@ -5707,14 +4715,6 @@
       }
     }
 
-    /* The site control bar (-10s / +10s / fullscreen button) was removed from
-       watch.html — every control duplicated the embed's own bar. Fullscreen
-       is still driven by the F key and the embed's fullscreen request; the
-       arrow keys still seek. No dead bindings for removed buttons remain. */
-
-    /* "Switch Anime MAL ID" is a debug tool, not a user feature: the button
-       was removed from watch.html. It is only recreated when a local debug
-       flag is set (?debug=1 or localStorage av_debug="1") — off by default. */
     let debugEnabled = new URLSearchParams(window.location.search).get("debug") === "1";
     try {
       debugEnabled = debugEnabled || localStorage.getItem("av_debug") === "1";
@@ -5731,8 +4731,7 @@
     }
     if (customMalBtn) {
       customMalBtn.addEventListener("click", () => {
-        /* The override is keyed by the catalog slug — a live title has no
-           slug, so the debug tool does not apply to it. */
+        
         if (isLive) {
           showToast("The MAL id override applies to catalog titles only.", "!");
           return;
@@ -5760,17 +4759,8 @@
       });
     }
 
-    // Bi-directional postMessage listener: MegaPlay + animeTVplus + ZokoAnime
     window.addEventListener("message", async (event) => {
-      /* ---- MegaPlay (third server) -------------------------------------
-         Documented events (megaplay.buzz/api), live-verified 2026-11-20:
-         {channel:"megacloud", event:"time", time, duration, percent},
-         {event:"complete"}, {event:"error"}, and {type:"watching-log",
-         currentTime, duration} (no channel field). The player also emits
-         PLAYER_READY / PIP_STATE / getFullscreenState — PLAYER_READY can
-         arrive AFTER the first time events on a resumed load, so it is NOT
-         the ready gate; the iframe load commit is (see the load listener
-         below). Origin is checked before anything is trusted. */
+      
       if (event.origin === MEGAPLAY_ORIGIN) {
         if (activeServer !== "megaplay") return;
         let mdata = event.data;
@@ -5782,16 +4772,8 @@
         if (!isWatchingLog && mdata.channel !== "megacloud") return;
         const mev = mdata.event || mdata.type;
 
-        /* Same-episode swap gate (Restart / track switch / switch-back):
-           the OLD document keeps emitting time events until the navigation
-           commits. Until the NEW document has loaded, same-episode events
-           belong to the dying player — ignore them (they would re-save a
-           just-cleared position / re-arm a stale resume notice). Cross-
-           episode events still flow: progress saves under playerEp. Errors
-           stay ungated so pre-load failures surface. */
         if (mev !== "error" && !megaPlayFrameLoaded && playerEp === currentEp) return;
 
-        // Events: time / watching-log → position tracking (same store as Zoko)
         if (mev === "time" || isWatchingLog) {
           markPlayerSettled();
           if (playerEp == null) return;
@@ -5800,10 +4782,7 @@
           const hasRealDuration = typeof mdata.duration === "number" && mdata.duration > 0;
           const dur = hasRealDuration ? mdata.duration : duration;
           const now = Date.now();
-          /* Progress is ALWAYS attributed to playerEp — the episode actually
-             playing in the iframe — under the SAME store as Zoko
-             (av_zoko_progress signed-out, /api/progress signed-in), so a
-             switch back to Zoko resumes where MegaPlay left off. */
+          
           if (currentUser && !isLive && cur > 0 && now - lastProgressSync > 5000) {
             lastProgressSync = now;
             api("/api/progress", {
@@ -5816,18 +4795,14 @@
               },
             });
           }
-          /* Live titles have no catalog row — their progress lives ONLY in
-             the site's local store, under the "live-<id>" namespace. */
+          
           if ((!currentUser || isLive) && cur > 0 && now - lastLocalSave > 5000) {
             lastLocalSave = now;
             writeLocalProgress(progressKey, playerEp, cur, dur);
           }
-          /* UI below is for the episode the page shows — stale events from
-             the previous episode must not touch it. */
+          
           if (playerEp !== currentEp) return;
-          /* First live time event = playback observed: retire the 45s
-             no-play backstop (a time event — not PLAYER_READY — is the
-             documented alive signal). */
+          
           if (!playerReady) {
             playerReady = true;
             if (megaplayFailTimer) { clearTimeout(megaplayFailTimer); megaplayFailTimer = null; }
@@ -5840,9 +4815,7 @@
           if (cur > 0) {
             if (spinner) spinner.hidden = true;
             if (coverOverlay) coverOverlay.style.display = "none";
-            /* Sustained playback >2s after an error = genuine recovery (the
-               same guard as Zoko): withdraw the failure offer. In-flight
-               events from the dying document must not clear a real failure. */
+            
             if (Date.now() - lastMegaPlayErrorAt > MEGAPLAY_RECOVERY_GUARD_MS) {
               if (fallbackOfferVisible) hideFallbackNote();
             }
@@ -5850,10 +4823,7 @@
           if (timeText) {
             timeText.textContent = `${formatTime(cur)} / ${durationIsReal && duration > 0 ? formatTime(duration) : "--:--"}`;
           }
-          /* Fallback resume notice: MegaPlay keeps its OWN internal per-video
-             resume store (live-verified) that the site can neither query nor
-             disable. When it resumes a load the site started at 0, surface
-             that honestly — same window and guards as Zoko's fallback. */
+          
           if (
             !resumeNoteShownForLoad &&
             resumeTimeForLoad === 0 &&
@@ -5880,12 +4850,10 @@
           return;
         }
 
-        // Event: complete → auto-next (parent-driven, same as Zoko's ended)
         if (mev === "complete") {
           markPlayerSettled();
           if (playerEp == null || playerEp !== currentEp) return;
-          /* totalEpisodes() is the AIRED count for live titles — auto-next
-             must never jump to an episode that has not aired yet. */
+          
           const decision = autoNextAction({
             server: "megaplay",
             currentEp,
@@ -5905,13 +4873,11 @@
           return;
         }
 
-        // Event: error → failure notice offering the way back to Zoko
         if (mev === "error") {
           markPlayerSettled();
           lastMegaPlayErrorAt = Date.now();
           if (megaplayFailTimer) { clearTimeout(megaplayFailTimer); megaplayFailTimer = null; }
-          /* The embed shows its own error UI inside the frame — retire the
-             site overlays rather than stacking on top. Never auto-switch. */
+          
           if (spinner) spinner.hidden = true;
           if (coverOverlay) coverOverlay.style.display = "none";
           showMegaPlayFailureOffer("MegaPlay couldn't play this episode.");
@@ -5920,14 +4886,6 @@
         return;
       }
 
-      /* ---- animeTVplus backup embed ----------------------------------
-         Docs-verified events: ready {mal, anilist, episode}, error {error,
-         available}, info (reply to an info request), fullscreen (the embed
-         asks the parent to drive fullscreen — handled below). There are NO
-         time / play / pause / ended events — so the backup gets no auto-next
-         and its playback position is not observable (resume-back uses the
-         last stored position). Every message carries
-         source:"animetvplus-embed". */
       if (event.origin === BACKUP_ORIGIN) {
         if (activeServer !== "backup") return;
         let bdata = event.data;
@@ -5936,15 +4894,13 @@
         }
         if (!bdata || bdata.source !== "animetvplus-embed") return;
         if (bdata.type === "ready") {
-          /* The backup reports the episode it loaded — ignore a stale ready
-             from a previous swap (same ready-gate pattern as Zoko). */
+          
           if (bdata.episode != null && Number(bdata.episode) !== Number(currentEp)) return;
           playerEp = currentEp;
           playerReady = true;
           markPlayerSettled();
           if (backupFailTimer) { clearTimeout(backupFailTimer); backupFailTimer = null; }
-          /* No autoplay on the backup: reveal the player so the viewer can
-             press Play INSIDE it. Our overlays must never block that click. */
+          
           if (spinner) spinner.hidden = true;
           if (coverOverlay) coverOverlay.style.display = "none";
           showToast("TVplus player ready — press Play inside the player", "▶", 4000);
@@ -5953,20 +4909,13 @@
           if (backupFailTimer) { clearTimeout(backupFailTimer); backupFailTimer = null; }
           if (spinner) spinner.hidden = true;
           if (coverOverlay) coverOverlay.style.display = "none";
-          /* The embed shows its own error screen inside the frame; the site
-             adds the honest way back to the primary player. */
+          
           const msg = bdata.error === "no_episode" ? "This episode isn't available on the TVplus player."
                     : bdata.error === "unknown_title" ? "This title isn't available on the TVplus player."
                     : "The TVplus player couldn't load this episode.";
           showBackupNote(msg);
         } else if (bdata.type === "fullscreen" || bdata.type === "requestFullscreen" || bdata.type === "toggleFullscreen") {
-          /* Fullscreen request from the embed (the Zoko bridge pattern): the
-             embed's own button flips to "Exit Fullscreen" and asks the
-             PARENT to fullscreen the player wrapper. Before this handler
-             existed the request was silently dropped here — the label
-             flipped but the page never entered fullscreen. Same shared
-             toggleFullscreen path (with its error toast) as Zoko and the
-             F key. A bare message with no direction is a toggle. */
+          
           const req = bdata.request;
           if (req === "enter" && !document.fullscreenElement) toggleFullscreen();
           else if (req === "exit" && document.fullscreenElement) toggleFullscreen();
@@ -5975,10 +4924,8 @@
         return;
       }
 
-      // Hard origin check per spec (Zoko)
       if (event.origin !== "https://zokoanime.video") return;
-      /* While the backup is active, stale events from the old Zoko document
-         (it keeps emitting until the navigation commits) are ignored. */
+      
       if (activeServer !== "zoko") return;
       let data = event.data;
       if (typeof data === "string") {
@@ -5988,17 +4935,6 @@
       }
       if (!data || data.channel !== "zokoanime") return;
 
-      /* Same-episode swap (Restart / track switch / switch-back to Zoko):
-         the OLD document keeps emitting time/state events for ~0.5s after
-         the src swap. Those in-flight events belong to the dying player —
-         acting on them re-showed the stale "Resumed from …" notice right
-         after Restart (playback at 0:00, notice still at the old position)
-         and could re-save the just-cleared position. Ignore same-episode
-         events until the NEW player reports ready. `ready` and `error` stay
-         ungated (ready flips the gate; pre-ready failures must surface).
-         Cross-episode attribution is untouched: while a NEW episode loads,
-         playerEp !== currentEp, so the old episode's final events still
-         save progress under the old episode. */
       if (
         data.type !== "ready" &&
         data.type !== "error" &&
@@ -6006,30 +4942,18 @@
         playerEp === currentEp
       ) return;
 
-      /* Ignore player events until the first episode is actually loaded, and
-         ignore events from the PREVIOUS episode while a new one is loading
-         (the old iframe keeps emitting until its src is replaced). */
       const eventIsForCurrentLoad = playerEp != null && playerEp === currentEp;
 
       // Event: ready
       if (data.type === "ready") {
-        /* The NEW player initialised: from this moment its events belong to
-           the episode being loaded. (Before this, in-flight events from the
-           previous document are still attributed to the previous episode.) */
+        
         playerEp = currentEp;
         playerReady = true;
         markPlayerSettled();
-        /* The player is demonstrably alive: retire the no-ready backstop and
-           any failure offer (a slow load is NOT a failure). */
+        
         if (zokoFailTimer) { clearTimeout(zokoFailTimer); zokoFailTimer = null; }
         if (fallbackOfferVisible) hideFallbackNote();
-        /* Arm the ready-without-playback backstop (fix #1): if no play /
-           time event arrives within 30s, the embed is up but the stream is
-           not — hide the spinner and offer the fallback instead of sitting
-           on "Loading stream…" forever. Cleared on play, first time event,
-           error, and every teardown. Armed ONCE per load: a retrying embed
-           that fires `ready` repeatedly must not keep resetting the window
-           (a second way the spinner could stick forever). */
+        
         if (!zokoNoPlayTimer) {
           const readyToken = loadToken;
           zokoNoPlayTimer = setTimeout(() => {
@@ -6042,11 +4966,7 @@
             showFallbackOffer();
           }, ZOKO_NO_PLAY_AFTER_READY_MS);
         }
-        /* "ready" means the player chrome is up — NOT that the stream is
-           playing. Keep the loading overlay until playback actually starts
-           (play / first time event) so the embed's placeholder duration is
-           never visible. Make the overlay click-through so the viewer can
-           still reach the embed's own play button if autoplay is blocked. */
+        
         if (spinner) spinner.style.pointerEvents = "none";
         if (overlay) overlay.hidden = true;
         // Report current fullscreen state to player
@@ -6057,26 +4977,21 @@
       if (data.type === "play") {
         if (!eventIsForCurrentLoad) return;
         markPlayerSettled();
-        /* Playback started — retire the ready-without-playback backstop AND
-           the load-start no-playback deadline. */
+        
         playbackEvidenceForLoad = true;
         if (zokoNoPlayTimer) { clearTimeout(zokoNoPlayTimer); zokoNoPlayTimer = null; }
         if (zokoNoPlaybackTimer) { clearTimeout(zokoNoPlaybackTimer); zokoNoPlaybackTimer = null; }
         isPaused = false;
         if (playPauseBtn) playPauseBtn.textContent = "❚❚";
-        /* Playback has actually started: the stream (and its real duration)
-           is live — retire the loading overlay AND the loading poster. */
+        
         if (spinner) spinner.hidden = true;
         if (coverOverlay) coverOverlay.style.display = "none";
-        /* Zoko recovered (e.g. after a transient edge-failover error):
-           withdraw the failure offer AND the error overlay — but only on
-           playback evidence >2s after the error (in-flight events from the
-           dying document must not clear a real failure). */
+        
         if (Date.now() - lastZokoErrorAt > ZOKO_RECOVERY_GUARD_MS) {
           if (fallbackOfferVisible) hideFallbackNote();
           if (overlay && !overlay.hidden && lastZokoErrorAt > 0) overlay.hidden = true;
         }
-        /* Begin the resume notice's auto-hide countdown now (not at page load). */
+        
         armResumeNoteAutoHide();
       }
 
@@ -6103,13 +5018,9 @@
           isPaused = data.paused;
           if (playPauseBtn) playPauseBtn.textContent = isPaused ? "▶" : "❚❚";
         }
-        /* Note: the embed reports `muted` here, but exposes NO postMessage
-           command to change it (its dispatcher only accepts seek/play/pause/
-           autoplay/autoskip/autonext/state). The site therefore ships no mute
-           control — the embed's own volume control is the real one. */
+        
       }
 
-      // Event: time or watching-log
       if (data.type === "watching-log" || data.type === "time") {
         if (playerEp == null) return;
         const cur = typeof data.currentTime === "number" ? data.currentTime
@@ -6120,13 +5031,6 @@
         const dur = hasRealDuration ? data.duration : duration;
         const now = Date.now();
 
-        /* Progress is ALWAYS attributed to the episode actually playing in
-           the iframe (playerEp). During an episode switch the old player
-           keeps reporting its position until the src swap lands — that
-           position belongs to the OLD episode and must be saved under it,
-           never under the episode being loaded (that leak made ep 2 "resume"
-           from ep 1's position). Applies to BOTH the signed-in server path
-           and the signed-out localStorage path. */
         if (currentUser && !isLive && cur > 0 && now - lastProgressSync > 5000) {
           lastProgressSync = now;
           api("/api/progress", {
@@ -6144,48 +5048,33 @@
           writeLocalProgress(progressKey, playerEp, cur, dur);
         }
 
-        /* Everything below is UI for the episode the page is showing — stale
-           events from the previous episode must not touch it. */
         if (playerEp !== currentEp) return;
         markPlayerSettled();
         currentPosition = cur;
-        /* Only the PLAYER's own duration is real. The seeded runtime is a
-           resume-math fallback, never a displayed value — showing it first
-           and "correcting" it later was the duration flicker. */
+        
         if (hasRealDuration) {
           duration = data.duration;
           durationIsReal = true;
         }
 
-        /* Playback is demonstrably running (real position from the player):
-           the loading overlay AND the loading poster are done. */
         if (cur > 0) {
-          /* First time event with a real position — retire the
-             ready-without-playback backstop AND the load-start
-             no-playback deadline. */
+          
           playbackEvidenceForLoad = true;
           if (zokoNoPlayTimer) { clearTimeout(zokoNoPlayTimer); zokoNoPlayTimer = null; }
           if (zokoNoPlaybackTimer) { clearTimeout(zokoNoPlaybackTimer); zokoNoPlaybackTimer = null; }
           if (spinner) spinner.hidden = true;
           if (coverOverlay) coverOverlay.style.display = "none";
-          /* Sustained playback after an error = genuine recovery (see the
-             guard note above): withdraw the offer and the error overlay. */
+          
           if (Date.now() - lastZokoErrorAt > ZOKO_RECOVERY_GUARD_MS) {
             if (fallbackOfferVisible) hideFallbackNote();
             if (overlay && !overlay.hidden && lastZokoErrorAt > 0) overlay.hidden = true;
           }
         }
 
-        // Update time text strictly driven by player events — --:-- until the
-        // real duration arrives (never a placeholder that later corrects).
         if (timeText) {
           timeText.textContent = `${formatTime(cur)} / ${durationIsReal && duration > 0 ? formatTime(duration) : "--:--"}`;
         }
 
-        /* Fallback: the embed resumed from ITS internal store (no site-side
-           position was known at load). Surface that resume honestly instead
-           of silently continuing. Only early in the load, and never after an
-           auto-skip jump or a viewer seek (those are not resumes). */
         if (
           !resumeNoteShownForLoad &&
           resumeTimeForLoad === 0 &&
@@ -6211,7 +5100,6 @@
         if (cur > 0) armResumeNoteAutoHide();
       }
 
-      // Event: skipped (intro or outro)
       if (data.type === "skipped") {
         if (!eventIsForCurrentLoad) return;
         skippedThisLoad = true;
@@ -6222,13 +5110,10 @@
       // Event: error
       if (data.type === "error") {
         markPlayerSettled();
-        /* An error is a definitive answer — retire the
-           ready-without-playback backstop AND the load-start
-           no-playback deadline. */
+        
         if (zokoNoPlayTimer) { clearTimeout(zokoNoPlayTimer); zokoNoPlayTimer = null; }
         if (zokoNoPlaybackTimer) { clearTimeout(zokoNoPlaybackTimer); zokoNoPlaybackTimer = null; }
-        /* Errors are always surfaced — including failures while the new
-           player is still initialising (before `ready` flips playerEp). */
+        
         if (spinner) spinner.hidden = true;
         if (overlay) {
           overlay.hidden = false;
@@ -6241,10 +5126,7 @@
             }
           }
         }
-        /* A real error signal (JW/video error, e.g. "Unable to play media"):
-           OFFER the backup inline. Never auto-switch — the embed may still
-           self-heal via edge failover, and the offer hides if playback
-           demonstrably recovers (>2s of continued events). Viewer decides. */
+        
         lastZokoErrorAt = Date.now();
         showFallbackOffer();
       }
@@ -6253,9 +5135,7 @@
       if (data.type === "ended") {
         if (!eventIsForCurrentLoad) return;
         markPlayerSettled();
-        /* totalEpisodes() is the AIRED count for live titles — auto-next must
-           never jump to an episode that has not aired yet, and an unknown
-           count (0) must never invent one. */
+        
         const decision = autoNextAction({
           server: "zoko",
           currentEp,
@@ -6274,7 +5154,6 @@
         }
       }
 
-      // Event: fullscreen request from embed (same shared path + error path)
       if (data.type === "fullscreen") {
         if (data.request === "enter" && !document.fullscreenElement) {
           toggleFullscreen();
@@ -6284,40 +5163,18 @@
       }
     });
 
-    /* Keyboard focus containment: shortcuts (F / Space / arrows) are handled
-       by THIS page, but clicking inside the cross-origin embed moves focus
-       into it and the parent never sees the keys (the embed's player does not
-       handle F at all — that is why F "did nothing" while Space/arrows worked
-       inside the player). With out-of-process iframes the parent gets NO
-       focus/blur event when that happens, so poll activeElement and keep
-       keyboard focus on the player wrapper. Mouse clicks inside the embed
-       still work normally; Space/arrows/F are served by this page's handler
-       via the embed's postMessage control bridge. */
     const containFocus = () => {
-      /* Zoko-only: the site serves Space/arrows/F via the postMessage
-         bridge, so focus must stay on the wrapper. On the backup there
-         are no site shortcuts — let focus stay INSIDE Uqload's player so
-         its own keyboard controls work. */
+      
       if (activeServer !== "zoko" || !playerWrap) return;
       if (document.activeElement === iframe) {
         playerWrap.focus({ preventScroll: true });
       }
     };
 
-    /* Iframe-scoped listeners, re-bound whenever the watchdog rebuilds the
-       iframe element (a replaced node carries no listeners). The MegaPlay
-       attribution boundary is the iframe load commit: from here player
-       events belong to the episode being shown. PLAYER_READY is NOT used
-       for this because on a resumed load it arrives AFTER the first time
-       events (live-verified). Zoko/TVplus keep their ready-event
-       attribution. */
     function bindIframeListeners() {
       if (!iframe) return;
       iframe.addEventListener("load", () => {
-        /* The iframe load commit is the attribution boundary for the
-           players that emit no reliable ready event (MegaPlay) — and for
-           animegg, whose embed page emits no documented postMessage events
-           at all. Nothing is auto-switched either way. */
+        
         if (activeServer === ANIMEGG_SERVER_ID) {
           markPlayerSettled();
           playerEp = currentEp;
@@ -6332,11 +5189,9 @@
     }
     bindIframeListeners();
     if (playerWrap) playerWrap.setAttribute("tabindex", "-1");
-    /* The poller reads `iframe` dynamically, so it survives a rebuild. It is
-       started ONCE — never per switch. */
+    
     setInterval(containFocus, 100);
 
-    // Keyboard Shortcuts (only when activeElement is not an input/textarea)
     window.addEventListener("keydown", (e) => {
       const tag = document.activeElement ? document.activeElement.tagName : "";
       if (tag === "INPUT" || tag === "TEXTAREA") return;
@@ -6346,8 +5201,7 @@
         toggleFullscreen();
         return;
       }
-      /* Space/arrows drive the ZOKO postMessage bridge only. On the backup
-         they are left to Uqload's own player (no fake site controls). */
+      
       if (activeServer !== "zoko") return;
       if (e.code === "Space") {
         e.preventDefault();
@@ -6361,18 +5215,13 @@
         const target = Math.min(duration, currentPosition + 10);
         sendPlayerCommand({ type: "seek", time: target });
       }
-      /* No M shortcut: the Zoko embed exposes no mute/volume postMessage
-         command (verified against its live command dispatcher), so a site
-         mute control would be fake. The embed's own volume control is the
-         real mute path. */
+      
     });
 
     // Fullscreenchange event: report state back to player
     document.addEventListener("fullscreenchange", () => {
       sendPlayerCommand({ type: "fullscreen", active: !!document.fullscreenElement });
-      /* TVplus: report the state back too, so its fullscreen icon stays in
-         sync with reality (the embed ignores messages it doesn't
-         understand, so this is harmless if it never asked). */
+      
       if (activeServer === "backup" && iframe && iframe.contentWindow) {
         try {
           iframe.contentWindow.postMessage(
@@ -6383,7 +5232,6 @@
       }
     });
 
-    // Watchlist Toggle (wlBtn is resolved at the top of initWatchPage)
     function updateWatchlistBtn(inList) {
       if (!wlBtn) return;
       wlBtn.setAttribute("data-active", inList ? "true" : "false");
@@ -6393,8 +5241,7 @@
 
     if (wlBtn) {
       wlBtn.addEventListener("click", async () => {
-        /* Live titles are not catalog rows — they are never added to the
-           watchlist (this feature writes nothing to the catalog). */
+        
         if (isLive) {
           showToast("This title is not part of your library.", "!");
           return;
@@ -6416,24 +5263,12 @@
       });
     }
 
-    /* Bootstrap: load the title, then start the episode from the URL.
-       Starting the episode here is what makes Resume land on the saved
-       episode at the saved position (the saved offset is applied through
-       the embed's &t= parameter). */
     async function startWatch() {
-      /* LIVE titles: the episode metadata depends on the title (runtime),
-         so the title loads FIRST — the episode is then derived from it. */
+      
       if (isLive) {
         const loaded = await loadTitleData();
         if (!loaded) return;
-        /* A live title with NO MAL id cannot play on Zoko at all (its
-           /stream/anilist/ route is dead upstream). Start it on the WORKING
-           TVplus AniList route instead — this is the initial server for a
-           title Zoko cannot serve, not an auto-switch away from a failing
-           player, and the viewer can still pick any server manually.
-           sessionStorage is deliberately NOT written here: that store is the
-           viewer's own server choice, and a title-level default must not leak
-           onto the next title they open. */
+        
         if (!(titleData && titleData.malId)) {
           const tvp = getBackupEmbedUrl(currentEp, 0, true);
           if (tvp) {
@@ -6445,7 +5280,7 @@
         await loadEpisode(currentEp, null);
         return;
       }
-      /* Title and episode metadata are independent: fetch both at once. */
+      
       const episodeDataPromise = fetchEpisodeData(currentEp);
       const loaded = await loadTitleData();
       if (!loaded) {
@@ -6458,11 +5293,7 @@
     (async () => {
       try {
         showPlaceholder("Loading episode…");
-        /* Reflect the session's server choice (or the ?player=backup /
-           ?player=megaplay / ?player=animegg test hook) BEFORE the first
-           load: pills, toggles and badge must be honest from the first
-           frame. The note itself is recomputed by loadEpisode — animegg
-           needs a live availability answer before it can say anything. */
+        
         applyServerUI();
         if (activeServer === "backup") {
           showBackupNote("TVplus player active — audio depends on the source file. Press Play inside the player.");
@@ -6476,7 +5307,7 @@
     })();
 
     /* Initialize comments for current episode */
-    /* Live titles have no catalog slug — comments are a catalog feature. */
+    
     if (!isLive && currentSlug) initComments(currentSlug, currentEp);
     else {
       const discussion = document.getElementById("watch-discussion");
@@ -6520,7 +5351,6 @@
       }
     }
 
-    // Bind the form only once - the episode can change without a reload.
     if (form && form.dataset.zoroCommentsBound !== "true") {
       form.dataset.zoroCommentsBound = "true";
       form.addEventListener("submit", async (e) => {
@@ -6528,8 +5358,6 @@
         const text = input ? input.value.trim() : "";
         if (!text) return;
 
-        /* Guests post with a display name; a signed-in user's name is their
-           account name (the server ignores `name` when a session is present). */
         const payload = { content: text };
         const nameInput = document.getElementById("zoro-comment-name");
         if (!currentUser) {
@@ -6559,10 +5387,6 @@
       });
     }
 
-    /* Guest comments: the box is ALWAYS usable. Signed out, a name field
-       appears above the textarea; signed in, it is hidden and the account
-       name is used. (The old signed-out state disabled the textarea and
-       forced a sign-in — Phase 3b removes that gate.) */
     const submitBtn = form ? form.querySelector('button[type="submit"]') : null;
     function applyCommentAuthState() {
       if (!form || !input) return;
@@ -6583,16 +5407,6 @@
     reloadComments = loadComments;
     loadComments();
   }
-
-  /* ==========================================================================
-     DETAIL PAGE (Phase 1): real metadata hero, episode list, recommendations
-     ========================================================================== */
-
-  /* ==========================================================================
-     LIVE DETAIL PAGE — detail.html?live=<anilistId>
-     Same layout as the catalog detail page, fed by /api/live/:id. No DB
-     write, no catalog import: a live title is never added to the catalog.
-     ========================================================================== */
 
   async function initLiveDetail(liveId) {
     const loadingEl = document.getElementById("detail-loading");
@@ -6625,8 +5439,7 @@
     const t = res.data.title;
     const next = t.nextAiringEpisode || null;
     const isFilm = t.format === "MOVIE";
-    /* Aired episodes: an airing title's last aired episode is the next one
-       minus one; a finished title has all of them. */
+    
     const airedCount = next && next.episode
       ? Math.max(0, Number(next.episode) - 1)
       : (t.episodes != null ? Number(t.episodes) : 0);
@@ -6638,8 +5451,7 @@
     if (cover) {
       cover.src = coverOf(t);
       cover.alt = t.name;
-      /* Live posters come from AniList's CDN, which 403s hotlinked requests
-         carrying a Referer; a failed poster falls back instead of collapsing. */
+      
       cover.referrerPolicy = "no-referrer";
       cover.onerror = function () {
         cover.onerror = null;
@@ -6657,11 +5469,6 @@
       altEl.hidden = parts.length === 0;
     }
 
-    /* Badges: the 18+ tag comes from the SERVER flag (Ecchi genre). Live
-       titles have no dub data at all — never a DUB badge or count. The SUB
-       count is the ONE canonical episode count the server sent for this
-       title (the same number the cards show); when even that is unknown the
-       badge is hidden rather than shown without a number. */
     const badges = document.getElementById("detail-badges");
     if (badges) {
       badges.innerHTML = `
@@ -6673,8 +5480,7 @@
       `;
     }
     const trackLabel = document.getElementById("detail-track-label");
-    /* A live title has no dub data (AniList knows nothing about dubs), so the
-       track label must never claim SUB / DUB. */
+    
     if (trackLabel) trackLabel.textContent = "SUB";
 
     const meta = document.getElementById("detail-meta");
@@ -6698,8 +5504,7 @@
       genresEl.innerHTML = (t.genres || [])
         .map((g) => `<a class="genre-chip-zoro" href="browse.html?genre=${encodeURIComponent(g)}">${escapeHtml(genreLabel(g))}</a>`)
         .join("");
-      /* AniList TAGS (not genres) are a separate list; they link to the same
-         tag filter the browse panel uses. No tags -> nothing is appended. */
+      
       const tagChips = (t.tags || [])
         .filter((tag) => tag && tag.name)
         .map((tag) => `<a class="genre-chip-zoro" href="browse.html?tags=${encodeURIComponent(tag.name)}">${escapeHtml(tag.name)}</a>`)
@@ -6710,8 +5515,7 @@
     if (syn) syn.textContent = t.synopsis || "";
     const watchNow = document.getElementById("detail-watch-now");
     if (watchNow) {
-      /* No episodes (a title with no episode list) has nothing to watch —
-         the button is hidden instead of leading to an empty player. */
+      
       const hasEpisodes = subCount(t) != null || airedCount > 0;
       if (hasEpisodes) {
         watchNow.href = liveWatchHref(t, 1);
@@ -6723,14 +5527,9 @@
     }
     document.title = `${t.name} - AniFlick`;
 
-    /* No watchlist row for live titles — the catalog is never written to. */
     const listBtn = document.getElementById("detail-add-list");
     if (listBtn) listBtn.hidden = true;
 
-    /* Remind Me (live-browser defect #2): airing + upcoming live titles get
-       the same persisted reminder as the schedule page (keyed live-<id>,
-       listed in the schedule page's "Your Reminders"). Finished titles
-       have nothing to remind about, so the button stays hidden for them. */
     if (titleNeedsReminder(t.status)) {
       wireDetailRemindButton(document.getElementById("detail-remind"), `live-${liveId}`, t.name);
     }
@@ -6759,8 +5558,6 @@
       epList.classList.toggle("single-episode", airedCount === 1);
     }
 
-    /* Phase 2 live metadata. Every section is HIDDEN until it has data — an
-       empty studios list or an anime with no relations renders nothing. */
     const castSection = document.getElementById("detail-cast-section");
     const castGrid = document.getElementById("detail-cast-grid");
     const cast = liveCharacters(t.characters);
@@ -6816,9 +5613,6 @@
       }
     }
 
-    /* "More Like This": AniList's own recommendation edges, already fetched
-       with the detail payload and adult-screened server-side. ONE renderer
-       shared with the catalog detail page; an empty set hides the section. */
     fillRecommendations(t.recommendations);
 
     if (loadingEl) loadingEl.hidden = true;
@@ -6833,8 +5627,6 @@
 
     const params = new URLSearchParams(window.location.search);
 
-    /* Live titles (?live=<anilistId>) reuse this layout but are fed by
-       /api/live/:id — never by the local catalog. */
     const liveParam = params.get("live");
     if (liveParam) {
       const liveId = parseInt(liveParam, 10);
@@ -6856,8 +5648,6 @@
       return;
     }
 
-    // ?slug= is the canonical key; ?id= is accepted as an alias for stable
-    // deep-linking (watchlist/progress/history keys all live under slugs).
     const rawId = (params.get("slug") || params.get("id") || "").trim();
     const loadingEl = document.getElementById("detail-loading");
     const errorEl = document.getElementById("detail-error");
@@ -6878,12 +5668,6 @@
       return;
     }
 
-    /* ?id= may carry a slug OR a real title ("solo-leveling", "Solo Leveling",
-       "naruto"). Resolve deterministically: a direct slug hit wins; otherwise
-       match the value against the slugified name / real_title / romaji of
-       every catalog title (punctuation- and case-insensitive, so spaces and
-       hyphens are interchangeable). No fuzzy substring matching — that could
-       land on the wrong show. */
     const compactKey = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
     let targetSlug = rawId;
     let res = await api(`/api/titles/${encodeURIComponent(rawId)}`);
@@ -6908,7 +5692,7 @@
       );
       return;
     }
-    // Everything below keys off the RESOLVED slug (Watch Now links, episode
+    
     // links, watchlist calls) — never the raw ?id= value.
     const slug = targetSlug;
     const t = res.data.title;
@@ -6934,8 +5718,7 @@
       altEl.textContent = parts.join("  •  ");
       altEl.hidden = parts.length === 0;
     }
-    // Detail page badges: the DUB count comes from the server's per-episode
-    // dub probes (dub_checks), never a copy of the SUB count. No confirmed
+
     // dub -> no DUB badge at all.
     const badges = document.getElementById("detail-badges");
     if (badges) {
@@ -6971,7 +5754,6 @@
     if (watchNow) watchNow.href = watchHref(slug, 1);
     document.title = `${t.name} - AniFlick`;
 
-    // Add to My List (reuses the existing watchlist API).
     const listBtn = document.getElementById("detail-add-list");
     function setListBtn(inList) {
       if (!listBtn) return;
@@ -7003,14 +5785,10 @@
       setListBtn(r.ok && r.data && r.data.userState ? r.data.userState.inWatchlist : false);
     });
 
-    /* Remind Me (live-browser defect #2): the same persisted reminder as
-       the schedule page, keyed by slug. Only airing/upcoming titles get
-       it — finished catalog titles keep the button hidden. */
     if (titleNeedsReminder(t.status)) {
       wireDetailRemindButton(document.getElementById("detail-remind"), slug, t.name);
     }
 
-    // Episode list (all episodes, each links to the watch page).
     const epList = document.getElementById("detail-episode-list");
     if (epList) {
       if (!episodes.length) {
@@ -7031,12 +5809,10 @@
           })
           .join("");
       }
-      /* A film's single row spans the full list width (2-col grid otherwise). */
+      
       epList.classList.toggle("single-episode", episodes.length === 1);
     }
 
-    // Recommendations: up to 6 same-genre catalog titles, rendered by the
-    // ONE shared "More Like This" renderer the live detail page and the watch
     // page also use.
     const recWrap = document.getElementById("detail-recommendations");
     if (recWrap) {
@@ -7054,15 +5830,6 @@
     markContentReady();
   }
 
-  /* ==========================================================================
-     SCHEDULE PAGE LOGIC
-     ========================================================================== */
-
-  /* Broadcast slots carry ONLY the time + catalog slug. Episode counts,
-     kind, studio and cover art are derived from the LIVE catalog at render
-     time — the old static ep/kind/studio/img filler drifted from the real
-     counts (Chainsaw Man "Ep 22" vs 12, Naruto "Ep 24" vs 220, Frieren
-     "Ep 25" vs 28, films labelled with week-long episode numbers). */
   const SCHEDULE_DATA = {
     monday: [
       { time: "20:30", slug: "moonlit-ramen" },
@@ -7102,8 +5869,6 @@
     const timelineEl = document.getElementById("schedule-timeline-container");
     if (!timelineEl) return;
 
-    // Real titles + local covers come from the catalog (coalesced/prefetched),
-    // so the schedule never shows the old placeholder names or stock photos.
     const titleMap = {};
     try {
       const tRes = await fetchTitles(18);
@@ -7130,15 +5895,10 @@
       setInterval(updateJstClock, 1000);
     }
 
-    // Determine current day of week by visitor's LOCAL date (Bug 6)
     const dayNames = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
     const nowLocal = new Date();
     const currentDayName = dayNames[nowLocal.getDay()];
 
-    /* REMINDERS — the store helpers (readReminders / writeReminders /
-       isReminded / toggleReminder) and BELL_SVG live in the SHARED section
-       near liveStatusLabel: the detail pages use the same store (defect #2,
-       23 Nov). This page owns only the schedule-specific rendering below. */
     function activeDayKey() {
       const active = document.querySelector(".schedule-day-tab.active");
       return (active && active.dataset.day) || currentDayName;
@@ -7148,7 +5908,7 @@
       if (!box) return;
       const list = readReminders();
       if (!list.length) { box.innerHTML = ""; box.hidden = true; return; }
-      /* Airing day/time come from the same weekly grid as the timeline. */
+      
       const slotBySlug = {};
       for (const [day, slots] of Object.entries(SCHEDULE_DATA)) {
         for (const s of slots) slotBySlug[s.slug] = { day, time: s.time };
@@ -7184,7 +5944,7 @@
         timelineEl.innerHTML = `<p style="color: var(--text-muted); padding: 2rem; text-align: center;">Schedule is temporarily unavailable — the catalog could not be loaded.</p>`;
         return;
       }
-      /* Only real catalog entries render — never placeholder filler. */
+      
       const items = slots
         .map((slot) => ({ slot, real: titleMap[slot.slug] }))
         .filter((x) => x.real && x.real.name);
@@ -7196,8 +5956,7 @@
       timelineEl.innerHTML = items.map(({ slot, real }) => {
         const isFilm = (real.kind || "").toLowerCase() === "film";
         const epCount = real.episodes || 1;
-        /* Series link to their LATEST available episode (the catalog count);
-           films are a single feature. */
+        
         const watchEp = isFilm ? 1 : epCount;
         const name = real.name;
         const cover = coverOf(real);
@@ -7233,7 +5992,6 @@
       `;
       }).join("");
 
-      // Remind buttons — toggle a real persisted reminder (fix #9)
       timelineEl.querySelectorAll(".btn-remind-slot").forEach((btn) => {
         btn.addEventListener("click", () => {
           const slug = btn.dataset.slug;
@@ -7255,8 +6013,7 @@
 
     // Day tabs
     const dayTabs = document.querySelectorAll(".schedule-day-tab");
-    /* The date numbers follow the CURRENT week (Monday-start) — the old
-       static 16–22 were filler that went stale every week. */
+    
     const weekMonday = new Date(nowLocal);
     weekMonday.setDate(nowLocal.getDate() - ((nowLocal.getDay() + 6) % 7));
     dayTabs.forEach((tab, i) => {
@@ -7277,7 +6034,6 @@
       });
     });
 
-    // Activate today's tab initially (or first tab)
     const todayTab = document.querySelector(`.schedule-day-tab[data-day="${currentDayName}"]`) || dayTabs[0];
     if (todayTab) {
       dayTabs.forEach((t) => t.classList.remove("active"));
@@ -7285,17 +6041,9 @@
       renderScheduleForDay(todayTab.dataset.day);
     }
 
-    /* The schedule is static content: it is ready as soon as it is rendered. */
     markContentReady();
   }
 
-  /* ==========================================================================
-     LIFECYCLE INITIALIZATION
-     ========================================================================== */
-
-  /* The intro is started as soon as the script runs. Waiting for
-     DOMContentLoaded delayed it by the full asset load, which pushed the
-     first paint of every session past the intro's own runtime. */
   if (document.body) initAizenIntro();
 
   document.addEventListener("DOMContentLoaded", () => {
@@ -7303,11 +6051,8 @@
     initMobileDrawer();
     initSearch();
 
-    /* The schedule is static data: render it first so it never waits on the API. */
     initSchedulePage();
 
-    /* Everything below is independent, so it all starts at once instead of
-       queueing behind one another (that chain was the 15s "empty boxes"). */
     const authReady = checkAuthSession();
     initSpotlightSlider();
     initHomeCatalogColumns();
@@ -7319,10 +6064,8 @@
     initDetailPage();
     initAzList();
 
-    /* The continue-watching rail needs the resolved auth state. */
     authReady.then(() => initContinueWatchingRail());
 
-    /* Pages whose content is plain HTML (Genres) have nothing to wait for. */
     const hasDynamicContent = !!(
       document.getElementById("zoro-main-grid") ||
       document.getElementById("spotlight-slider-container") ||
@@ -7349,8 +6092,6 @@
       });
     }
 
-    /* Back-to-top button (every page): appears after scrolling down and
-       returns to the top on click. */
     const backTop = document.createElement("button");
     backTop.type = "button";
     backTop.className = "back-to-top";
@@ -7362,7 +6103,6 @@
     toggleBackTop();
     backTop.addEventListener("click", () => window.scrollTo({ top: 0, behavior: "smooth" }));
 
-    /* Footer (c) year follows the current year. */
     document.querySelectorAll(".js-footer-year").forEach((el) => {
       el.textContent = String(new Date().getFullYear());
     });

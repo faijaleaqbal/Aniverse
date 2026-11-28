@@ -89,6 +89,29 @@ const app = express();
    operator explicitly enables it (see config.TRUST_PROXY). */
 app.set("trust proxy", TRUST_PROXY);
 
+const CSP_HEADER = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline'",
+  "font-src 'self'",
+  "img-src 'self' data: https:",
+  "frame-src 'self' https://zokoanime.video https://embed.animetvplus.site",
+  "connect-src 'self' https://zokoanime.video",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+].join("; ");
+
+/* Security & default Cache-Control headers for all responses (Caddy copies
+   upstream headers verbatim, so set once here). */
+app.use((req, res, next) => {
+  res.setHeader("Content-Security-Policy", CSP_HEADER);
+  if (req.path.startsWith("/api/") || req.path.startsWith("/auth/")) {
+    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+  }
+  next();
+});
+
 /* Client IP for the rate limits. req.ip already honours X-Forwarded-For when
    trust proxy is on; normalise the IPv6-mapped loopback forms so one client
    cannot split its quota across ::1 / ::ffff:127.0.0.1. */
@@ -1559,14 +1582,25 @@ app.use(
     etag: true,
     lastModified: true,
     setHeaders(res, filePath) {
-      if (res.locals.versionedAsset) {
+      if (res.locals.versionedAsset || filePath.endsWith(".woff2")) {
         res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
-      } else if (filePath.endsWith(".html") || filePath.endsWith(".js") || filePath.endsWith(".css")) {
-        res.setHeader("Cache-Control", "no-cache, must-revalidate");
+      } else if (
+        filePath.endsWith(".html") ||
+        filePath.endsWith(".js") ||
+        filePath.endsWith(".css") ||
+        filePath.endsWith(`${path.sep}robots.txt`) ||
+        filePath.endsWith(`${path.sep}sitemap.xml`)
+      ) {
+        res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
       }
     },
   })
 );
+
+const NO_CACHE_FILE_OPTS = {
+  cacheControl: false,
+  headers: { "Cache-Control": "no-cache, no-store, must-revalidate" },
+};
 
 /* Named page routes (23 Nov): clean URLs — /home, /browse, /faq, … — with
    one explicit route per page instead of relying on the generic /:page
@@ -1594,14 +1628,14 @@ const NAMED_PAGES = {
 };
 for (const [name, file] of Object.entries(NAMED_PAGES)) {
   app.get(`/${name}`, (req, res) => {
-    res.sendFile(path.join(SITE_ROOT, file));
+    res.sendFile(path.join(SITE_ROOT, file), NO_CACHE_FILE_OPTS);
   });
 }
 
 // Fallback for HTML routing if requested without extension
 app.get("/:page", (req, res, next) => {
   const pageFile = path.join(SITE_ROOT, `${req.params.page}.html`);
-  res.sendFile(pageFile, (err) => {
+  res.sendFile(pageFile, NO_CACHE_FILE_OPTS, (err) => {
     if (err) next();
   });
 });
@@ -1617,7 +1651,7 @@ app.use((req, res) => {
       error: { code: "NOT_FOUND", message: "Not found." },
     });
   }
-  res.status(404).sendFile(path.join(SITE_ROOT, "404.html"));
+  res.status(404).sendFile(path.join(SITE_ROOT, "404.html"), NO_CACHE_FILE_OPTS);
 });
 
 /* ==========================================================================

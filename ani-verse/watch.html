@@ -6,48 +6,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Watch Anime - AniFlick (Zoro UI × Aizen Engine)</title>
   <meta name="description" content="Watch high quality anime online on AniFlick. Free streaming with multi-server selection, subtitles and dubs.">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <!-- Loaded async: a slow Google Fonts response must never block the app script or render. -->
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
-  <noscript><link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet"></noscript>
-  <link rel="preload" href="css/zoro-aizen.css?v=22" as="style">
-  <link rel="preload" href="js/zoro-aizen.js?v=24" as="script">
-  <script>
-    /* Warm the API while the app script is still downloading: this removes a
-       full round trip from the critical path. The app script adopts these
-       in-flight requests instead of issuing duplicates. */
-    window.__zoroPrefetch = {};
-    (function () {
-      var paths = ["/api/auth/me", "/api/titles?limit=18"];
-      paths.forEach(function (path) {
-        var ctl = new AbortController();
-        var to = setTimeout(function () { ctl.abort(); }, 10000);
-        window.__zoroPrefetch[path] = fetch(path, { credentials: "same-origin", signal: ctl.signal })
-          .then(function (r) {
-            clearTimeout(to);
-            return r.json().then(function (d) { return { ok: r.ok, status: r.status, data: d, error: null }; });
-          })
-          .catch(function (e) {
-            clearTimeout(to);
-            return { ok: false, status: 0, data: null, error: String((e && e.message) || e) };
-          });
-      });
-    })();
-  </script>  <script>
-    /* Set the theme before first paint (no flash of the wrong palette). The
-       shared app script owns the toggle; this only reads the stored choice. */
-    (function () {
-      try {
-        var t = localStorage.getItem("av_theme");
-        document.documentElement.setAttribute("data-theme", t === "light" ? "light" : "dark");
-      } catch (e) {
-        document.documentElement.setAttribute("data-theme", "dark");
-      }
-    })();
-  </script>
+  <noscript></noscript>
+  <link rel="preload" href="css/zoro-aizen.css?v=23" as="style">
+  <link rel="preload" href="js/zoro-aizen.js?v=25" as="script">
+  <script src="/js/boot.js?v=1"></script>
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
-  <link rel="stylesheet" href="css/zoro-aizen.css?v=22">
+  <link rel="stylesheet" href="css/zoro-aizen.css?v=23">
   <!-- Player-specific styles (spinner overlay, resume note, toasts). Without
        this sheet the spinner rendered as plain text BELOW the player. -->
   <link rel="stylesheet" href="css/zoko-player.css?v=14">
@@ -121,16 +85,13 @@
       <span id="watch-anime-title">Loading…</span>
     </div>
 
-    <!-- Data error state: shown instead of stale placeholder content.
-         Layout lives in zoko-player.css so the `hidden` attribute can actually
-         hide it (an inline display:flex would override [hidden]). -->
+    <!-- Error state -->
     <div id="watch-data-error" hidden>
       <span id="watch-data-error-text">Something went wrong while loading this episode.</span>
       <button class="btn-zoro-primary" id="watch-data-error-retry" type="button">Retry</button>
     </div>
 
-    <!-- Title + subtitle span the FULL width above both columns so the
-         player and the episode sidebar start at the same y. -->
+    <!-- Title header -->
     <div style="margin-top: 1rem;">
       <div class="detail-badges" id="watch-anime-badges" hidden style="margin-bottom: 0.5rem;"></div>
       <h1 id="watch-anime-title-h1" class="watch-page-title">Loading…</h1>
@@ -142,15 +103,7 @@
       <div class="watch-player-column">
         <!-- Video Player Stage (ZokoAnime Embed) -->
         <div class="player-theater-wrapper" id="player-wrap">
-          <!-- Shared embed iframe. The sandbox is applied PER PLAYER by
-               js/zoro-aizen.js (applyIframeSandbox / PLAYER_IFRAME_SANDBOX_BY_SERVER):
-               Zoko — the default player — is UNSANDBOXED because it refuses to
-               run inside a sandboxed iframe ("EMBED BLOCKED: This player does
-               not run inside a sandboxed iframe"); TVplus (backup)
-               and animegg get the sandboxed value (allow-scripts
-               allow-same-origin allow-forms allow-presentation — no
-               allow-popups / allow-top-navigation / allow-modals /
-               allow-downloads). Fullscreen is unaffected. -->
+          <!-- Embed iframe -->
           <iframe
             id="zoko-embed-frame"
             class="player-stage-video"
@@ -165,43 +118,7 @@
               <span style="color: var(--zoro-lime);">⚡</span> Stream with ZokoAnime (Auto-Skip)
             </div>
           </div>
-          <script>
-            /* The loading poster must be THIS title's own art — never a
-               hardcoded stock photo. Start the title fetch at parse time and
-               paint the cover/banner the moment it lands (before the app
-               script even runs). The app adopts this in-flight request.
-
-               LIVE titles (?live=<anilistId>) come from /api/live/:id — the
-               local catalog has no row for them. */
-            (function () {
-              var params = new URLSearchParams(location.search);
-              var live = params.get("live");
-              /* No default slug: an unknown/missing id must resolve to a
-                 not-found state, never prefetch (and paint) Jujutsu Kaisen. */
-              var slug = params.get("slug") || params.get("id") || "";
-              var path = live ? "/api/live/" + encodeURIComponent(live)
-                              : slug ? "/api/titles/" + encodeURIComponent(slug) : null;
-              window.__zoroPrefetch = window.__zoroPrefetch || {};
-              if (!path) return;
-              var ctl = new AbortController();
-              var to = setTimeout(function () { ctl.abort(); }, 10000);
-              window.__zoroPrefetch[path] = fetch(path, { credentials: "same-origin", signal: ctl.signal })
-                .then(function (r) {
-                  clearTimeout(to);
-                  return r.json().then(function (d) {
-                    var t = (d && d.title) || null;
-                    var art = t && (t.banner || t.bannerLocal || t.cover || t.coverLocal);
-                    var el = document.getElementById("video-cover-overlay");
-                    if (el && art) el.style.backgroundImage = "url('" + art + "')";
-                    return { ok: r.ok, status: r.status, data: d, error: null };
-                  });
-                })
-                .catch(function (e) {
-                  clearTimeout(to);
-                  return { ok: false, status: 0, data: null, error: String((e && e.message) || e) };
-                });
-            })();
-          </script>
+          <script src="js/watch-boot.js?v=1"></script>
           <div class="zoko-player-spinner" id="zoko-player-spinner" hidden>
             <div class="zoko-spinner-ring"></div>
             <span>Loading stream…</span>
@@ -215,17 +132,9 @@
           </div>
         </div>
 
-        <!-- Watch controls: ONE grouped card — Server, Audio, Episode and
-             Playback. Every control keeps its id (the app script binds by
-             id); only the grouping changed (2026-11-23, user asked for one
-             clean, easy-to-use control area instead of three scattered
-             bars). The dead animegg pill was removed here: the player never
-             plays (embed hangs on "Please wait", confirmed on the user's own
-             phone) — the server routes stay live, only the pill is gone. -->
+        <!-- Watch controls -->
         <section class="watch-controls" aria-label="Player controls">
-          <!-- Server: Zoko stays the PRIMARY player; TVplus is the
-               alternate the viewer chooses (or is offered when a player
-               fails). Session-scoped choice; swaps the iframe src in place. -->
+          <!-- Server selector -->
           <div class="watch-controls-row">
             <span class="watch-controls-label">Server</span>
             <div class="zoko-track-switcher" id="zoko-server-switcher" role="group" aria-label="Streaming server">
@@ -277,17 +186,13 @@
           </div>
         </section>
 
-        <!-- Failure offer / backup status notice: inline, the viewer chooses.
-             Never auto-switches away from Zoko. -->
+        <!-- Status notice -->
         <div class="zoko-fallback-note" id="zoko-fallback-note" hidden></div>
 
         <!-- Resume notice + toasts -->
         <div class="zoko-resume-note" id="zoko-resume-note" hidden></div>
         <div class="zoko-toasts" id="zoko-toasts" aria-live="polite"></div>
 
-        <!-- The site control bar (-10s / +10s / fullscreen) was REMOVED: every
-             control duplicated the embed's own bar (seek, fullscreen, volume).
-             Keyboard shortcuts (F, Space, arrows) still work page-wide. -->
 
         <!-- Anime Synopsis & Details Card -->
         <div style="background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 12px; padding: 1.5rem;">
@@ -297,7 +202,7 @@
           </p>
         </div>
 
-        <!-- Zoro Community & Comments Box (Synced to SQLite) -->
+        <!-- Comments -->
         <div class="discussion-box" id="watch-discussion">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem;">
             <h3 class="watch-panel-title">Community Discussion</h3>
@@ -316,14 +221,11 @@
           </form>
 
           <div class="comment-list-zoro" id="comments-list-container">
-            <!-- Populated via API -->
+            <!-- Dynamic content -->
           </div>
         </div>
 
-        <!-- More Like This (Phase 3b): the SAME rail as the detail page.
-             Live titles reuse the recommendations already in the /api/live
-             payload (no second query); catalog titles use the same same-genre
-             shelf. The section hides itself when there is nothing to show. -->
+        <!-- Related rail -->
         <section class="watch-recommendations" id="watch-recommendations-section" hidden>
           <div class="section-header-zoro">
             <h2 class="section-title">More Like <span class="accent">This</span></h2>
@@ -348,7 +250,7 @@
           </div>
 
           <div class="ep-buttons-grid" id="zoro-episodes-grid">
-            <!-- Populated via API -->
+            <!-- Dynamic content -->
           </div>
         </div>
 
@@ -407,6 +309,6 @@
     </div>
   </footer>
 
-  <script src="js/zoro-aizen.js?v=24"></script>
+  <script src="js/zoro-aizen.js?v=25"></script>
 </body>
 </html>
