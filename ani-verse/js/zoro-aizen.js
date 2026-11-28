@@ -3175,7 +3175,6 @@
     const progressFill = document.getElementById("video-progress-fill");
     const timeText = document.getElementById("video-time-text");
 
-    const wlBtn = document.getElementById("watch-add-list-btn");
     const epGrid = document.getElementById("zoro-episodes-grid");
     const epSubtitle = document.getElementById("watch-ep-subtitle");
     const animeTitle = document.getElementById("watch-anime-title");
@@ -4044,11 +4043,6 @@
       const detailLink = document.getElementById("watch-detail-link");
       if (detailLink) detailLink.href = detailHref(currentSlug);
       if (coverOverlay) coverOverlay.style.backgroundImage = `url('${bannerOf(titleData)}')`;
-
-      // Watchlist Button State
-      if (wlBtn && data.userState) {
-        updateWatchlistBtn(data.userState.inWatchlist);
-      }
 
       renderEpisodesGrid();
       updateEpisodeNavState();
@@ -5328,37 +5322,6 @@
         } catch {}
       }
     });
-
-    function updateWatchlistBtn(inList) {
-      if (!wlBtn) return;
-      wlBtn.setAttribute("data-active", inList ? "true" : "false");
-      wlBtn.innerHTML = inList ? "✓ In My List" : "+ Add to List";
-      wlBtn.style.color = inList ? "var(--zoro-lime)" : "#fff";
-    }
-
-    if (wlBtn) {
-      wlBtn.addEventListener("click", async () => {
-        
-        if (isLive) {
-          showToast("This title is not part of your library.", "!");
-          return;
-        }
-        if (!currentUser) {
-          openAuthModal("login");
-          return;
-        }
-        const active = wlBtn.getAttribute("data-active") === "true";
-        const res = await api(`/api/watchlist/${encodeURIComponent(currentSlug)}`, {
-          method: active ? "DELETE" : "POST",
-        });
-        if (res.ok) {
-          updateWatchlistBtn(!active);
-          showToast(!active ? "Added to your Watchlist!" : "Removed from Watchlist.");
-        } else {
-          showToast("Could not update your list. Please try again.", "!");
-        }
-      });
-    }
 
     async function startWatch() {
       
