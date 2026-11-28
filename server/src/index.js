@@ -867,7 +867,7 @@ app.get("/api/search", async (req, res, next) => {
         allResults.push(withCatalogSlug(item, index));
         continue;
       }
-      allResults.push(item);
+      allResults.push(withCatalogSlug(item, index));
     }
 
     /* One stable result set for the whole query: every page is a slice of

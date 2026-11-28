@@ -3973,6 +3973,27 @@ async function runTests() {
         const bossLive = await (await fetch(`${baseUrl}/api/live/987444`)).json();
         assert.equal(bossLive.title.hindiAvailable, true, "Wild Last Boss cached available must surface as hindiAvailable: true");
 
+        // /api/search results also surface hindiAvailable for pure live results
+        mockAniList({
+          mediaList: [
+            fakeMedia({
+              id: 987333,
+              idMal: 987333,
+              title: { english: "Frieren Test", romaji: "Frieren Test" },
+              externalLinks: [{ id: 1, site: "TMDB", type: "TV", url: "https://www.themoviedb.org/tv/209867" }],
+            }),
+            fakeMedia({
+              id: 987444,
+              idMal: 987444,
+              title: { english: "Wild Last Boss Test", romaji: "Wild Last Boss Test" },
+              externalLinks: [{ id: 1, site: "TMDB", type: "TV", url: "https://www.themoviedb.org/tv/280042" }],
+            }),
+          ],
+        });
+        const searchRes = await (await fetch(`${baseUrl}/api/search?q=test`)).json();
+        assert.equal(searchRes.results[0].hindiAvailable, false);
+        assert.equal(searchRes.results[1].hindiAvailable, true);
+
         // Transient upstream failure fails open (available: true, checked: false)
         mode = "error";
         const failOpenRes = await fetch(`${baseUrl}/api/hindi/vidstream3?tmdbId=555555&season=1&episode=1`);
