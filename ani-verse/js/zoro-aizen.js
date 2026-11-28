@@ -571,6 +571,9 @@
   }
 
   function initAizenIntro(force = false) {
+    if (!force && window.matchMedia && window.matchMedia("(max-width: 820px)").matches) {
+      return;
+    }
     try {
       if (!force && sessionStorage.getItem("aizen_intro_seen")) {
         return;
@@ -687,6 +690,11 @@
     document.documentElement.setAttribute("data-theme", theme);
     const btn = document.getElementById("btn-theme-toggle");
     if (btn) btn.setAttribute("aria-pressed", theme === "light" ? "true" : "false");
+    const drawerBtn = document.getElementById("drawer-theme-toggle");
+    if (drawerBtn) {
+      drawerBtn.setAttribute("aria-pressed", theme === "light" ? "true" : "false");
+      drawerBtn.textContent = theme === "light" ? "🌙 Dark Mode" : "☀️ Light Mode";
+    }
   }
 
   function initThemeToggle() {
@@ -741,6 +749,11 @@
             <a class="mobile-drawer-link" href="az-list.html">🔤 A-Z List</a>
             <a class="mobile-drawer-link" href="/login">🔐 Sign In</a>
           </nav>
+          <div class="mobile-drawer-actions">
+            <button class="mobile-drawer-action" id="drawer-search-trigger" type="button">🔍 Search Anime</button>
+            <button class="mobile-drawer-action" id="drawer-random-anime" type="button">🎲 Random Anime</button>
+            <button class="mobile-drawer-action" id="drawer-theme-toggle" type="button" aria-pressed="false">☀️ Light Mode</button>
+          </div>
         </div>
       `;
       document.body.appendChild(backdrop);
@@ -750,6 +763,37 @@
       backdrop.addEventListener("click", (e) => {
         if (e.target === backdrop) setDrawer(false);
       });
+
+      const drawerSearchBtn = backdrop.querySelector("#drawer-search-trigger");
+      if (drawerSearchBtn) {
+        drawerSearchBtn.addEventListener("click", () => {
+          setDrawer(false);
+          const header = document.querySelector(".zoro-header");
+          const input = document.getElementById("zoro-search-input");
+          if (header) header.classList.add("mobile-search-open");
+          const mobileSearchBtn = document.getElementById("btn-mobile-search");
+          if (mobileSearchBtn) mobileSearchBtn.setAttribute("aria-expanded", "true");
+          if (input) setTimeout(() => input.focus(), 50);
+        });
+      }
+
+      const drawerRandomBtn = backdrop.querySelector("#drawer-random-anime");
+      if (drawerRandomBtn) {
+        drawerRandomBtn.addEventListener("click", () => {
+          setDrawer(false);
+          const headerRandom = document.getElementById("btn-random-anime");
+          if (headerRandom) headerRandom.click();
+        });
+      }
+
+      const drawerThemeBtn = backdrop.querySelector("#drawer-theme-toggle");
+      if (drawerThemeBtn) {
+        applyTheme(currentTheme());
+        drawerThemeBtn.addEventListener("click", () => {
+          const headerTheme = document.getElementById("btn-theme-toggle");
+          if (headerTheme) headerTheme.click();
+        });
+      }
       
       document.addEventListener("keydown", (e) => {
         if (e.key === "Escape" && backdrop.classList.contains("is-open")) {
@@ -957,7 +1001,7 @@
 
   function updateHeaderUser() {
     const slot = document.getElementById("header-user-slot");
-    document.querySelectorAll('.header-nav a[href="/login"], .mobile-drawer-nav a[href="/login"]').forEach((a) => {
+    document.querySelectorAll('.header-nav a[href="/login"], .mobile-drawer-links a[href="/login"]').forEach((a) => {
       a.hidden = Boolean(currentUser);
     });
     if (!slot) return;
@@ -1098,6 +1142,45 @@
     const dropdown = document.getElementById("zoro-search-dropdown");
     if (!input || !dropdown) return;
 
+    const header = document.querySelector(".zoro-header");
+    const headerActions = header ? header.querySelector(".header-actions") : null;
+    const searchWrapper = input.closest(".search-wrapper");
+    let mobileSearchBtn = document.getElementById("btn-mobile-search");
+
+    if (header && headerActions && !mobileSearchBtn) {
+      mobileSearchBtn = document.createElement("button");
+      mobileSearchBtn.type = "button";
+      mobileSearchBtn.id = "btn-mobile-search";
+      mobileSearchBtn.className = "icon-action-btn mobile-search-toggle";
+      mobileSearchBtn.setAttribute("aria-label", "Toggle Search");
+      mobileSearchBtn.setAttribute("aria-expanded", "false");
+      mobileSearchBtn.innerHTML =
+        '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>';
+      const userSlot = document.getElementById("header-user-slot");
+      if (userSlot && userSlot.parentElement === headerActions) {
+        headerActions.insertBefore(mobileSearchBtn, userSlot);
+      } else {
+        headerActions.appendChild(mobileSearchBtn);
+      }
+
+      mobileSearchBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const nextOpen = !header.classList.contains("mobile-search-open");
+        header.classList.toggle("mobile-search-open", nextOpen);
+        mobileSearchBtn.setAttribute("aria-expanded", nextOpen ? "true" : "false");
+        if (nextOpen) {
+          setTimeout(() => input.focus(), 20);
+        } else {
+          dropdown.classList.remove("is-open");
+        }
+      });
+    }
+
+    function closeMobileSearch() {
+      if (header) header.classList.remove("mobile-search-open");
+      if (mobileSearchBtn) mobileSearchBtn.setAttribute("aria-expanded", "false");
+    }
+
     let debounceTimer = null;
     let searchToken = 0;
 
@@ -1164,6 +1247,13 @@
     document.addEventListener("click", (e) => {
       if (!input.contains(e.target) && !dropdown.contains(e.target)) {
         dropdown.classList.remove("is-open");
+        if (
+          searchWrapper &&
+          !searchWrapper.contains(e.target) &&
+          (!mobileSearchBtn || !mobileSearchBtn.contains(e.target))
+        ) {
+          closeMobileSearch();
+        }
       }
     });
 
@@ -1193,6 +1283,7 @@
         dropdown.innerHTML = "";
         input.value = "";
         input.blur();
+        closeMobileSearch();
       }
     });
 
