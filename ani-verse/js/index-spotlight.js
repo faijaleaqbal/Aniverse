@@ -27,7 +27,21 @@
             dub.remove();
           }
           var ma = badges.querySelector(".badge-multi-audio");
-          if (t.tmdbId > 0) {
+          var hindiHidden = t.hindiAvailable === false;
+          if (!hindiHidden && t.tmdbId > 0) {
+            try {
+              var ssRaw = sessionStorage.getItem("av_vidstream3_avail_v1");
+              if (ssRaw) {
+                var ssMap = JSON.parse(ssRaw);
+                var s = t.tmdbSeason > 0 ? Math.floor(t.tmdbSeason) : 1;
+                var ep = 1 + (t.tmdbEpisodeOffset > 0 ? Math.floor(t.tmdbEpisodeOffset) : 0);
+                if (ssMap && ssMap[Math.floor(t.tmdbId) + ":" + s + "-" + ep] === false) {
+                  hindiHidden = true;
+                }
+              }
+            } catch (e) {}
+          }
+          if (!hindiHidden && t.tmdbId > 0) {
             if (!ma) {
               ma = document.createElement("span");
               ma.className = "badge badge-multi-audio";

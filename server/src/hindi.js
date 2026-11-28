@@ -1,40 +1,29 @@
 /**
- * Hindi player server-side helpers (Vidstream / ravok.buzz & Vidstream-3 / blakiteapi.xyz).
+ * Hindi player server-side helpers (Vidstream-3 / blakiteapi.xyz).
  *
- * - Vidstream (animedekho.tv) sends `Content-Security-Policy: frame-ancestors 'self'
- *   https://animedekho.tv https://animeworld.site`, so browsers refuse to iframe it.
- *   We resolve the underlying `https://ravok.buzz/video/{id}` URL server-side and
- *   return it as JSON so the watch page iframes ravok.buzz directly.
  * - Vidstream-3 (blakiteapi.xyz) has no frame-ancestors restriction, but returns a
  *   "Content not available" / "Video Unavailable" page when a title/episode is missing.
  *   We check availability server-side (failing open on transient network errors) and
- *   cache the check briefly so the watch page hides the button when unavailable.
+ *   cache the check briefly so the watch page hides the button when unavailable and
+ *   card lists / detail pages suppress Multi Audio for titles known unavailable.
  */
 
-const DEFAULT_ANIMEDEKHO_ORIGIN = (process.env.ANIMEDEKHO_ORIGIN || "https://animedekho.tv").replace(/\/+$/, "");
 const DEFAULT_BLAKITE_ORIGIN = (process.env.BLAKITE_ORIGIN || "https://blakiteapi.xyz").replace(/\/+$/, "");
 
-let animedekhoOrigin = DEFAULT_ANIMEDEKHO_ORIGIN;
 let blakiteOrigin = DEFAULT_BLAKITE_ORIGIN;
 
 const FETCH_TIMEOUT_MS = 10_000;
-const VIDSTREAM_CACHE_TTL_MS = 2 * 60 * 1000; // short per-session cache (2 min)
 const VIDSTREAM3_CACHE_TTL_MS = 3 * 60 * 1000; // availability cache (3 min)
 const CACHE_MAX = 500;
 
-const vidstreamCache = new Map();
-const vidstreamInflight = new Map();
 const vidstream3Cache = new Map();
 const vidstream3Inflight = new Map();
 
-export function _setHindiOriginsForTests({ animedekho, blakite } = {}) {
-  animedekhoOrigin = (animedekho || DEFAULT_ANIMEDEKHO_ORIGIN).replace(/\/+$/, "");
+export function _setHindiOriginsForTests({ blakite } = {}) {
   blakiteOrigin = (blakite || DEFAULT_BLAKITE_ORIGIN).replace(/\/+$/, "");
 }
 
 export function clearHindiCaches() {
-  vidstreamCache.clear();
-  vidstreamInflight.clear();
   vidstream3Cache.clear();
   vidstream3Inflight.clear();
 }
@@ -52,25 +41,6 @@ function boundedSet(map, key, entry) {
     if (oldestKey != null) map.delete(oldestKey);
   }
   map.set(key, entry);
-}
-
-/**
- * Extract the ravok.buzz video URL from animedekho.tv embed HTML.
- * Prefers `<iframe src="...">`, falls back to any matching ravok.buzz/video/{id} URL.
- */
-export function extractRavokUrl(html) {
-  if (typeof html !== "string" || !html) return null;
-  const iframeMatch = html.match(
-    /<iframe\b[^>]*\bsrc=["'](https?:\/\/ravok\.buzz\/video\/[0-9a-zA-Z_-]+)["']/i
-  );
-  if (iframeMatch && iframeMatch[1]) {
-    return iframeMatch[1].replace(/^http:/i, "https:");
-  }
-  const urlMatch = html.match(/https?:\/\/ravok\.buzz\/video\/([0-9a-f]{16,64}|[0-9a-zA-Z_-]{8,})/i);
-  if (urlMatch && urlMatch[0]) {
-    return urlMatch[0].replace(/^http:/i, "https:");
-  }
-  return null;
 }
 
 /**
@@ -119,60 +89,36 @@ async function fetchHtml(url) {
 }
 
 /**
- * Resolve a ravok.buzz player URL from animedekho.tv for a TMDB episode.
- * Never throws; returns `{ ok: true, available, url, reason }`.
+ * Synchronously return cached Vidstream-3 availability (`true`, `false`, or `null` if unknown).
+ * Never performs network I/O; safe for card list endpoints.
  */
-export async function resolveVidstreamUrl({ tmdbId, season = 1, episode = 1, bypassCache = false } = {}) {
+export function getKnownVidstream3Availability({ tmdbId, season = 1, episode = 1 } = {}) {
   const id = Math.trunc(Number(tmdbId));
   const s = Math.trunc(Number(season));
   const ep = Math.trunc(Number(episode));
   if (!Number.isFinite(id) || id <= 0 || !Number.isFinite(s) || s <= 0 || !Number.isFinite(ep) || ep <= 0) {
-    return { ok: true, available: false, url: null, reason: "invalid_params" };
+    return false;
   }
+  const hit = vidstream3Cache.get(`${id}:${s}-${ep}`);
+  if (!hit || Date.now() - hit.at >= VIDSTREAM3_CACHE_TTL_MS) return null;
+  return Boolean(hit.available);
+}
 
-  const key = `${id}:${s}-${ep}`;
-  if (!bypassCache) {
-    const hit = vidstreamCache.get(key);
-    if (hit && Date.now() - hit.at < VIDSTREAM_CACHE_TTL_MS) {
-      return { ok: true, available: hit.available, url: hit.url, reason: hit.reason || null };
-    }
-    if (vidstreamInflight.has(key)) {
-      return vidstreamInflight.get(key);
-    }
+/**
+ * Attach `hindiAvailable` (`true` | `false` | `null`) to a resolved TMDB info object
+ * using the in-memory Vidstream-3 availability cache.
+ */
+export function withHindiAvailability(tmdbInfo = {}) {
+  const tmdbId = tmdbInfo && tmdbInfo.tmdbId ? Number(tmdbInfo.tmdbId) : null;
+  if (!Number.isFinite(tmdbId) || tmdbId <= 0) {
+    return { ...tmdbInfo, hindiAvailable: false };
   }
-
-  const task = (async () => {
-    const targetUrl = `${animedekhoOrigin}/embed/${id}/${s}-${ep}`;
-    let res;
-    try {
-      res = await fetchHtml(targetUrl);
-    } catch {
-      return { ok: true, available: false, url: null, reason: "upstream_error" };
-    }
-    if (!res.ok) {
-      return { ok: true, available: false, url: null, reason: `upstream_http_${res.status}` };
-    }
-    let html;
-    try {
-      html = await res.text();
-    } catch {
-      return { ok: true, available: false, url: null, reason: "upstream_read_error" };
-    }
-
-    const ravokUrl = extractRavokUrl(html);
-    if (!ravokUrl) {
-      boundedSet(vidstreamCache, key, { available: false, url: null, reason: "no_ravok_url", at: Date.now() });
-      return { ok: true, available: false, url: null, reason: "no_ravok_url" };
-    }
-
-    boundedSet(vidstreamCache, key, { available: true, url: ravokUrl, reason: null, at: Date.now() });
-    return { ok: true, available: true, url: ravokUrl, reason: null };
-  })().finally(() => {
-    if (!bypassCache) vidstreamInflight.delete(key);
-  });
-
-  if (!bypassCache) vidstreamInflight.set(key, task);
-  return task;
+  const season = Number(tmdbInfo.tmdbSeason) > 0 ? Math.floor(Number(tmdbInfo.tmdbSeason)) : 1;
+  const offset = Number(tmdbInfo.tmdbEpisodeOffset) > 0 ? Math.floor(Number(tmdbInfo.tmdbEpisodeOffset)) : 0;
+  return {
+    ...tmdbInfo,
+    hindiAvailable: getKnownVidstream3Availability({ tmdbId, season, episode: 1 + offset }),
+  };
 }
 
 /**

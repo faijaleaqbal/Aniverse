@@ -14,7 +14,7 @@ import {
 } from "../src/oauth-providers.js";
 import { buildDetailSeo, truncateDescription } from "../src/seo.js";
 import { extractTmdbFromExternalLinks, resolveTmdbInfo } from "../src/tmdb.js";
-import { extractRavokUrl, isBlakiteUnavailableHtml } from "../src/hindi.js";
+import { isBlakiteUnavailableHtml, withHindiAvailability, clearHindiCaches } from "../src/hindi.js";
 
 console.log("=== Running ZokoAnime Unit / Smoke Tests ===");
 
@@ -405,17 +405,16 @@ test("extractTmdbFromExternalLinks and resolveTmdbInfo resolve TV TMDB ids and r
   );
 });
 
-test("extractRavokUrl extracts ravok.buzz/video URLs and returns null when absent", () => {
-  assert.equal(
-    extractRavokUrl('<iframe src="https://ravok.buzz/video/4c12343400ce0c1454ad4bc3860602b9" allowfullscreen></iframe>'),
-    "https://ravok.buzz/video/4c12343400ce0c1454ad4bc3860602b9"
+test("withHindiAvailability reports false when unmapped and null when uncached", () => {
+  clearHindiCaches();
+  assert.deepEqual(
+    withHindiAvailability({ tmdbId: null, tmdbSeason: null, tmdbEpisodeOffset: 0 }),
+    { tmdbId: null, tmdbSeason: null, tmdbEpisodeOffset: 0, hindiAvailable: false }
   );
-  assert.equal(
-    extractRavokUrl('<iframe src="http://ravok.buzz/video/abcdef1234567890abcdef1234567890"></iframe>'),
-    "https://ravok.buzz/video/abcdef1234567890abcdef1234567890"
+  assert.deepEqual(
+    withHindiAvailability({ tmdbId: 209867, tmdbSeason: 1, tmdbEpisodeOffset: 0 }),
+    { tmdbId: 209867, tmdbSeason: 1, tmdbEpisodeOffset: 0, hindiAvailable: null }
   );
-  assert.equal(extractRavokUrl("<title>Series not found</title>"), null);
-  assert.equal(extractRavokUrl(""), null);
 });
 
 test("isBlakiteUnavailableHtml detects CFG errors and visible unavailable markers without false positives on JS templates", () => {

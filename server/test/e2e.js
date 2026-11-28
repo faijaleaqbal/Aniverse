@@ -3781,66 +3781,75 @@ async function runTests() {
       );
     });
 
-    await test("Hindi players: server options, embed URLs, sandbox, CSP, and Multi Audio badge", async () => {
+    await test("Hindi player (Vidstream-3): server option, embed URL, sandbox, CSP, and Multi Audio badge", async () => {
       const html = readFileSync(fileURLToPath(new URL("../../ani-verse/watch.html", import.meta.url)), "utf8");
       const js = readFileSync(ZORO_JS_PATH, "utf8");
 
-      // 1. Server pills in watch.html: Zoko primary, TVplus backup, then hidden Hindi pills; no Vidmoly
+      // 1. Server pills in watch.html: Zoko primary, TVplus backup, then hidden Vidstream-3 (Hindi); no Vidstream (Hindi) or Vidmoly
       const zokoIdx = html.indexOf('data-server="zoko"');
       const backupIdx = html.indexOf('data-server="backup"');
-      const vidstreamIdx = html.indexOf('data-server="vidstream"');
       const vidstream3Idx = html.indexOf('data-server="vidstream3"');
       assert.ok(zokoIdx >= 0 && backupIdx > zokoIdx, "Zoko and TVplus stay first in order");
-      assert.ok(vidstreamIdx > backupIdx && vidstream3Idx > vidstreamIdx, "Vidstream (Hindi) and Vidstream-3 (Hindi) follow TVplus");
-      assert.ok(html.includes("Vidstream (Hindi)"), "watch.html has Vidstream (Hindi) label");
+      assert.ok(vidstream3Idx > backupIdx, "Vidstream-3 (Hindi) follows TVplus");
+      assert.ok(!html.includes('data-server="vidstream"'), "watch.html must not have Vidstream (Hindi) button");
+      assert.ok(!html.includes("Vidstream (Hindi)"), "watch.html must not have Vidstream (Hindi) label");
       assert.ok(html.includes("Vidstream-3 (Hindi)"), "watch.html has Vidstream-3 (Hindi) label");
       assert.ok(!/vidmoly/i.test(html) && !/vidmoly/i.test(js), "Vidmoly must NOT be added anywhere");
-      assert.ok(!/ravok\.buzz/i.test(js), "ravok.buzz videoIds must never be hardcoded in client JS");
+      assert.ok(!/ravok\.buzz/i.test(js), "ravok.buzz must not appear in client JS");
+      assert.ok(!/getVidstreamApiPath|probeVidstream\b/.test(js), "dead Vidstream client helpers must be removed");
 
-      // 2. Sandbox attributes on Hindi iframes block popups and top navigation
+      // 2. Sandbox attributes on Vidstream-3 iframe block popups and top navigation
       const { PLAYER_IFRAME_SANDBOX, PLAYER_IFRAME_SANDBOX_BY_SERVER } = evalZoroBlock(
         "PLAYER_IFRAME_SANDBOX",
         ["PLAYER_IFRAME_SANDBOX", "PLAYER_IFRAME_SANDBOX_BY_SERVER"]
       );
       assert.equal(PLAYER_IFRAME_SANDBOX_BY_SERVER.zoko, null, "Zoko remains unsandboxed");
-      assert.equal(PLAYER_IFRAME_SANDBOX_BY_SERVER.vidstream, PLAYER_IFRAME_SANDBOX, "vidstream is sandboxed");
+      assert.equal(PLAYER_IFRAME_SANDBOX_BY_SERVER.vidstream, undefined, "removed vidstream has no sandbox entry");
       assert.equal(PLAYER_IFRAME_SANDBOX_BY_SERVER.vidstream3, PLAYER_IFRAME_SANDBOX, "vidstream3 is sandboxed");
-      assert.ok(PLAYER_IFRAME_SANDBOX_BY_SERVER.vidstream.includes("allow-scripts"));
-      assert.ok(PLAYER_IFRAME_SANDBOX_BY_SERVER.vidstream.includes("allow-same-origin"));
-      assert.ok(!PLAYER_IFRAME_SANDBOX_BY_SERVER.vidstream.includes("allow-popups"));
-      assert.ok(!PLAYER_IFRAME_SANDBOX_BY_SERVER.vidstream.includes("allow-top-navigation"));
+      assert.ok(PLAYER_IFRAME_SANDBOX_BY_SERVER.vidstream3.includes("allow-scripts"));
+      assert.ok(PLAYER_IFRAME_SANDBOX_BY_SERVER.vidstream3.includes("allow-same-origin"));
+      assert.ok(!PLAYER_IFRAME_SANDBOX_BY_SERVER.vidstream3.includes("allow-popups"));
+      assert.ok(!PLAYER_IFRAME_SANDBOX_BY_SERVER.vidstream3.includes("allow-top-navigation"));
 
-      // 3. Hindi player API paths, Vidstream-3 URL builder, and Multi Audio badge visibility logic
+      // 3. Vidstream-3 API paths, URL builder, and Multi Audio badge visibility logic
       const hindi = evalZoroBlock("HINDI_PLAYER_LOGIC", [
+        "isHindiServer",
         "hasHindiPlayers",
+        "isHindiBadgeAllowed",
+        "isHindiConfirmedAvailable",
         "multiAudioBadge",
         "multiAudioInlineBadge",
         "multiAudioDetailBadge",
-        "getVidstreamApiPath",
         "getVidstream3ApiPath",
         "getVidstream3EmbedUrl",
       ]);
+      assert.equal(hindi.isHindiServer("vidstream3"), true);
+      assert.equal(hindi.isHindiServer("vidstream"), false);
       assert.equal(hindi.hasHindiPlayers({ tmdbId: 31910 }), true);
       assert.equal(hindi.hasHindiPlayers({ tmdbId: null }), false);
       assert.equal(hindi.hasHindiPlayers(null), false);
       assert.ok(hindi.multiAudioBadge({ tmdbId: 31910 }).includes("Multi Audio"));
       assert.equal(hindi.multiAudioBadge({ tmdbId: null }), "");
+      assert.equal(hindi.multiAudioBadge({ tmdbId: 209867, hindiAvailable: false }), "", "known-unavailable suppresses card Multi Audio badge");
       assert.ok(hindi.multiAudioInlineBadge({ tmdbId: 31910 }).includes("Multi Audio"));
       assert.equal(hindi.multiAudioInlineBadge({ tmdbId: null }), "");
+      assert.equal(hindi.multiAudioInlineBadge({ tmdbId: 209867, hindiAvailable: false }), "");
       assert.ok(hindi.multiAudioDetailBadge({ tmdbId: 31910 }).includes("Multi Audio"));
       assert.equal(hindi.multiAudioDetailBadge({ tmdbId: null }), "");
-      assert.equal(hindi.getVidstreamApiPath({ tmdbId: 280042 }, 1), "/api/hindi/vidstream?tmdbId=280042&season=1&episode=1");
+      assert.equal(hindi.multiAudioDetailBadge({ tmdbId: 209867, hindiAvailable: false }), "");
+      assert.equal(hindi.isHindiConfirmedAvailable({ tmdbId: 280042, hindiAvailable: null }), false);
+      assert.equal(hindi.isHindiConfirmedAvailable({ tmdbId: 280042, hindiAvailable: true }), true);
       assert.equal(hindi.getVidstream3ApiPath({ tmdbId: 85937 }, 1), "/api/hindi/vidstream3?tmdbId=85937&season=1&episode=1");
-      assert.equal(hindi.getVidstream3EmbedUrl({ tmdbId: 85937 }, 1), "https://blakiteapi.xyz/embed/85937/1-1");
       assert.equal(
-        hindi.getVidstreamApiPath({ tmdbId: 120089, tmdbSeason: 1, tmdbEpisodeOffset: 12 }, 1),
-        "/api/hindi/vidstream?tmdbId=120089&season=1&episode=13"
+        hindi.getVidstream3ApiPath({ tmdbId: 120089, tmdbSeason: 1, tmdbEpisodeOffset: 12 }, 1),
+        "/api/hindi/vidstream3?tmdbId=120089&season=1&episode=13"
       );
-      assert.equal(hindi.getVidstreamApiPath({ tmdbId: null }, 1), null);
+      assert.equal(hindi.getVidstream3EmbedUrl({ tmdbId: 85937 }, 1), "https://blakiteapi.xyz/embed/85937/1-1");
+      assert.equal(hindi.getVidstream3ApiPath({ tmdbId: null }, 1), null);
       assert.equal(hindi.getVidstream3EmbedUrl({ tmdbId: null }, 1), null);
-      assert.ok(!js.includes("https://animedekho.tv"), "client JS must never iframe animedekho.tv directly");
+      assert.ok(!js.includes("https://animedekho.tv"), "client JS must never reference animedekho.tv");
 
-      // 4. CSP frame-src includes ravok.buzz and blakiteapi.xyz alongside existing origins
+      // 4. CSP frame-src keeps blakiteapi.xyz and existing origins, and excludes ravok.buzz & animedekho.tv
       const watchRes = await fetch(`${baseUrl}/watch`);
       assert.equal(watchRes.status, 200);
       const csp = watchRes.headers.get("content-security-policy") || "";
@@ -3848,11 +3857,12 @@ async function runTests() {
         "https://zokoanime.video",
         "https://embed.animetvplus.site",
         "https://challenges.cloudflare.com",
-        "https://ravok.buzz",
         "https://blakiteapi.xyz",
       ]) {
         assert.ok(csp.includes(origin), `CSP frame-src keeps ${origin}`);
       }
+      assert.ok(!csp.includes("ravok.buzz"), "CSP frame-src must not include ravok.buzz");
+      assert.ok(!csp.includes("animedekho.tv"), "CSP frame-src must not include animedekho.tv");
 
       // 5. Catalog titles: Naruto (sea-of-stars) resolves TMDB TV id; A Silent Voice (Film) does not
       const narutoRes = await fetch(`${baseUrl}/api/titles/sea-of-stars`);
@@ -3893,65 +3903,12 @@ async function runTests() {
       assert.equal((await liveWithoutTmdb.json()).title.tmdbId, null);
     });
 
-    await test("Hindi endpoint: GET /api/hindi/vidstream resolves ravok URL server-side and hides when missing/failing", async () => {
-      let calls = 0;
-      let mode = "ok";
-      const stub = http.createServer((req, res) => {
-        calls++;
-        if (mode === "error") {
-          res.writeHead(502);
-          res.end("Bad Gateway");
-          return;
-        }
-        if (req.url === "/embed/209867/1-1") {
-          const vid = calls === 1 ? "4c12343400ce0c1454ad4bc3860602b9" : "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-          res.writeHead(200, { "Content-Type": "text/html" });
-          res.end(`<html><body><iframe src="https://ravok.buzz/video/${vid}" allowfullscreen></iframe></body></html>`);
-          return;
-        }
-        res.writeHead(200, { "Content-Type": "text/html" });
-        res.end("<html><head><title>Series not found</title></head><body></body></html>");
-      });
-      await new Promise((resolve) => stub.listen(0, "127.0.0.1", resolve));
-      const { port } = stub.address();
-      _setHindiOriginsForTests({ animedekho: `http://127.0.0.1:${port}` });
-      clearHindiCaches();
-      try {
-        const bad = await fetch(`${baseUrl}/api/hindi/vidstream?tmdbId=abc&season=1&episode=1`);
-        assert.equal(bad.status, 400);
-
-        const okRes = await fetch(`${baseUrl}/api/hindi/vidstream?tmdbId=209867&season=1&episode=1`);
-        assert.equal(okRes.status, 200);
-        const okJson = await okRes.json();
-        assert.equal(okJson.ok, true);
-        assert.equal(okJson.available, true);
-        assert.equal(okJson.url, "https://ravok.buzz/video/4c12343400ce0c1454ad4bc3860602b9");
-
-        // Fresh parameter bypasses the short cache and fetches a new session URL
-        const freshRes = await fetch(`${baseUrl}/api/hindi/vidstream?tmdbId=209867&season=1&episode=1&fresh=1`);
-        assert.equal(freshRes.status, 200);
-        assert.equal((await freshRes.json()).url, "https://ravok.buzz/video/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
-
-        // Missing ravok URL -> available: false, url: null
-        const missRes = await fetch(`${baseUrl}/api/hindi/vidstream?tmdbId=999999&season=1&episode=1`);
-        assert.equal(missRes.status, 200);
-        const missJson = await missRes.json();
-        assert.equal(missJson.available, false);
-        assert.equal(missJson.url, null);
-
-        // Upstream 502 -> available: false, not cached
-        mode = "error";
-        const errRes = await fetch(`${baseUrl}/api/hindi/vidstream?tmdbId=777777&season=1&episode=1`);
-        assert.equal(errRes.status, 200);
-        assert.equal((await errRes.json()).available, false);
-      } finally {
-        _setHindiOriginsForTests();
-        clearHindiCaches();
-        stub.close();
-      }
+    await test("Hindi endpoint: GET /api/hindi/vidstream is removed and returns 404", async () => {
+      const removedRes = await fetch(`${baseUrl}/api/hindi/vidstream?tmdbId=280042&season=1&episode=1`);
+      assert.equal(removedRes.status, 404);
     });
 
-    await test("Hindi endpoint: GET /api/hindi/vidstream3 checks availability, caches briefly, and fails open on network errors", async () => {
+    await test("Hindi endpoint: GET /api/hindi/vidstream3 checks availability, caches briefly, updates hindiAvailable, and fails open on network errors", async () => {
       let calls = 0;
       let mode = "normal";
       const stub = http.createServer((req, res) => {
@@ -3995,6 +3952,26 @@ async function runTests() {
         const availJson = await availRes.json();
         assert.equal(availJson.available, true);
         assert.ok(availJson.embedUrl.endsWith("/embed/280042/1-1"));
+
+        // Live API responses reflect known Vidstream-3 availability from cache (Frieren false, Wild Last Boss true)
+        mockAniList({
+          mediaById: {
+            987333: fakeMedia({
+              id: 987333,
+              idMal: 987333,
+              externalLinks: [{ id: 1, site: "TMDB", type: "TV", url: "https://www.themoviedb.org/tv/209867" }],
+            }),
+            987444: fakeMedia({
+              id: 987444,
+              idMal: 987444,
+              externalLinks: [{ id: 1, site: "TMDB", type: "TV", url: "https://www.themoviedb.org/tv/280042" }],
+            }),
+          },
+        });
+        const frierenLive = await (await fetch(`${baseUrl}/api/live/987333`)).json();
+        assert.equal(frierenLive.title.hindiAvailable, false, "Frieren cached unavailable must surface as hindiAvailable: false");
+        const bossLive = await (await fetch(`${baseUrl}/api/live/987444`)).json();
+        assert.equal(bossLive.title.hindiAvailable, true, "Wild Last Boss cached available must surface as hindiAvailable: true");
 
         // Transient upstream failure fails open (available: true, checked: false)
         mode = "error";

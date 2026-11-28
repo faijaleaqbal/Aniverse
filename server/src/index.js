@@ -85,7 +85,7 @@ import {
 import { getTurnstileSiteKey, verifyTurnstile } from "./turnstile.js";
 import { renderDetailHtml } from "./seo.js";
 import { resolveTmdbInfo } from "./tmdb.js";
-import { resolveVidstreamUrl, checkVidstream3Availability } from "./hindi.js";
+import { checkVidstream3Availability, withHindiAvailability } from "./hindi.js";
 
 const app = express();
 
@@ -99,7 +99,7 @@ const CSP_HEADER = [
   "style-src 'self'",
   "font-src 'self'",
   "img-src 'self' data: https://s4.anilist.co",
-  "frame-src 'self' https://zokoanime.video https://embed.animetvplus.site https://challenges.cloudflare.com https://animedekho.tv https://blakiteapi.xyz https://ravok.buzz",
+  "frame-src 'self' https://zokoanime.video https://embed.animetvplus.site https://challenges.cloudflare.com https://blakiteapi.xyz",
   "frame-ancestors 'self'",
   "connect-src 'self' https://zokoanime.video",
   "object-src 'none'",
@@ -786,6 +786,12 @@ function withCatalogSlug(live, index) {
       );
     }
   }
+  Object.assign(live, withHindiAvailability(live));
+  if (Array.isArray(live.recommendations)) {
+    live.recommendations = live.recommendations.map((rec) =>
+      rec ? { ...rec, ...withHindiAvailability(rec) } : rec
+    );
+  }
   return live;
 }
 
@@ -1318,7 +1324,7 @@ app.get("/api/animegg/by-slug/:slug/:ep", async (req, res, next) => {
 });
 
 /* ==========================================================================
-   HINDI PLAYERS (Vidstream / ravok.buzz & Vidstream-3 / blakiteapi.xyz)
+   HINDI PLAYER (Vidstream-3 / blakiteapi.xyz)
    ========================================================================== */
 
 function parseHindiQuery(query = {}) {
@@ -1330,20 +1336,6 @@ function parseHindiQuery(query = {}) {
   }
   return { tmdbId, season, episode };
 }
-
-app.get("/api/hindi/vidstream", async (req, res, next) => {
-  try {
-    const parsed = parseHindiQuery(req.query);
-    if (!parsed) {
-      return res.status(400).json({ ok: false, error: "Valid positive numeric tmdbId, season, and episode are required." });
-    }
-    const bypassCache = req.query.fresh === "1" || req.query.fresh === "true";
-    const result = await resolveVidstreamUrl({ ...parsed, bypassCache });
-    return res.json(result);
-  } catch (err) {
-    next(err);
-  }
-});
 
 app.get("/api/hindi/vidstream3", async (req, res, next) => {
   try {
@@ -1461,12 +1453,14 @@ app.get("/api/progress/continue", (req, res) => {
       updatedAt: r.updated_at,
       cover: r.cover_local || r.cover_remote || null,
       banner: r.banner_local || r.banner_remote || null,
-      ...resolveTmdbInfo({
-        anilistId: r.anilist_id != null ? Number(r.anilist_id) : null,
-        malId: r.mal_id != null ? Number(r.mal_id) : null,
-        kind: r.kind,
-        preferMal: true,
-      }),
+      ...withHindiAvailability(
+        resolveTmdbInfo({
+          anilistId: r.anilist_id != null ? Number(r.anilist_id) : null,
+          malId: r.mal_id != null ? Number(r.mal_id) : null,
+          kind: r.kind,
+          preferMal: true,
+        })
+      ),
     })),
   });
 });
