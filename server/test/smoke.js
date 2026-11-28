@@ -507,4 +507,33 @@ test("isBlakiteUnavailableHtml detects CFG errors and visible unavailable marker
   );
 });
 
+/* Turnstile: the login widget must surface the widget's own error code
+   (110200 = domain not authorized renders as "Unable to connect to
+   website") instead of leaving a mysterious Cloudflare error box. The
+   config-error path must exist in the shipped login.js. */
+test("login.js wires Turnstile error-callback and names the 110200 domain fix", () => {
+  const loginJs = readFileSync(
+    fileURLToPath(new URL("../../ani-verse/js/login.js", import.meta.url)),
+    "utf8"
+  );
+  assert.ok(loginJs.includes('"error-callback"'), "login.js must pass error-callback to turnstile.render");
+  assert.ok(loginJs.includes("110200"), "login.js must recognize the 110200 domain-not-authorized code");
+  assert.ok(
+    loginJs.includes("TURNSTILE_CONFIG_ERRORS"),
+    "login.js must have a config-error code map"
+  );
+  assert.ok(
+    loginJs.includes("showTurnstileConfigError"),
+    "login.js must have a config-error handler"
+  );
+  assert.ok(
+    loginJs.includes('data-turnstile-error'),
+    "login.js must stamp the error code on the slot for browser verification"
+  );
+  assert.ok(
+    loginJs.includes("hostname list"),
+    "login.js must tell the user the fix is the Turnstile hostname list"
+  );
+});
+
 console.log(`\nAll ${passed} smoke / unit tests passed successfully!\n`);

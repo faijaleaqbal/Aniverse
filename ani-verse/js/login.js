@@ -42,6 +42,25 @@
   var turnstileLoadFailed = false;
   var currentMode = "signin";
   var turnstileWidgets = { signin: null, register: null };
+  /* Turnstile widget error codes that mean the widget is misconfigured for
+     this hostname — they NEVER resolve by retrying or refreshing:
+     110200 domain not authorized for this sitekey, 110100/110110 invalid or
+     unknown sitekey, 400020/400021 invalid sitekey / sitekey domain
+     mismatch, 400070 sitekey disabled. For 110200 the widget itself renders
+     "Unable to connect to website" with a Troubleshoot link, which is why
+     the failure looked like a network problem. The fix is in the Cloudflare
+     dashboard: the widget's hostname list must include the hostname in the
+     browser's address bar (the login page always lands on
+     aniflick.duckdns.org — vyapora.me 301-redirects there). */
+  var TURNSTILE_CONFIG_ERRORS = {
+    110200: true,
+    110100: true,
+    110110: true,
+    400020: true,
+    400021: true,
+    400070: true,
+  };
+  var turnstileConfigError = null;
   var turnstileSlots = {
     signin: document.getElementById("signin-turnstile"),
     register: document.getElementById("register-turnstile"),
@@ -102,6 +121,7 @@
   function showTurnstileLoadFailure() {
     turnstileLoadFailed = true;
     ["signin", "register"].forEach(function (m) {
+      if (turnstileConfigError) return; /* config-error note stays put */
       var slot = turnstileSlots[m];
       if (slot) slot.hidden = true;
       var note = ensureTurnstileNote(m);
@@ -112,9 +132,46 @@
     });
   }
 
+  /* Widget reported a configuration error (e.g. 110200: this hostname is
+     not on the sitekey's allowed list). Retrying cannot help — hide the
+     broken Cloudflare error box and say plainly what is wrong and what
+     fixes it. OAuth sign-in below is unaffected (it never uses Turnstile). */
+  function showTurnstileConfigError(mode, code) {
+    turnstileConfigError = { mode: mode, code: String(code) };
+    var slot = turnstileSlots[mode];
+    if (slot) {
+      slot.hidden = true;
+      slot.setAttribute("data-turnstile-error", String(code));
+    }
+    var note = ensureTurnstileNote(mode);
+    if (note) {
+      note.textContent =
+        "Bot check is not set up for this address (code " +
+        code +
+        "). Email sign-in is paused until the site owner adds this address to the Turnstile widget's hostname list in the Cloudflare dashboard. You can still sign in with Google, Discord, MAL or AniList below.";
+      note.hidden = false;
+    }
+  }
+
+  /* Transient widget error (network, timeout, …): Turnstile auto-retries
+     with retry:auto, so keep the slot visible and show a per-mode note. */
+  function showTurnstileWidgetError(mode, code) {
+    var note = ensureTurnstileNote(mode);
+    if (note) {
+      note.textContent = "Bot check failed (code " + code + ") — please refresh the page and try again.";
+      note.hidden = false;
+    }
+  }
+
   function renderTurnstileForMode(mode) {
     if (!turnstileEnabled || !turnstileApiLoaded || turnstileLoadFailed) return;
     if (!window.turnstile || typeof window.turnstile.render !== "function") return;
+    /* A config error (e.g. 110200) applies to every mode — same sitekey,
+       same hostname — so never re-render once it is known. */
+    if (turnstileConfigError) {
+      showTurnstileConfigError(mode, turnstileConfigError.code);
+      return;
+    }
     var slot = turnstileSlots[mode];
     if (!slot) return;
     slot.hidden = false;
@@ -125,6 +182,10 @@
         turnstileWidgets[mode] = window.turnstile.render(slot, {
           sitekey: turnstileSiteKey,
           theme: "dark",
+          "error-callback": function (code) {
+            if (TURNSTILE_CONFIG_ERRORS[Number(code)]) showTurnstileConfigError(mode, code);
+            else showTurnstileWidgetError(mode, code);
+          },
         });
       } catch (e) {}
     } else if (typeof window.turnstile.reset === "function") {
